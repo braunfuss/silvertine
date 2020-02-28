@@ -1,0 +1,3 @@
+[console_scripts]
+seiger = seiger.apps.seiger:main
+
