@@ -21,6 +21,7 @@ from pyrocko.gui.pile_viewer import PhaseMarker, EventMarker
 from ..util.ref_mods import *
 from ..util.differential_evolution import differential_evolution
 
+
 def update_sources(params):
     for i, source in enumerate(sources):
         source.lat = float(params[0+4*i])
@@ -45,7 +46,7 @@ def picks_fit(params, line=None):
     norms = 0.
     dists = []
     iter_event = 0
-    iter_new = iiter +1
+    iter_new = iiter + 1
     iiter = iter_new
     for ev, source in zip(ev_dict_list, sources):
         for st in ev["phases"]:
@@ -192,7 +193,7 @@ def synthetic_ray_tracing_setup(events, stations, mod):
         dists = []
         for st in stations:
                 dist = (ortho.distance_accurate15nm(ev["lat"], ev["lon"],
-                                                  st.lat, st.lon)+st.elevation)*cake.m2d
+                                                    st.lat, st.lon)+st.elevation)*cake.m2d
                 dists.append(dist)
                 for i, arrival in enumerate(mod.arrivals([dist],
                                             phases=phase_list,
@@ -229,6 +230,9 @@ def synthetic_ray_tracing_setup(events, stations, mod):
         ev_list.append(phase_markers)
 
 
+def calculate_ttt()
+
+
 def solve(show=False, n_tests=1, scenario_folder="scenarios", optimize_depth=False):
     global ev_dict_list, times, phase_list, km, mod, pyrocko_stations, bounds, sources, source_dc, iiter
 
@@ -239,7 +243,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios", optimize_depth=Fal
     t = timesys.time()
     sources = []
     bounds = OrderedDict()
-    test_events, pyrocko_stations=load_synthetic_test(n_tests, scenario_folder)
+    test_events, pyrocko_stations = load_synthetic_test(n_tests, scenario_folder)
     ev_iter = 0
     for ev in test_events:
         bounds.update({'lat%s' %ev_iter:(ev.lat-0.4, ev.lat+0.4)})

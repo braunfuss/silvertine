@@ -193,7 +193,8 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios"):
         bounds.update({'depth%s'%ev_iter:(1.*km, 7.*km)})
         bounds.update({'timeshift%s'%ev_iter:(-0.01, 0.01)})
         ev_iter = ev_iter+1
-
+    bounds.update({'p_vel%s' %ev_iter:(ev.lat-0.4, ev.lat+0.4)})
+    bounds.update({'s_vel%s'%ev_iter:(ev.lon-0.2, ev.lon+0.2)})
         time = ev.time
         source_dc = DCSource(
             lat=ev.lat,

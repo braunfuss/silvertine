@@ -5,8 +5,8 @@ from os.path import join as pjoin
 import os.path as op
 from pyrocko.moment_tensor import MomentTensor
 
-from pyrocko import util, model,io, trace, config
-from pyrocko.gf import Target, DCSource, RectangularSource
+from pyrocko import util, model, io, trace, config
+from pyrocko.gf import Target, DCSource, RectangularSource, PorePressureLineSource, PorePressurePointSource, VLVDSource
 from pyrocko import gf
 from pyrocko.fdsn import ws
 from pyrocko.fdsn import station as fs
@@ -38,7 +38,6 @@ def xjoin(basepath, path):
 
 class Path(String):
     pass
-
 
 
 class HasPaths(Object):
@@ -82,8 +81,6 @@ class HasPaths(Object):
                 for p in path]
 
 
-
-
 def rand_source(event, SourceType="MT"):
 
     if SourceType == "MT":
@@ -98,14 +95,57 @@ def rand_source(event, SourceType="MT"):
             strike=mt.strike1,
             dip=mt.dip1,
             rake=mt.rake1,
-            time = event.time,
+            time=event.time,
             magnitude=event.magnitude)
 
+    if SourceType == "VLVD":
+        mt = MomentTensor.random_dc(magnitude=event.magnitude)
+        event.moment_tensor = mt
+        source = VLVDSource(
+            lat=event.lat,
+            lon=event.lon,
+            north_shift=event.north_shift,
+            east_shift=event.east_shift,
+            depth=event.depth,
+            azimuth=event.strike
+            dip=mt.dip1,
+            volume_change=num.random.uniform(1,1) # here synthetic volume change
+            time=event.time,
+            clvd_moment=mt.moment()) # ?
+
+    if SourceType == "PorePressurePointSource":
+        mt = MomentTensor.random_dc(magnitude=event.magnitude)
+        event.moment_tensor = mt
+        source = PorePressurePointSource(
+            lat=event.lat,
+            lon=event.lon,
+            north_shift=event.north_shift,
+            east_shift=event.east_shift,
+            depth=event.depth,
+            pp=num.random.uniform(1,1),  # here change in pa
+            time=event.time) # ?
+
+
+    if SourceType == "PorePressureLineSource":
+        mt = MomentTensor.random_dc(magnitude=event.magnitude)
+        event.moment_tensor = mt
+        source = PorePressureLineSource(
+            lat=event.lat,
+            lon=event.lon,
+            north_shift=event.north_shift,
+            east_shift=event.east_shift,
+            depth=event.depth,
+            azimuth=event.strike
+            dip=mt.dip1,
+            pp=num.random.uniform(1,1) # here change in pa
+            time=event.time,
+            length=num.random.uniform(1,20)*km, # scaling!)
+
     if SourceType == "Rectangular":
-        length= rand(1,20)*km
-        width= rand(1,20)*km
+        length = num.random.uniform(1,20)*km
+        width = num.random.uniform(1,20)*km
         strike,dip,rake = MomentTensor.random_strike_dip_rake()
-        event.moment_tensor= MomentTensor(strike1=strike, dip1=dip, rake1=rake)
+        event.moment_tensor = MomentTensor(strike1=strike, dip1=dip, rake1=rake)
         source = RectangularSource(
             lat=event.lat,
             lon=event.lon,
@@ -117,10 +157,11 @@ def rand_source(event, SourceType="MT"):
             rake=rake,
             length=length,
             width=width,
-            time = event.time,
+            time=event.time,
             magnitude=event.magnitude)
 
     return source, event
+
 
 def gen_stations(nstations=5,
                  latmin=-90., latmax=90.,
@@ -139,7 +180,7 @@ def gen_stations(nstations=5,
 
 
 def gen_real_stations(tmin=util.stt('2014-01-01 16:10:00.000'),
-                      tmax= util.stt('2014-01-01 16:39:59.000')):
+                      tmax=util.stt('2014-01-01 16:39:59.000')):
 
     stations = []
     selection = [
@@ -157,7 +198,7 @@ def gen_real_stations(tmin=util.stt('2014-01-01 16:10:00.000'),
     return stations
 
 
-def gen_event(scenario_id, magmin=1., magmax=3.,
+def gen_random_tectonic_event(scenario_id, magmin=1., magmax=3.,
               depmin=5, depmax=10,
               latmin=48.9586, latmax=49.3,
               lonmin=8.1578, lonmax=8.4578,
@@ -213,7 +254,6 @@ def save(synthetic_traces, event, stations, savedir, noise_events=False):
             model.dump_events(noise_events, savedir+'events_noise.txt')
 
 
-
 def gen_white_noise(synthetic_traces,scale=2e-8, scale_spectral='False'):
 
     if scale_spectral == 'True':
@@ -230,11 +270,31 @@ def gen_white_noise(synthetic_traces,scale=2e-8, scale_spectral='False'):
 def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin, magmax, depmin, depmax, latmin, latmax, lonmin, lonmax, stations_file):
     engine = gf.LocalEngine(store_superdirs=['/home/steinberg/seiger/grond/gf_stores'])
     for scenario in range(scenarios):
-        event = gen_event(scenario, magmin=magmin, magmax=magmax, depmin=depmin, depmax=depmax, latmin=latmin, latmax=latmax, lonmin=lonmin, lonmax=lonmax)
+
+        choice = num.random.choice(2,1)
+        if choice == 0:
+            event = gen_random_tectonic_event(scenario, magmin=magmin,
+                                              magmax=magmax, depmin=depmin,
+                                              depmax=depmax, latmin=latmin,
+                                              latmax=latmax, lonmin=lonmin,
+                                              lonmax=lonmax)
+
+            source, events = rand_source(event, SourceType='MT')
+
+        if choice == 1:
+
+            event = gen_induced_event(scenario, magmin=magmin,
+                                              magmax=magmax, depmin=depmin,
+                                              depmax=depmax, latmin=latmin,
+                                              latmax=latmax, lonmin=lonmin,
+                                              lonmax=lonmax)
+
+            source, events = rand_source(event, SourceType='VLVD')
+
         savedir = projdir + 'scenario_' + str(scenario) + '/'
         if not os.path.exists(savedir):
             os.makedirs(savedir)
-        source, events = rand_source(event, SourceType='MT')
+
         if stations_file is not None:
             stations = model.load_stations(projdir + "/" + stations_file)
         targets = []
@@ -257,14 +317,16 @@ def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin, ma
         gen_white_noise(synthetic_traces)
         noise_events = gen_noise_events(targets, synthetic_traces, engine)
 
-
         events = [event]
-        save(synthetic_traces, events, stations, savedir, noise_events=noise_events)
+        save(synthetic_traces, events, stations, savedir,
+             noise_events=noise_events)
+
 
 def seigerScenario(projdir, scenarios=10, modelled_channel_codes='ENZ',
                    store_id='landau_100hz', magmin=1., magmax=3.,
                    depmin=5, depmax=10,
-                   latmin= 48.9586, latmax=49.3,
-                   lonmin=8.1578, lonmax=8.4578, stations_file=None):
+                   latmin=48.9586, latmax=49.3,
+                   lonmin=8.1578, lonmax=8.4578,
+                   stations_file=None, ratio_events=1):
 
     gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin, magmax, depmin, depmax, latmin, latmax, lonmin, lonmax, stations_file)
