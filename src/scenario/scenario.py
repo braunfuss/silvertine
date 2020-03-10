@@ -138,10 +138,10 @@ def gen_stations(nstations=5,
     return stations
 
 
+def gen_real_stations(tmin=util.stt('2014-01-01 16:10:00.000'),
+                      tmax= util.stt('2014-01-01 16:39:59.000')):
 
-def gen_real_stations(tmin = util.stt('2014-01-01 16:10:00.000'), tmax= util.stt('2014-01-01 16:39:59.000')):
-
-    stations=[]
+    stations = []
     selection = [
         ('*', '*', '*', 'BH*', tmin, tmax),
     ]
@@ -156,24 +156,26 @@ def gen_real_stations(tmin = util.stt('2014-01-01 16:10:00.000'), tmax= util.stt
 
     return stations
 
+
 def gen_event(scenario_id, magmin=1., magmax=3.,
               depmin=5, depmax=10,
-              latmin= 48.9586, latmax=49.3,
+              latmin=48.9586, latmax=49.3,
               lonmin=8.1578, lonmax=8.4578,
-              timemin=util.str_to_time('2007-01-01 16:10:00.000'), timemax=util.str_to_time('2020-01-01 16:10:00.000')):
-
+              timemin=util.str_to_time('2007-01-01 16:10:00.000'),
+              timemax=util.str_to_time('2020-01-01 16:10:00.000')):
 
     name = scenario_id
-    depth = rand(depmin,depmax)*km
-    magnitude = rand(magmin,magmax)
-    lat = randlat(latmin,latmax)
+    depth = rand(depmin, depmax)*km
+    magnitude = rand(magmin, magmax)
+    lat = randlat(latmin, latmax)
     lon = rand(lonmin, lonmax)
-    time= rand(timemin,timemax)
-    event = model.Event(name=name, lat=lat,lon=lon,
-    magnitude = magnitude, depth=depth,
-    time=time)
+    time = rand(timemin, timemax)
+    event = model.Event(name=name, lat=lat, lon=lon,
+                        magnitude=magnitude, depth=depth,
+                        time=time)
 
     return event
+
 
 def gen_noise_events(targets, synthetics, engine, noise_sources=1, delay=40):
 
@@ -187,14 +189,15 @@ def gen_noise_events(targets, synthetics, engine, noise_sources=1, delay=40):
             lon=event.lon,
             depth=event.depth,
             strike=mt.strike1,
-            dip = mt.dip1,
-            rake = mt.rake1,
-            time = time,
+            dip=mt.dip1,
+            rake=mt.rake1,
+            time=time,
             magnitude=event.magnitude)
         response = engine.process(source, targets)
         noise_traces = response.pyrocko_traces()
-        for tr,tr_noise in zip(synthetics,noise_traces):
-            noise = trace.Trace(deltat=tr.deltat, tmin=tr.tmin, ydata=tr_noise.ydata)
+        for tr, tr_noise in zip(synthetics, noise_traces):
+            noise = trace.Trace(deltat=tr.deltat, tmin=tr.tmin,
+                                ydata=tr_noise.ydata)
             tr.add(noise)
         noise_events.append(event)
     return(noise_events)
@@ -228,7 +231,7 @@ def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin, ma
     engine = gf.LocalEngine(store_superdirs=['/home/steinberg/seiger/grond/gf_stores'])
     for scenario in range(scenarios):
         event = gen_event(scenario, magmin=magmin, magmax=magmax, depmin=depmin, depmax=depmax, latmin=latmin, latmax=latmax, lonmin=lonmin, lonmax=lonmax)
-        savedir = projdir + '/scenario_' + str(scenario) + '/'
+        savedir = projdir + 'scenario_' + str(scenario) + '/'
         if not os.path.exists(savedir):
             os.makedirs(savedir)
         source, events = rand_source(event, SourceType='MT')

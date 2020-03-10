@@ -44,6 +44,8 @@ subcommand_descriptions = {
     'init': 'initialise new project structure or print configuration',
     'scenario': 'create a forward-modelled scenario project',
     'locate': 'locate a single or a set of earthquakes',
+    'beam': 'beamform for a single or a set of earthquakes',
+    'beam_process': 'beam_process for a single or a set of earthquakes',
     'events': 'print available event names for given configuration',
     'check': 'check data and configuration',
     'go': 'run seiger optimisation',
@@ -69,6 +71,8 @@ subcommand_usages = {
     'scenario': 'scenario [options] <projectdir>',
     'locate': 'locate [options] <projectdir>',
     'events': 'events <configfile>',
+    'beam': 'beams [options] <projectdir>',
+    'beam_process': 'beam_process [options] <projectdir>',
     'check': 'check <configfile> <eventnames> ... [options]',
     'go': 'go <configfile> <eventnames> ... [options]',
     'forward': (
@@ -120,6 +124,8 @@ Subcommands:
 
     scenario        %(scenario)s
     locate        %(locate)s
+    beam        %(beam)s
+    beam_process        %(beam_process)s
     init            %(init)s
     events          %(events)s
     check           %(check)s
@@ -360,32 +366,156 @@ def magnitude_range(option, opt_str, value, parser):
     setattr(parser.values, option.dest, mag_range)
 
 
-
-
 def command_locate(args):
-
-    STORE_STATIC = 'crust2_ib_static'
-    STORE_WAVEFORMS = 'crust2_ib'
 
     def setup(parser):
         parser.add_option(
-            '--magnitude-range', dest='magnitude_range', type=str,
-            action='callback', callback=magnitude_range, default=[6.0, 7.0],
-            help='Magnitude range min_mag-max_mag (default: %default)')
+            '--show', dest='show', type=str, default=False,
+            help='overwrite existing project folder.')
+        parser.add_option(
+            '--nevents', dest='nevents', type=int, default=1,
+            help='Number of events to locate (default: %default)')
 
-
-    parser, options, args = cl_parse('scenario', args, setup)
+    parser, options, args = cl_parse('locate', args, setup)
 
     from seiger.locate import locate1D
     project_dir = args[0]
-    result, best_model  = seiger.locate.locate1D.solve()
+    if options.show is not False:
+        options.show = True
+    result, best_model = seiger.locate.locate1D.solve(scenario_folder=project_dir, show=options.show, n_tests=options.nevents)
+
+
+def command_beam(args):
+
+    def setup(parser):
+        parser.add_option(
+            '--show', dest='show', type=str, default=False,
+            help='overwrite existing project folder.')
+        parser.add_option(
+            '--nevents', dest='nevents', type=int, default=1,
+            help='Number of events to locate (default: %default)')
+
+    parser, options, args = cl_parse('locate', args, setup)
+
+    from seiger.beam_depth import abedeto
+    project_dir = args[0]
+    if options.show is not False:
+        options.show = True
+    seiger.beam_depth.abedeto.beam(project_dir, show=options.show, n_tests=options.nevents)
+
+
+def command_beam_process(args):
+
+    def setup(parser):
+        parser.add_option(
+            '--show', dest='show', type=str, default=False,
+            help='overwrite existing project folder.')
+        parser.add_option(
+            '--nevents', dest='nevents', type=int, default=1,
+            help='Number of events to locate (default: %default)')
+
+    parser, options, args = cl_parse('locate', args, setup)
+
+    from seiger.beam_depth import abedeto
+    project_dir = args[0]
+    if options.show is not False:
+        options.show = True
+    seiger.beam_depth.abedeto.beam(project_dir, show=options.show, n_tests=options.nevents)
+
+    import argparse
+
+    parser = argparse.ArgumentParser('What was the depth, again?', add_help=False)
+    parser.add_argument('--log', required=False, default='INFO')
+
+    sp = parser.add_subparsers(dest='cmd')
+
+    process_parser = sp.add_parser('beam_process', help='Create images')
+    process_parser.add_argument('projects', help='default "all available"',
+                             nargs='*', default=".")
+    process_parser.add_argument('--array-id', dest='array_id',
+                                help='array-id to process',
+                                required=False,
+                                default=False)
+    process_parser.add_argument('--settings',
+                                help='settings file',
+                                default=False,
+                                required=False)
+    process_parser.add_argument('--cc_align',
+                        help='dummy argument at the moment',
+                        required=False)
+    process_parser.add_argument('--store-superdirs',
+            help='super directory where to look for stores',
+            dest='store_superdirs', nargs='*', default=['stores'], required=False)
+    process_parser.add_argument('--store',
+                        help='name of store id',
+                        dest='store_id',
+                        required=False)
+    process_parser.add_argument('--depth',
+                        help='assumed source depth [km]',
+                        required=False)
+    process_parser.add_argument('--depths',
+                        help='testing depths in km. zstart:zstop:delta, default 0:15:1',
+                        default='0:15:1', required=False)
+    process_parser.add_argument('--quantity',
+                        help='velocity|displacement',
+                        choices=['velocity', 'displacement', 'restituted'],
+                        required=False)
+    process_parser.add_argument('--filter',
+                        help='4th order butterw. default: "0.7:4.5"',
+                        required=False)
+    process_parser.add_argument('--correction', required=False,
+                        help='a global correction in time [s]')
+    process_parser.add_argument('--gain', required=False,
+                        help='gain factor', default=1.,
+                                type=float)
+    process_parser.add_argument('--zoom', required=False,
+                                help='time window to look at. default -7:15',
+                                default='-7:15')
+
+    process_parser.add_argument('--normalize',
+                        help='normalize traces to 1',
+                        action='store_true',
+                        required=False)
+    process_parser.add_argument('--skip-true',
+                        help='if true, do not plot recorded and the assigned synthetic trace on top of each other',
+                        dest='skip_true',
+                        action='store_true',
+                        required=False)
+    process_parser.add_argument('--show',
+                        help='show matplotlib plots after each step',
+                        action='store_true',
+                        required=False)
+    process_parser.add_argument('--force-nearest-neighbor',
+                        help='handles OOB',
+                        dest='force_nearest_neighbor',
+                        default=False,
+                        action='store_true',
+                        required=False)
+    process_parser.add_argument('--auto-caption',
+                        help='Add a caption to figure with basic info',
+                        dest='auto_caption',
+                        default=False,
+                        action='store_true',
+                        required=False)
+    process_parser.add_argument('--out-filename',
+                        help='file to store image',
+                        dest='save_as',
+                        required=False)
+    process_parser.add_argument('--print-parameters', dest='print_parameters',
+                        help='creates a text field giving the used parameters',
+                        required=False)
+    process_parser.add_argument('--title', dest='title',
+                        help='template for title.',
+                        required=False)
+    process_parser.add_argument('--overwrite-settings', dest='overwrite_settings',
+                        help='overwrite former settings files', default=False,
+                        action='store_true', required=False)
+    args = parser.parse_args()
+    seiger.beam_depth.abedeto.process(args, project_dir, show=options.show, n_tests=options.nevents)
 
 
 
 def command_scenario(args):
-
-    STORE_STATIC = 'crust2_ib_static'
-    STORE_WAVEFORMS = 'crust2_ib'
 
     def setup(parser):
         parser.add_option(

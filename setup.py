@@ -88,7 +88,7 @@ setup(
 
     name='seiger',
 
-    description='Monitoring and relocation of geothermal plants',
+    description='Monitoring and relocation of induced earthquakes',
 
     version=version,
 
@@ -102,8 +102,8 @@ setup(
         'seiger.clustering',
         'seiger.scenario',
         'seiger.locate',
-
-
+        'seiger.util',
+        'seiger.beam_depth',
     ],
     entry_points={
         'console_scripts': [

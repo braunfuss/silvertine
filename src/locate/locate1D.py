@@ -18,83 +18,79 @@ from pyrocko import model
 import time as timesys
 import scipy
 from pyrocko.gui.pile_viewer import PhaseMarker, EventMarker
+from ..util.ref_mods import *
+from ..util.differential_evolution import differential_evolution
+
+def update_sources(params):
+    for i, source in enumerate(sources):
+        source.lat = float(params[0+4*i])
+        source.lon = float(params[1+4*i])
+        source.depth = float(params[2+4*i])
+        source.time = float(source_dc.time - params[3+4*i])
+        print(source)
+    return sources
 
 
-def update_source(params):
-    s = source
-    s.lat = float(params[0])
-    s.lon = float(params[1])
-    s.depth = float(params[2])
-    s.time = float(source_dc.time - params[3])
-    return source
-
-
-def insheim_layered_model():
-    mod = cake.LayeredModel.from_scanlines(cake.read_nd_model_str('''
-  0.             1.81           0.85           2.7         1264.           600.
-  0.54           2.25           1.11           2.7         1264.           600.
-  0.54           2.25           1.11           2.7         1264.           600.
-  0.77           2.85           1.44           2.7         1264.           600.
-  0.77           2.85           1.44           2.7         1264.           600.
-  1.07           3.18           1.61           2.7         1264.           600.
-  1.07           3.18           1.61           2.7         1264.           600.
-  2.25           3.81           2.01           2.7         1264.           600.
-  2.25           3.81           2.01           2.7         1264.           600.
-  2.40           5.12           2.65           2.7         1264.           600.
-  2.40           5.12           2.65           2.7         1264.           600.
-  2.55           4.53           2.39           2.7         1264.           600.
-  2.55           4.53           2.39           2.7         1264.           600.
-  3.28           5.14           2.91           2.7         1264.           600.
-  3.28           5.14           2.91           2.7         1264.           600.
-  3.550          5.688          3.276           2.7         1264.           600.
-  3.550          5.688          3.276           2.7         1264.           600.
-  5.100          5.98          3.76           2.7         1264.           600.
-  5.100          5.98          3.76           2.7         1264.           600.
-  15.00          6.18          3.57           2.7         1264.           600.
-  15.00          6.18          3.57           2.7         1264.           600.
-  20.00          6.25          3.61           2.7         1264.           600.
-  20.00          6.25          3.61           2.7         1264.           600.
-  21.00          6.88          3.97           2.7         1264.           600.
-  21.00          6.88          3.97           2.7         1264.           600.
- 24.             8.1            4.69           2.7         1264.           600.
-mantle
- 24.             8.1            4.69           2.7         1264.           600.'''.lstrip()))
-
-    return mod
-
+def update_depth(params):
+    for i, source in enumerate(sources):
+        source.depth = float(params[0+4*i])
+        print(source)
+    return sources
 
 
 def picks_fit(params, line=None):
-    update_source(params)
+    update_sources(params)
     global iiter
-    iiter = 0
     misfits = 0.
     norms = 0.
     dists = []
-    for ev in ev_dict_list:
+    iter_event = 0
+    iter_new = iiter +1
+    iiter = iter_new
+    for ev, source in zip(ev_dict_list, sources):
         for st in ev["phases"]:
-            for stp in pyrocko_stations:
+            for stp in pyrocko_stations[iter_event]:
                 if stp.station == st["station"]:
-                    dists = ortho.distance_accurate50m(source.lat, source.lon, stp.lat, stp.lon)*cake.m2d
-                    try:
-                        for i, arrival in enumerate(mod.arrivals([dists], phases=phase_list, zstart=source.depth)):
+                    phase = st["phase"]
+                    if phase == "Pg":
+                        phase = "P<(moho)"
+                    if phase == "pg":
+                        phase = "p<(moho)"
+                    if phase == "Sg":
+                        phase = "S<(moho)"
+                    if phase == "sg":
+                        phase = "s<(moho)"
+                    if phase == "PG":
+                        phase = "P>(moho)"
+                    if phase == "pG":
+                        phase = "p>(moho)"
+                    if phase == "SG":
+                        phase = "S>(moho)"
+                    if phase == "sG":
+                        phase = "s>(moho)"
+                    if phase == "P*":
+                        phase = "P"
+                    if phase == "S*":
+                        phase = "S"
+                    cake_phase = cake.PhaseDef(phase)
+                    phase_list = [cake_phase]
+                    dists = (ortho.distance_accurate15nm(source.lat, source.lon,
+                                                       stp.lat,
+                                                       stp.lon)+stp.elevation)*cake.m2d
 
-                            tdiff = st["pick"]
-                            phase = st["phase"]
-                            if phase == "Pg":
-                                phase = "P<(moho)"
-                            if phase == "pg":
-                                phase = "p<(moho)"
-                            used_phase = arrival.used_phase()
-                            if phase == used_phase.given_name():
-                                misfits += num.sqrt(num.sum((tdiff - arrival.t)**2))
-                                norms += num.sqrt(num.sum(arrival.t**2))
-                    except:
-                        pass
+                    for i, arrival in enumerate(mod.arrivals([dists],
+                                                phases=phase_list,
+                                                zstart=source.depth)):
+
+                        tdiff = st["pick"]
+
+                        used_phase = arrival.used_phase()
+                        if phase == used_phase.given_name() or phase[0] == used_phase.given_name()[0]:
+                            misfits += num.sqrt(num.sum((tdiff - arrival.t)**2))
+                            norms += num.sqrt(num.sum(arrival.t**2))
+
     misfit = num.sqrt(misfits**2 / norms**2)
-
-    iiter += 1
-
+    iter_event = iter_event + 1
     if line:
         data = {
             'y': [misfit],
@@ -105,38 +101,103 @@ def picks_fit(params, line=None):
     return misfit
 
 
-def load_synthetic_test(n_tests, nstart=8, nend=None):
+
+def depth_fit(params, line=None):
+    update_depth(params)
+    global iiter
+    misfits = 0.
+    norms = 0.
+    dists = []
+    iter_event = 0
+    iter_new = iiter +1
+    iiter = iter_new
+    for ev, source in zip(ev_dict_list, sources):
+        for st in ev["phases"]:
+            for stp in pyrocko_stations[iter_event]:
+                if stp.station == st["station"]:
+                    phase = st["phase"]
+                    if phase == "Pg":
+                        phase = "P<(moho)"
+                    if phase == "pg":
+                        phase = "p<(moho)"
+                    if phase == "Sg":
+                        phase = "S<(moho)"
+                    if phase == "sg":
+                        phase = "s<(moho)"
+                    if phase == "PG":
+                        phase = "P>(moho)"
+                    if phase == "pG":
+                        phase = "p>(moho)"
+                    if phase == "SG":
+                        phase = "S>(moho)"
+                    if phase == "sG":
+                        phase = "s>(moho)"
+                    if phase == "P*":
+                        phase = "P"
+                    if phase == "S*":
+                        phase = "S"
+                    cake_phase = cake.PhaseDef(phase)
+                    phase_list = [cake_phase]
+                    dists = (ortho.distance_accurate15nm(source.lat, source.lon,
+                                                       stp.lat,
+                                                       stp.lon)+stp.elevation)*cake.m2d
+
+                    for i, arrival in enumerate(mod.arrivals([dists],
+                                                phases=phase_list,
+                                                zstart=source.depth)):
+
+                        tdiff = st["pick"]
+
+                        used_phase = arrival.used_phase()
+                        if phase == used_phase.given_name() or phase[0] == used_phase.given_name()[0]:
+                            misfits += num.sqrt(num.sum((tdiff - arrival.t)**2))
+                            norms += num.sqrt(num.sum(arrival.t**2))
+
+    misfit = num.sqrt(misfits**2 / norms**2)
+    iter_event = iter_event + 1
+    if line:
+        data = {
+            'y': [misfit],
+            'x': [iiter],
+        }
+        line.data_source.stream(data)
+
+    return misfit
+
+
+def load_synthetic_test(n_tests, scenario_folder, nstart=8, nend=None):
     events = []
     stations = []
     for i in range(nstart, n_tests):
-        events.append(model.load_events("/home/steinberg/src/mini-1d/scenario_%s/event.txt" % i)[0])
-        stations.append(model.load_stations("/home/steinberg/src/mini-1d/scenario_%s/stations.pf" % i))
+        print("%s/scenario_%s/event.txt" % (scenario_folder, i))
+
+        events.append(model.load_events("%s/scenario_%s/event.txt" % (scenario_folder, i))[0])
+        stations.append(model.load_stations("%s/scenario_%s/stations.pf" % (scenario_folder, i)))
     return events, stations
 
 
 def synthetic_ray_tracing_setup(events, stations, mod):
-
     k = 0
     for evs, stats in zip(events, stations):
         ev_dict_list.append(dict(id="%s" % k, time=evs.time, lat=evs.lat,
                             lon=evs.lon, mag=evs.magnitude, mag_type="syn",
                             source="syn", phases=[], depth=[], rms=[],
                             error_h=[], error_z=[]))
-    pyrocko_stations = stations[0]
-
+    stations = stations[0]
     for nev, ev in enumerate(ev_dict_list):
         phase_markers = []
         stations_event = []
         hypo_in = []
         station_phase_to_nslc = {}
         dists = []
-        for st in pyrocko_stations:
-                dist = ortho.distance_accurate50m(ev["lat"], ev["lon"],
-                                                  st.lat, st.lon)*cake.m2d
+        for st in stations:
+                dist = (ortho.distance_accurate15nm(ev["lat"], ev["lon"],
+                                                  st.lat, st.lon)+st.elevation)*cake.m2d
                 dists.append(dist)
                 for i, arrival in enumerate(mod.arrivals([dist],
                                             phases=phase_list,
                                             zstart=events[nev].depth)):
+
                     event_arr = model.event.Event(lat=ev["lat"], lon=ev["lon"],
                                                   time=ev["time"],
                                                   catalog=ev["source"],
@@ -153,7 +214,7 @@ def synthetic_ray_tracing_setup(events, stations, mod):
                         used_phase = "Sg"
                     if used_phase == "p":
                         used_phase = "p"
-                    tarr = events[nev].time+arrival.t
+                    tarr=events[nev].time+arrival.t
                     phase_markers.append(PhaseMarker(["0", st.station], tarr,
                                                      tarr, 0,
                                                      phasename=used_phase,
@@ -164,61 +225,73 @@ def synthetic_ray_tracing_setup(events, stations, mod):
                                              pick=arrival.t))
                     times.append(tarr)
 
-        ev_list = []
+        ev_list=[]
         ev_list.append(phase_markers)
 
 
-def solve(show=False):
-    global ev_dict_list, times, phase_list, km, mod, pyrocko_stations, bounds, source, source_dc, iiter
+def solve(show=False, n_tests=1, scenario_folder="scenarios", optimize_depth=False):
+    global ev_dict_list, times, phase_list, km, mod, pyrocko_stations, bounds, sources, source_dc, iiter
 
     km = 1000.
     iiter = 0
     mod = insheim_layered_model()
 
-    pyrocko_stations = model.load_stations("test_scenario" + "/" + "stations.raw.txt")
-
-    bounds = OrderedDict([
-        ('lat', (49.0, 49.4)),
-        ('lon', (8.2, 8.6)),
-        ('depth', (1.*km, 7.*km)),
-        ('timeshift', (-0.01, 0.01)),
-        ])
-
-    time = util.str_to_time("2008-06-10 06:40:55.265")
-    source_dc = DCSource(
-        lat=49.2641236051,
-        lon=8.40722205647,
-        depth=5968.,
-        strike=20.,
-        dip=40.,
-        rake=60.,
-        time=time,
-        magnitude=4.)
-
-    source = gf.DCSource(
-        lat=source_dc.lat,
-        lon=source_dc.lon)
-
     t = timesys.time()
+    sources = []
+    bounds = OrderedDict()
+    test_events, pyrocko_stations=load_synthetic_test(n_tests, scenario_folder)
+    ev_iter = 0
+    for ev in test_events:
+        bounds.update({'lat%s' %ev_iter:(ev.lat-0.4, ev.lat+0.4)})
+        bounds.update({'lon%s'%ev_iter:(ev.lon-0.4, ev.lon+0.4)})
+        bounds.update({'depth%s'%ev_iter:(0.1*km, 7.*km)})
+        bounds.update({'timeshift%s'%ev_iter:(-0.1, 0.1)})
+        ev_iter = ev_iter+1
 
-    n_tests = 9
-    test_events, test_stations = load_synthetic_test(n_tests)
+        time = ev.time
+        source_dc = DCSource(
+            lat=ev.lat,
+            lon=ev.lon,
+            depth=ev.depth,
+            time=time,
+            magnitude=ev.magnitude)
+
+        # start solution lat, lon
+        source = gf.DCSource(
+            lat=source_dc.lat,
+            lon=source_dc.lon)
+        sources.append(source)
     ev_dict_list = []
     times = []
 
     inp_cake = mod
-    Pg = cake.PhaseDef('P<(moho)')
-    pg = cake.PhaseDef('p<(moho)')
-    p = cake.PhaseDef('p')
-    P = cake.PhaseDef('P')
 
-    Phase_S = cake.PhaseDef('S')
-    Sg = cake.PhaseDef('S<(moho)')
-    sg = cake.PhaseDef('s<(moho)')
-    phase_list = [P, p, Sg, sg, pg, Phase_S]
+    # P-phase definitions
+    Pg=cake.PhaseDef('P<(moho)')
+    pg=cake.PhaseDef('p<(moho)')
+    PG=cake.PhaseDef('P'+'\\')
+    pG=cake.PhaseDef('p'+'\\')
+    p=cake.PhaseDef('p')
+    pS=cake.PhaseDef('pS')
+    PP=cake.PhaseDef('PP')
+    P=cake.PhaseDef('P')
 
-    synthetic_ray_tracing_setup(test_events, test_stations, inp_cake)
+    # S-phase Definitions
+    Phase_S=cake.PhaseDef('S')
+    Phase_s=cake.PhaseDef('s')
+    sP=cake.PhaseDef('sP')
+    SP=cake.PhaseDef('SP')
+    SS=cake.PhaseDef('SS')
+    Sg=cake.PhaseDef('S<(moho)')
+    sg=cake.PhaseDef('s<(moho)')
+    SG=cake.PhaseDef('S>(moho)')
+    sG=cake.PhaseDef('s>(moho)')
+    phase_list=[P, p, Sg, sg, pg, Phase_S, Phase_s, Pg, PG, pG, SS, PP, pS, SP, sP]
 
+    synthetic_ray_tracing_setup(test_events, pyrocko_stations, inp_cake)
+    import cProfile, pstats
+    pr = cProfile.Profile()
+    pr.enable()
     if show is True:
         from bokeh.client import push_session, show_session
         from bokeh.io import curdoc
@@ -228,8 +301,8 @@ def solve(show=False):
         f = figure(title='SciPy Optimisation Progress',
                    x_axis_label='# Iteration',
                    y_axis_label='Misfit',
-                   plot_width=800,
-                   plot_height=300)
+                   plot_width=1200,
+                   plot_height=500)
         plot = f.scatter([], [])
         ds = plot.data_source
 
@@ -242,23 +315,64 @@ def solve(show=False):
         session = push_session(curdoc())
         session.show()
 
-        result = scipy.optimize.differential_evolution(
+        result = differential_evolution(
             picks_fit,
             args=[plot],
             bounds=tuple(bounds.values()),
-            maxiter=4,
-            tol=0.01,
+            seed=123,
+            maxiter=25,
+            tol=0.0001,
             callback=lambda a, convergence: curdoc().add_next_tick_callback(button_callback(a, convergence)))
+
+        sources = update_sources(result.x)
+        for source in sources:
+            source.regularize()
+        if optimize_depth is True:
+            bounds = OrderedDict()
+            for source in sources:
+                bounds.update({'depth%s'%ev_iter:(source.depth-300., source.depth+300.)})
+            result = differential_evolution(
+                depth_fit,
+                args=[plot],
+                bounds=tuple(bounds.values()),
+                seed=123,
+                maxiter=6,
+                tol=0.001,
+                callback=lambda a, convergence: curdoc().add_next_tick_callback(button_callback(a, convergence)))
+            for source in sources:
+                sources = update_depth(result.x)
+
     else:
-        result = scipy.optimize.differential_evolution(
+        result = differential_evolution(
             picks_fit,
             args=[],
             bounds=tuple(bounds.values()),
-            maxiter=4,
-            tol=0.01)
+            maxiter=6,
+            seed=123,
+            tol=0.0001)
 
-    source = update_source(result.x)
-    source.regularize()
+        sources = update_sources(result.x)
+        for source in sources:
+            source.regularize()
 
-    print(source)
-    return result, source
+        if optimize_depth is True:
+            bounds = OrderedDict()
+            for source in sources:
+                bounds.update({'depth%s'%ev_iter:(source.depth-300., source.depth+300.)})
+            result = differential_evolution(
+                depth_fit,
+                args=[],
+                bounds=tuple(bounds.values()),
+                seed=123,
+                maxiter=6,
+                tol=0.001,
+                callback=lambda a, convergence: curdoc().add_next_tick_callback(button_callback(a, convergence)))
+            for source in sources:
+                sources = update_depth(result.x)
+    pr.disable()
+    filename = 'profile.prof'
+    pr.dump_stats(filename)
+    for source in sources:
+        source.regularize()
+        print(source)
+    return result, sources
