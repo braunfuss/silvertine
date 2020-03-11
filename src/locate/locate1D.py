@@ -15,6 +15,7 @@ import os
 from pyrocko import orthodrome as ortho
 from pyrocko import cake
 from pyrocko import model
+from pyrocko.gf import meta
 import time as timesys
 import scipy
 from pyrocko.gui.pile_viewer import PhaseMarker, EventMarker
@@ -28,14 +29,12 @@ def update_sources(params):
         source.lon = float(params[1+4*i])
         source.depth = float(params[2+4*i])
         source.time = float(source_dc.time - params[3+4*i])
-        print(source)
     return sources
 
 
 def update_depth(params):
     for i, source in enumerate(sources):
         source.depth = float(params[0+4*i])
-        print(source)
     return sources
 
 
@@ -53,6 +52,10 @@ def picks_fit(params, line=None):
             for stp in pyrocko_stations[iter_event]:
                 if stp.station == st["station"]:
                     phase = st["phase"]
+                    dists_m = (ortho.distance_accurate50m(source.lat, source.lon,
+                                                           stp.lat,
+                                                           stp.lon)+stp.elevation)
+
                     if phase == "Pg":
                         phase = "P<(moho)"
                     if phase == "pg":
@@ -74,21 +77,16 @@ def picks_fit(params, line=None):
                     if phase == "S*":
                         phase = "S"
                     cake_phase = cake.PhaseDef(phase)
-                    phase_list = [cake_phase]
-                    dists = (ortho.distance_accurate15nm(source.lat, source.lon,
-                                                       stp.lat,
-                                                       stp.lon)+stp.elevation)*cake.m2d
+                    coords = num.array((dists_m, num.tile(source.depth, 1))).T
 
-                    for i, arrival in enumerate(mod.arrivals([dists],
-                                                phases=phase_list,
-                                                zstart=source.depth)):
+                    onset = interpolated_tts[cake_phase.definition()].interpolate(coords)
 
-                        tdiff = st["pick"]
-
-                        used_phase = arrival.used_phase()
-                        if phase == used_phase.given_name() or phase[0] == used_phase.given_name()[0]:
-                            misfits += num.sqrt(num.sum((tdiff - arrival.t)**2))
-                            norms += num.sqrt(num.sum(arrival.t**2))
+                    tdiff = st["pick"]
+                    try:
+                        misfits += num.sqrt(num.sum((tdiff - onset)**2))
+                        norms += num.sqrt(num.sum(onset**2))
+                    except:
+                        pass
 
     misfit = num.sqrt(misfits**2 / norms**2)
     iter_event = iter_event + 1
@@ -100,7 +98,6 @@ def picks_fit(params, line=None):
         line.data_source.stream(data)
 
     return misfit
-
 
 
 def depth_fit(params, line=None):
@@ -166,7 +163,7 @@ def depth_fit(params, line=None):
     return misfit
 
 
-def load_synthetic_test(n_tests, scenario_folder, nstart=8, nend=None):
+def load_synthetic_test(n_tests, scenario_folder, nstart=0, nend=None):
     events = []
     stations = []
     for i in range(nstart, n_tests):
@@ -215,7 +212,7 @@ def synthetic_ray_tracing_setup(events, stations, mod):
                         used_phase = "Sg"
                     if used_phase == "p":
                         used_phase = "p"
-                    tarr=events[nev].time+arrival.t
+                    tarr = events[nev].time+arrival.t
                     phase_markers.append(PhaseMarker(["0", st.station], tarr,
                                                      tarr, 0,
                                                      phasename=used_phase,
@@ -230,24 +227,25 @@ def synthetic_ray_tracing_setup(events, stations, mod):
         ev_list.append(phase_markers)
 
 
-def calculate_ttt()
-
-
-def solve(show=False, n_tests=1, scenario_folder="scenarios", optimize_depth=False):
-    global ev_dict_list, times, phase_list, km, mod, pyrocko_stations, bounds, sources, source_dc, iiter
+def solve(show=False, n_tests=1, scenario_folder="scenarios",
+          optimize_depth=False, scenario=True, data_folder="data"):
+    global ev_dict_list, times, phase_list, km, mod, pyrocko_stations, bounds, sources, source_dc, iiter, interpolated_tts
 
     km = 1000.
     iiter = 0
     mod = insheim_layered_model()
-
+    mod_name = "insheim"
     t = timesys.time()
     sources = []
     bounds = OrderedDict()
-    test_events, pyrocko_stations = load_synthetic_test(n_tests, scenario_folder)
+    if scenario is True:
+        test_events, pyrocko_stations = load_synthetic_test(n_tests, scenario_folder)
+    else:
+        test_events, pyrocko_stations = load_data(data_folder)
     ev_iter = 0
     for ev in test_events:
-        bounds.update({'lat%s' %ev_iter:(ev.lat-0.4, ev.lat+0.4)})
-        bounds.update({'lon%s'%ev_iter:(ev.lon-0.4, ev.lon+0.4)})
+        bounds.update({'lat%s' %ev_iter:(ev.lat-0.2, ev.lat+0.2)})
+        bounds.update({'lon%s'%ev_iter:(ev.lon-0.2, ev.lon+0.2)})
         bounds.update({'depth%s'%ev_iter:(0.1*km, 7.*km)})
         bounds.update({'timeshift%s'%ev_iter:(-0.1, 0.1)})
         ev_iter = ev_iter+1
@@ -290,12 +288,22 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios", optimize_depth=Fal
     sg=cake.PhaseDef('s<(moho)')
     SG=cake.PhaseDef('S>(moho)')
     sG=cake.PhaseDef('s>(moho)')
-    phase_list=[P, p, Sg, sg, pg, Phase_S, Phase_s, Pg, PG, pG, SS, PP, pS, SP, sP]
+    phase_list = [P, p, Sg, sg, pg, Phase_S, Phase_s, Pg, PG, pG, SS, PP, pS, SP, sP]
 
     synthetic_ray_tracing_setup(test_events, pyrocko_stations, inp_cake)
-    import cProfile, pstats
+    import cProfile
+    import pstats
     pr = cProfile.Profile()
     pr.enable()
+    from seiger.util import ttt
+    # Calculate Traveltime tabel for each phase (parallel)
+
+    try:
+        interpolated_tts = ttt.load_sptree(phase_list, mod_name)
+    except:
+        print("Calculating travel time look up table, this may take some time.")
+        ttt.calculate_ttt_parallel(pyrocko_stations, mod, phase_list, mod_name)
+        interpolated_tts = ttt.load_sptree(phase_list, mod_name)
     if show is True:
         from bokeh.client import push_session, show_session
         from bokeh.io import curdoc
@@ -351,7 +359,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios", optimize_depth=Fal
             picks_fit,
             args=[],
             bounds=tuple(bounds.values()),
-            maxiter=6,
+            maxiter=10,
             seed=123,
             tol=0.0001)
 

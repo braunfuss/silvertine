@@ -107,9 +107,9 @@ def rand_source(event, SourceType="MT"):
             north_shift=event.north_shift,
             east_shift=event.east_shift,
             depth=event.depth,
-            azimuth=event.strike
+            azimuth=event.strike,
             dip=mt.dip1,
-            volume_change=num.random.uniform(1,1) # here synthetic volume change
+            volume_change=num.random.uniform(1,1), # here synthetic volume change
             time=event.time,
             clvd_moment=mt.moment()) # ?
 
@@ -125,7 +125,6 @@ def rand_source(event, SourceType="MT"):
             pp=num.random.uniform(1,1),  # here change in pa
             time=event.time) # ?
 
-
     if SourceType == "PorePressureLineSource":
         mt = MomentTensor.random_dc(magnitude=event.magnitude)
         event.moment_tensor = mt
@@ -135,16 +134,16 @@ def rand_source(event, SourceType="MT"):
             north_shift=event.north_shift,
             east_shift=event.east_shift,
             depth=event.depth,
-            azimuth=event.strike
+            azimuth=event.strike,
             dip=mt.dip1,
-            pp=num.random.uniform(1,1) # here change in pa
+            pp=num.random.uniform(1,1), # here change in pa
             time=event.time,
-            length=num.random.uniform(1,20)*km, # scaling!)
+            length=num.random.uniform(1,20)*km) # scaling!)
 
     if SourceType == "Rectangular":
         length = num.random.uniform(1,20)*km
         width = num.random.uniform(1,20)*km
-        strike,dip,rake = MomentTensor.random_strike_dip_rake()
+        strike, dip, rake = MomentTensor.random_strike_dip_rake()
         event.moment_tensor = MomentTensor(strike1=strike, dip1=dip, rake1=rake)
         source = RectangularSource(
             lat=event.lat,

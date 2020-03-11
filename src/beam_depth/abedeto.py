@@ -12,6 +12,10 @@ import logging
 from ..util.ref_mods import *
 pjoin = os.path.join
 
+"""
+array beam depth method based on scripts from Marius Kriegerowski, GFZ, adbeto code
+"""
+
 
 class CakeTiming(Object):
     '''Calculates and caches phase arrivals.
@@ -179,10 +183,6 @@ def process(args, scenario_folder, n_tests=1, show=True):
             fn_array_center = pjoin("%sscenario_%s/" % (scenario_folder, i), 'array_center.pf')
             settings.station_filename = fn_array_center
             station = model.load_stations(fn_array_center)
-
-    #    settings.store_id = '%s_%s_%s' % (array_id,
-    #                                      target_crust,
-    #                                      source_crust)
 
             settings.store_id = 'landau_100hz'
 
