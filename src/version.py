@@ -1,1 +1,1 @@
-from seiger.setup_info import version as __version__  # noqa
+from silvertine.setup_info import version as __version__  # noqa

@@ -267,7 +267,7 @@ def gen_white_noise(synthetic_traces,scale=2e-8, scale_spectral='False'):
 
 
 def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin, magmax, depmin, depmax, latmin, latmax, lonmin, lonmax, stations_file):
-    engine = gf.LocalEngine(store_superdirs=['/home/steinberg/seiger/grond/gf_stores'])
+    engine = gf.LocalEngine(store_superdirs=['/home/steinberg/silvertine/grond/gf_stores'])
     for scenario in range(scenarios):
 
         choice = num.random.choice(2,1)
@@ -321,7 +321,7 @@ def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin, ma
              noise_events=noise_events)
 
 
-def seigerScenario(projdir, scenarios=10, modelled_channel_codes='ENZ',
+def silvertineScenario(projdir, scenarios=10, modelled_channel_codes='ENZ',
                    store_id='landau_100hz', magmin=1., magmax=3.,
                    depmin=5, depmax=10,
                    latmin=48.9586, latmax=49.3,

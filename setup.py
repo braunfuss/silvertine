@@ -68,7 +68,7 @@ installed_date = %s
             sha1, local_modifications, version, combi, datestr)])
 
         outfile = self.get_module_outfile(
-            self.build_lib, ['seiger'], 'setup_info')
+            self.build_lib, ['silvertine'], 'setup_info')
 
         dir = op.dirname(outfile)
         self.mkpath(dir)
@@ -76,7 +76,7 @@ installed_date = %s
             f.write(module_code)
 
     def run(self):
-        self.make_info_module('seiger', version)
+        self.make_info_module('silvertine', version)
         build_py.run(self)
 
 
@@ -86,34 +86,34 @@ setup(
         'install': CustomInstallCommand,
     },
 
-    name='seiger',
+    name='silvertine',
 
     description='Monitoring and relocation of induced earthquakes',
 
     version=version,
 
-    author='The seiger Developers',
+    author='The silvertine Developers',
 
     author_email='andreas.steinberg@ifg.uni-kiel.de',
 
     packages=[
-        'seiger',
-        'seiger.apps',
-        'seiger.clustering',
-        'seiger.scenario',
-        'seiger.locate',
-        'seiger.util',
-        'seiger.beam_depth',
+        'silvertine',
+        'silvertine.apps',
+        'silvertine.clustering',
+        'silvertine.scenario',
+        'silvertine.locate',
+        'silvertine.util',
+        'silvertine.beam_depth',
     ],
     entry_points={
         'console_scripts': [
-            'seiger = seiger.apps.seiger:main',
+            'silvertine = silvertine.apps.silvertine:main',
         ]
     },
-    package_dir={'seiger': 'src'},
+    package_dir={'silvertine': 'src'},
 
     package_data={
-        'seiger': [
+        'silvertine': [
             'report/app/*.html',
             'report/app/favicon.png',
             'report/app/templates/*.html',
@@ -124,7 +124,7 @@ setup(
             'data/snippets/*.md',
             'data/examples/*/*.*',
             'data/examples/*/*/*.*',
-            'data/examples/*/*/seigerown',
+            'data/examples/*/*/silvertineown',
             ]},
 
     data_files=[],

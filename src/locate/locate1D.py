@@ -295,7 +295,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
     import pstats
     pr = cProfile.Profile()
     pr.enable()
-    from seiger.util import ttt
+    from silvertine.util import ttt
     # Calculate Traveltime tabel for each phase (parallel)
 
     try:

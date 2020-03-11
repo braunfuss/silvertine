@@ -26,7 +26,7 @@ def find_station(name, tmin=None, tmax=None):
             return False
 
 
-def load_seiger_stations():
+def load_silvertine_stations():
 
     stations_landau = num.loadtxt("data/stations_landau.pf", delimiter=",", dtype='str')
     stations_landau_pyrocko = []
