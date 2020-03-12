@@ -376,7 +376,7 @@ def command_locate(args):
             '--nevents', dest='nevents', type=int, default=1,
             help='Number of events to locate (default: %default)')
         parser.add_option(
-            '--scenario', dest='scenario', type=str, default=False,
+            '--scenario', dest='scenario', type=str, default=True,
             help='Synthetic scenario')
         parser.add_option(
             '--data_folder', dest='data_folder', type=str, default="data",
@@ -388,7 +388,7 @@ def command_locate(args):
     project_dir = args[0]
     if options.show is not False:
         options.show = True
-    result, best_model = silvertine.locate.locate1D.solve(scenario_folder=project_dir, show=options.show, n_tests=options.nevents, scenario=option.scenario, data_folder=options.data_folder)
+    result, best_model = silvertine.locate.locate1D.solve(scenario_folder=project_dir, show=options.show, n_tests=options.nevents, scenario=options.scenario, data_folder=options.data_folder)
 
 
 def command_beam(args):
