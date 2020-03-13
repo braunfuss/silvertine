@@ -146,12 +146,23 @@ def picks_fit(params, line=None, line2=None, line3=None, line4=None, interpolate
                         phase = "P"
                     if phase == "S*":
                         phase = "S"
+                    if phase == "SmS":
+                        phase = 'Sv(moho)s'
+                    if phase == "PmP":
+                        phase = 'Pv(moho)p'
+                    if phase == "Pn":
+                        phase = 'Pv_(moho)p'
+                    if phase == "Sn":
+                        phase = 'Sv_(moho)s'
                     cake_phase = cake.PhaseDef(phase)
 
                     if interpolate is True:
                         coords = num.array((dists_m, num.tile(source.depth, 1))).T
-                        onset = interpolated_tts[cake_phase.definition()].interpolate(coords)
-
+                        try:
+                            onset = interpolated_tts[cake_phase.definition()].interpolate(coords)
+                        except:
+                            print(coords)
+                            print(fail)
                     elif interpolate is False:
                         tts = interpolated_tts[cake_phase.definition()]
                         absolute_difference_function = lambda list_value : abs(abs(list_value[:][0][1] - given_value[1]))+abs(list_value[:][0][0] - given_value[0])
@@ -322,8 +333,14 @@ def synthetic_ray_tracing_setup(events, stations, mod):
         ev_list.append(phase_markers)
 
 
-def load_data(data_folder):
-    return None
+def load_data(data_folder=None, nevent=0):
+    from silvertine.util import silvertine_meta
+    ev_dict_list, picks = silvertine_meta.load_ev_dict_list(path=data_folder, nevent=0)
+    ev_list_picks, stations, ev_list, ev_dict_list = silvertine_meta.convert_phase_picks_to_pyrocko(ev_dict_list, picks, nevent=0)
+    if nevent is None:
+        return ev_list, stations, ev_dict_list, ev_list_picks
+    else:
+        return ev_list, stations, ev_dict_list, ev_list_picks
 
 
 @ray.remote
@@ -341,8 +358,9 @@ def optim_parallel(event, sources, bounds, stations, interpolated_tts):
         source.regularize()
         print(source)
 
+
 def solve(show=False, n_tests=1, scenario_folder="scenarios",
-          optimize_depth=False, scenario=True, data_folder="data", parallel=True):
+          optimize_depth=False, scenario=True, data_folder="data", parallel=False, adress=None):
     global ev_dict_list, times, phase_list, km, mod, pyrocko_stations, bounds, sources, source_dc, iiter, interpolated_tts
 
     km = 1000.
@@ -358,13 +376,15 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
     if scenario is True:
         test_events, pyrocko_stations = load_synthetic_test(n_tests, scenario_folder)
     else:
-        test_events, pyrocko_stations = load_data(data_folder)
+        test_events, pyrocko_stations, ev_dict_list, ev_list_picks = load_data(data_folder)
     ev_iter = 0
     for ev in test_events:
         if parallel is False:
             bounds.update({'lat%s' %ev_iter:(ev.lat-0.2, ev.lat+0.2)})
             bounds.update({'lon%s'%ev_iter:(ev.lon-0.2, ev.lon+0.2)})
-            if ev.depth >= 3*km:
+            if ev.depth is None:
+                bounds.update({'depth%s'%ev_iter:(0*km, 15*km)})
+            elif ev.depth >= 3*km:
                 bounds.update({'depth%s'%ev_iter:(ev.depth-3*km, ev.depth+3*km)})
             else:
                 bounds.update({'depth%s'%ev_iter:(0., ev.depth+3*km)})
@@ -397,42 +417,49 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
             lat=source_dc.lat,
             lon=source_dc.lon)
         sources.append(source)
-    ev_dict_list = []
     times = []
 
     inp_cake = mod
 
     # P-phase definitions
-    Pg=cake.PhaseDef('P<(moho)')
-    pg=cake.PhaseDef('p<(moho)')
-    PG=cake.PhaseDef('P'+'\\')
-    pG=cake.PhaseDef('p'+'\\')
-    p=cake.PhaseDef('p')
-    pS=cake.PhaseDef('pS')
-    PP=cake.PhaseDef('PP')
-    P=cake.PhaseDef('P')
-    pP=cake.PhaseDef('pP')
-    pPv3pP=cake.PhaseDef('pPv3pP')
-    pPv3pPv3pP=cake.PhaseDef('pPv3pPv3pP')
-
-
+    Pg = cake.PhaseDef('P<(moho)')
+    pg = cake.PhaseDef('p<(moho)')
+    PG = cake.PhaseDef('P'+'\\')
+    pG = cake.PhaseDef('p'+'\\')
+    p = cake.PhaseDef('p')
+    pS = cake.PhaseDef('pS')
+    PP = cake.PhaseDef('PP')
+    P = cake.PhaseDef('P')
+    pP = cake.PhaseDef('pP')
+    pPv3pP = cake.PhaseDef('pPv3pP')
+    pPv3pPv3pP = cake.PhaseDef('pPv3pPv3pP')
+    PmP = cake.PhaseDef('Pv(moho)p')
+    Pn = cake.PhaseDef('Pv_(moho)p')
     # S-phase Definitions
-    S=cake.PhaseDef('S')
-    s=cake.PhaseDef('s')
-    sP=cake.PhaseDef('sP')
-    SP=cake.PhaseDef('SP')
-    SS=cake.PhaseDef('SS')
-    Sg=cake.PhaseDef('S<(moho)')
-    sg=cake.PhaseDef('s<(moho)')
-    SG=cake.PhaseDef('S>(moho)')
-    sG=cake.PhaseDef('s>(moho)')
-    sS=cake.PhaseDef('sS')
-    sSv3sS=cake.PhaseDef('sSv3sS')
-    sSv3sSv3sS=cake.PhaseDef('sSv3sSv3sS')
+    S = cake.PhaseDef('S')
+    s = cake.PhaseDef('s')
+    sP = cake.PhaseDef('sP')
+    SP = cake.PhaseDef('SP')
+    SS = cake.PhaseDef('SS')
+    SmS = cake.PhaseDef('Sv(moho)s')
+    Sg = cake.PhaseDef('S<(moho)')
+    sg = cake.PhaseDef('s<(moho)')
+    SG = cake.PhaseDef('S>(moho)')
+    sG = cake.PhaseDef('s>(moho)')
+    sS = cake.PhaseDef('sS')
+    Sn = cake.PhaseDef('Sv_(moho)s')
 
-    phase_list = [P, p, Sg, sg, pg, S, s, Pg, PG, pG, SS, PP, pS, SP, sP, sS, pP, pPv3pP, pPv3pPv3pP, sSv3sS, sSv3sSv3sS]
+    sSv3sS = cake.PhaseDef('sSv3sS')
+    sSv3sSv3sS = cake.PhaseDef('sSv3sSv3sS')
 
-    synthetic_ray_tracing_setup(test_events, pyrocko_stations, inp_cake)
+    phase_list = [P, p, Sg, sg, pg, S, s, Pg, PG, pG, SS, PP, pS, SP, sP, sS,
+                  pP, pPv3pP, pPv3pPv3pP, sSv3sS, sSv3sSv3sS, SmS, PmP]
+
+    phase_list = [P, p, Sg, S, s, Pg, pg, sg, SmS, PmP, Sn, Pn]
+
+    if scenario is True:
+        ev_dict_list = []
+        synthetic_ray_tracing_setup(test_events, pyrocko_stations, inp_cake)
     import cProfile
     import pstats
     pr = cProfile.Profile()
@@ -440,12 +467,13 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
     from silvertine.util import ttt
     # Calculate Traveltime tabel for each phase (parallel)
 
-    try:
-        interpolated_tts = ttt.load_sptree(phase_list, mod_name)
-    except:
-        print("Calculating travel time look up table, this may take some time.")
-        ttt.calculate_ttt_parallel(pyrocko_stations, mod, phase_list, mod_name)
-        interpolated_tts = ttt.load_sptree(phase_list, mod_name)
+    interpolated_tts, missing = ttt.load_sptree(phase_list, mod_name)
+    if len(missing) != 0:
+        print("Calculating travel time look up table,\
+                this may take some time.")
+        ttt.calculate_ttt_parallel(pyrocko_stations, mod, missing, mod_name, adress=adress)
+        interpolated_tts_new, missing = ttt.load_sptree(phase_list, mod_name)
+        interpolated_tts = {**interpolated_tts, **interpolated_tts_new}
     if show is True:
         from bokeh.client import push_session, show_session
         from bokeh.io import curdoc
@@ -503,7 +531,8 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
         if optimize_depth is True:
             bounds = OrderedDict()
             for source in sources:
-                bounds.update({'depth%s'%ev_iter:(source.depth-300., source.depth+300.)})
+                bounds.update({'depth%s' % ev_iter:(source.depth-300.,
+                                                    source.depth+300.)})
             result = differential_evolution(
                 depth_fit,
                 args=[plot],
@@ -537,7 +566,8 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
         if optimize_depth is True:
             bounds = OrderedDict()
             for source in sources:
-                bounds.update({'depth%s'%ev_iter:(source.depth-300., source.depth+300.)})
+                bounds.update({'depth%s' % ev_iter: (source.depth-300.,
+                                                     source.depth+300.)})
             result = differential_evolution(
                 depth_fit,
                 args=[],

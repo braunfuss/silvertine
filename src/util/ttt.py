@@ -43,9 +43,9 @@ def calculate_ttt(stations, mod, phase_defs, mod_name, gridspacing=1000.,
     x_tolerance = num.array((10., 10.))       # in meters
     # Boundaries of the grid.
     xmin = 0.
-    xmax = 60000.
+    xmax = 260000.
     zmin = 0.
-    zmax = 15000.
+    zmax = 20000.
     x_bounds = num.array(((xmin, xmax), (zmin, zmax)))
     # In this example the receiver is located at the surface.
     receiver_depth = 0.
@@ -98,20 +98,24 @@ def calculate_ttt(stations, mod, phase_defs, mod_name, gridspacing=1000.,
         sptree.dump(filename=folder+'/'+mod_name+'sptree_%s.yaml' % phase_def.id)
 
 
-def calculate_ttt_parallel(stations, mod, phase_list, mod_name, gridspacing=1000., dimx=50000., dimy=50000., dimz=10000., o_lat=49.2, o_lon=8.4):
+def calculate_ttt_parallel(stations, mod, phase_list, mod_name, gridspacing=1000., dimx=50000., dimy=50000., dimz=10000., o_lat=49.2, o_lon=8.4, adress=None):
     num_cpus = psutil.cpu_count(logical=False)
-    ray.init(num_cpus=num_cpus)
+    if adress is not None:
+        ray.init(adress=adress)
+    else:
+        ray.init(num_cpus=num_cpus)
     stations = stations[0]
-    #mod = ray.put(mod)
-    #stations = ray.put(stations)
-    #mod_name = ray.put(stations)
     ray.get([calculate_ttt.remote(stations, mod, phase_list[i], mod_name) for i in range(len(phase_list))])
 
 
 def load_sptree(phase_defs, mod_name, folder="scenarios/ttt/"):
     interpolated_tts = {}
+    missing = []
     for phase_def in phase_defs:
-        spt = spit.SPTree(filename=folder+'/'+mod_name+'sptree_%s.yaml' % phase_def.definition())
-        interpolated_tts[phase_def.definition()] = spt
+        try:
+            spt = spit.SPTree(filename=folder+'/'+mod_name+'sptree_%s.yaml' % phase_def.definition())
+            interpolated_tts[phase_def.definition()] = spt
+        except:
+            missing.append(phase_def)
 
-    return interpolated_tts
+    return interpolated_tts, missing

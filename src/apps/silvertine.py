@@ -381,14 +381,19 @@ def command_locate(args):
         parser.add_option(
             '--data_folder', dest='data_folder', type=str, default="data",
             help='Data folder for real data')
-
+        parser.add_option(
+            '--parallel', dest='parallel', type=str, default=False,
+            help='parallel location')
+        parser.add_option(
+            '--adress', dest='adress', type=str, default=None,
+            help='Adress of ray instance for cluster computation')
     parser, options, args = cl_parse('locate', args, setup)
 
     from silvertine.locate import locate1D
     project_dir = args[0]
     if options.show is not False:
         options.show = True
-    result, best_model = silvertine.locate.locate1D.solve(scenario_folder=project_dir, show=options.show, n_tests=options.nevents, scenario=options.scenario, data_folder=options.data_folder)
+    result, best_model = silvertine.locate.locate1D.solve(scenario_folder=project_dir, show=options.show, n_tests=options.nevents, scenario=options.scenario, data_folder=options.data_folder, parallel=options.parallel, adress=options.adress)
 
 
 def command_beam(args):
