@@ -4,6 +4,7 @@ from pyrocko.client import fdsn
 import numpy as num
 from pyrocko.gui.pile_viewer import PhaseMarker, EventMarker
 
+
 def find_station(name, tmin=None, tmax=None):
     if tmin and tmax is None:
         tmin = util.stt('2013-10-23 21:06:54.400')
@@ -109,7 +110,6 @@ def load_ev_dict_list(path=None, nevent=0):
         except:
             ev_dict_list.append(dict(id=ev[0], time=ev_time, lat=float(ev[3]), lon=float(ev[4]), mag=None, mag_type=None, source=ev[5], phases=[], depth=[], rms=[], error_h = [], error_z=[]  ))
 
-
     picks = num.loadtxt("data/geres_phas.csv", delimiter="\t", dtype='str')
     return ev_dict_list, picks
 
@@ -146,8 +146,8 @@ def convert_phase_picks_to_pyrocko(ev_dict_list, picks, nevent=0):
                 else:
                     time = time[0:2]+":"+time[2:4]+":"+time[4:5]+time[5:]
                 date = str(date[0:4])+"-"+str(date[4:6]+"-"+date[6:8]+" ")
-                ev_time = util.str_to_time(date+time)
-                times.append(ev_time)
+                pick_time = util.str_to_time(date+time)
+                times.append(pick_time)
                 if p[1] not in stations_event:
                     for st in stations_meta_pyrocko:
                             if st.station == p[1]:
@@ -183,8 +183,8 @@ def convert_phase_picks_to_pyrocko(ev_dict_list, picks, nevent=0):
                 else:
                     event = model.event.Event(lat=ev["lat"], lon=ev["lon"], time=ev["time"], catalog=ev["source"], magnitude=ev["mag"])
                     pyrocko_events.append(event)
-                    phase_markers.append(PhaseMarker(["0",p[1]], ev_time, ev_time, 0, phasename=p[2], event_hash=ev["id"], event=event))
-                    ev["phases"].append(dict(station=p[1], phase=p[2], pick=ev_time))
+                    phase_markers.append(PhaseMarker(["0",p[1]], pick_time, pick_time, 0, phasename=p[2], event_hash=ev["id"], event=event))
+                    ev["phases"].append(dict(station=p[1], phase=p[2], pick=pick_time-event.time))
                     pyrocko_station.append(station)
         pyrocko_stations.append(pyrocko_station)
         ev_list.append(phase_markers)

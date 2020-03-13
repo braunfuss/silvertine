@@ -158,18 +158,13 @@ def picks_fit(params, line=None, line2=None, line3=None, line4=None, interpolate
 
                     if interpolate is True:
                         coords = num.array((dists_m, num.tile(source.depth, 1))).T
-                        try:
-                            onset = interpolated_tts[cake_phase.definition()].interpolate(coords)
-                        except:
-                            print(coords)
-                            print(fail)
+                        onset = interpolated_tts[cake_phase.definition()].interpolate(coords)
                     elif interpolate is False:
                         tts = interpolated_tts[cake_phase.definition()]
                         absolute_difference_function = lambda list_value : abs(abs(list_value[:][0][1] - given_value[1]))+abs(list_value[:][0][0] - given_value[0])
                         d = [(k,v) for k,v in tts.f_values.items()]
                         given_value = (dists_m, source_depth)
                         onset = min(d, key=absolute_difference_function)[1]
-
                     tdiff = st["pick"]
                     try:
                         misfits += num.sqrt(num.sum((tdiff - onset)**2))
@@ -494,15 +489,15 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
         p2 = f2.scatter([], [])
 
         f3 = figure(title='Lat with depth',
-                   x_axis_label='Lat',
-                   y_axis_label='depth',
+                   x_axis_label='Depth [m]',
+                   y_axis_label='Lat',
                    plot_width=500,
                    plot_height=500)
         p3 = f3.scatter([], [])
 
         f4 = figure(title='Lat with depth',
-                   x_axis_label='Lat',
-                   y_axis_label='depth',
+                   x_axis_label='Depth [m]',
+                   y_axis_label='Lon',
                    plot_width=500,
                    plot_height=500)
         p4 = f4.scatter([], [])
