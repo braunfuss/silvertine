@@ -376,16 +376,19 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
     ev_iter = 0
     for ev in test_events:
         if parallel is False:
-            bounds.update({'lat%s' % ev_iter: (ev.lat-0.2, ev.lat+0.2)})
-            bounds.update({'lon%s' % ev_iter: (ev.lon-0.2, ev.lon+0.2)})
+            bounds.update({'lat%s' % ev_iter: (ev.lat-0.5, ev.lat+0.5)})
+            bounds.update({'lon%s' % ev_iter: (ev.lon-0.5, ev.lon+0.5)})
             if ev.depth is None:
                 bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
             elif ev.depth >= 3*km:
-                bounds.update({'depth%s' % ev_iter: (ev.depth-3*km, ev.depth+3*km)})
-            else:
-                bounds.update({'depth%s' % ev_iter: (0., ev.depth+3*km)})
+#                bounds.update({'depth%s' % ev_iter: (ev.depth-3*km, ev.depth+3*km)})
+                bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
 
-            bounds.update({'timeshift%s' % ev_iter: (-0.1, 0.1)})
+            else:
+#                bounds.update({'depth%s' % ev_iter: (0., ev.depth+3*km)})
+                bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
+
+            bounds.update({'timeshift%s' % ev_iter: (-0.5, 0.5)})
         else:
             bounds = OrderedDict()
             bounds.update({'lat%s' % ev_iter: (ev.lat-0.2, ev.lat+0.2)})

@@ -182,10 +182,11 @@ def convert_phase_picks_to_pyrocko(ev_dict_list, picks, nevent=0):
                     print(p[1], "not found in lists or online")
                 else:
                     event = model.event.Event(lat=ev["lat"], lon=ev["lon"], time=ev["time"], catalog=ev["source"], magnitude=ev["mag"])
-                    pyrocko_events.append(event)
                     phase_markers.append(PhaseMarker(["0",p[1]], pick_time, pick_time, 0, phasename=p[2], event_hash=ev["id"], event=event))
                     ev["phases"].append(dict(station=p[1], phase=p[2], pick=pick_time-event.time))
                     pyrocko_station.append(station)
+        pyrocko_events.append(event)
+
         pyrocko_stations.append(pyrocko_station)
         ev_list.append(phase_markers)
 
