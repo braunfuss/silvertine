@@ -26,6 +26,7 @@ import psutil
 
 num_cpus = psutil.cpu_count(logical=False)-1
 
+
 def update_sources(params):
     for i, source in enumerate(sources):
         source.lat = float(params[0+4*i])
@@ -35,19 +36,15 @@ def update_sources(params):
     return sources
 
 
-def update_source(params):
-
-
-    return source
-
-
 def update_depth(params):
     for i, source in enumerate(sources):
         source.depth = float(params[0+4*i])
     return sources
 
 
-def picks_fit_parallel(params, events=None, sources=None, source_dc=None, pyrocko_stations=None, interpolated_tts=None, interpolate=True):
+def picks_fit_parallel(params, events=None, sources=None, source_dc=None,
+                       pyrocko_stations=None, interpolated_tts=None,
+                       interpolate=True):
     misfits = 0.
     norms = 0.
     dists = []
@@ -61,9 +58,10 @@ def picks_fit_parallel(params, events=None, sources=None, source_dc=None, pyrock
             for stp in pyrocko_stations:
                 if stp.station == st["station"]:
                     phase = st["phase"]
-                    dists_m = (ortho.distance_accurate50m(source.lat, source.lon,
-                                                           stp.lat,
-                                                           stp.lon)+stp.elevation)
+                    dists_m = (ortho.distance_accurate50m(source.lat,
+                                                          source.lon,
+                                                          stp.lat,
+                                                          stp.lon)+stp.elevation)
 
                     if phase == "Pg":
                         phase = "P<(moho)"
@@ -93,7 +91,7 @@ def picks_fit_parallel(params, events=None, sources=None, source_dc=None, pyrock
 
                     elif interpolate is False:
                         tts = interpolated_tts[cake_phase.definition()]
-                        absolute_difference_function = lambda list_value : abs(abs(list_value[:][0][1] - given_value[1]))+abs(list_value[:][0][0] - given_value[0])
+                        absolute_difference_function = lambda list_value: abs(abs(list_value[:][0][1] - given_value[1]))+abs(list_value[:][0][0] - given_value[0])
                         d = [(k,v) for k,v in tts.f_values.items()]
                         given_value = (dists_m, source_depth)
                         onset = min(d, key=absolute_difference_function)[1]
@@ -102,7 +100,7 @@ def picks_fit_parallel(params, events=None, sources=None, source_dc=None, pyrock
                     try:
                         misfits += num.sqrt(num.sum((tdiff - onset)**2))
                         norms += num.sqrt(num.sum(onset**2))
-                    except:
+                    except Exception:
                         pass
 
     return misfit
@@ -122,9 +120,10 @@ def picks_fit(params, line=None, line2=None, line3=None, line4=None, interpolate
             for stp in pyrocko_stations[iter_event]:
                 if stp.station == st["station"]:
                     phase = st["phase"]
-                    dists_m = (ortho.distance_accurate50m(source.lat, source.lon,
-                                                           stp.lat,
-                                                           stp.lon)+stp.elevation)
+                    dists_m = (ortho.distance_accurate50m(source.lat,
+                                                          source.lon,
+                                                          stp.lat,
+                                                          stp.lon)+stp.elevation)
 
                     if phase == "Pg":
                         phase = "P<(moho)"
@@ -161,7 +160,7 @@ def picks_fit(params, line=None, line2=None, line3=None, line4=None, interpolate
                         onset = interpolated_tts[cake_phase.definition()].interpolate(coords)
                     elif interpolate is False:
                         tts = interpolated_tts[cake_phase.definition()]
-                        absolute_difference_function = lambda list_value : abs(abs(list_value[:][0][1] - given_value[1]))+abs(list_value[:][0][0] - given_value[0])
+                        absolute_difference_function = lambda list_value: abs(abs(list_value[:][0][1] - given_value[1]))+abs(list_value[:][0][0] - given_value[0])
                         d = [(k,v) for k,v in tts.f_values.items()]
                         given_value = (dists_m, source_depth)
                         onset = min(d, key=absolute_difference_function)[1]
@@ -169,7 +168,7 @@ def picks_fit(params, line=None, line2=None, line3=None, line4=None, interpolate
                     try:
                         misfits += num.sqrt(num.sum((tdiff - onset)**2))
                         norms += num.sqrt(num.sum(onset**2))
-                    except:
+                    except Exception:
                         pass
         if line2:
             data = {
@@ -208,7 +207,7 @@ def depth_fit(params, line=None):
     norms = 0.
     dists = []
     iter_event = 0
-    iter_new = iiter +1
+    iter_new = iiter + 1
     iiter = iter_new
     for ev, source in zip(ev_dict_list, sources):
         for st in ev["phases"]:
@@ -237,9 +236,10 @@ def depth_fit(params, line=None):
                         phase = "S"
                     cake_phase = cake.PhaseDef(phase)
                     phase_list = [cake_phase]
-                    dists = (ortho.distance_accurate15nm(source.lat, source.lon,
-                                                       stp.lat,
-                                                       stp.lon)+stp.elevation)*cake.m2d
+                    dists = (ortho.distance_accurate15nm(source.lat,
+                                                         source.lon,
+                                                         stp.lat,
+                                                         stp.lon)+stp.elevation)*cake.m2d
 
                     for i, arrival in enumerate(mod.arrivals([dists],
                                                 phases=phase_list,
@@ -290,41 +290,41 @@ def synthetic_ray_tracing_setup(events, stations, mod):
         station_phase_to_nslc = {}
         dists = []
         for st in stations:
-                dist = (ortho.distance_accurate15nm(ev["lat"], ev["lon"],
-                                                    st.lat, st.lon)+st.elevation)*cake.m2d
-                dists.append(dist)
-                for i, arrival in enumerate(mod.arrivals([dist],
-                                            phases=phase_list,
-                                            zstart=events[nev].depth)):
+            dist = (ortho.distance_accurate15nm(ev["lat"], ev["lon"],
+                                                st.lat, st.lon)+st.elevation)*cake.m2d
+            dists.append(dist)
+            for i, arrival in enumerate(mod.arrivals([dist],
+                                        phases=phase_list,
+                                        zstart=events[nev].depth)):
 
-                    event_arr = model.event.Event(lat=ev["lat"], lon=ev["lon"],
-                                                  time=ev["time"],
-                                                  catalog=ev["source"],
-                                                  magnitude=ev["mag"])
-                    used_phase = arrival.used_phase()
-                    used_phase = used_phase.given_name()
-                    if used_phase == "p<(moho)":
-                        used_phase = "p"
-                    if used_phase == "P<(moho)":
-                        used_phase = "Pg"
-                    if used_phase == "s<(moho)":
-                        used_phase = "sg"
-                    if used_phase == "S<(moho)":
-                        used_phase = "Sg"
-                    if used_phase == "p":
-                        used_phase = "p"
-                    tarr = events[nev].time+arrival.t
-                    phase_markers.append(PhaseMarker(["0", st.station], tarr,
-                                                     tarr, 0,
-                                                     phasename=used_phase,
-                                                     event_hash=ev["id"],
-                                                     event=events[nev]))
-                    ev["phases"].append(dict(station=st.station,
-                                             phase=used_phase,
-                                             pick=arrival.t))
-                    times.append(tarr)
+                event_arr = model.event.Event(lat=ev["lat"], lon=ev["lon"],
+                                              time=ev["time"],
+                                              catalog=ev["source"],
+                                              magnitude=ev["mag"])
+                used_phase = arrival.used_phase()
+                used_phase = used_phase.given_name()
+                if used_phase == "p<(moho)":
+                    used_phase = "p"
+                if used_phase == "P<(moho)":
+                    used_phase = "Pg"
+                if used_phase == "s<(moho)":
+                    used_phase = "sg"
+                if used_phase == "S<(moho)":
+                    used_phase = "Sg"
+                if used_phase == "p":
+                    used_phase = "p"
+                tarr = events[nev].time+arrival.t
+                phase_markers.append(PhaseMarker(["0", st.station], tarr,
+                                                 tarr, 0,
+                                                 phasename=used_phase,
+                                                 event_hash=ev["id"],
+                                                 event=events[nev]))
+                ev["phases"].append(dict(station=st.station,
+                                         phase=used_phase,
+                                         pick=arrival.t))
+                times.append(tarr)
 
-        ev_list=[]
+        ev_list = []
         ev_list.append(phase_markers)
 
 
@@ -355,7 +355,8 @@ def optim_parallel(event, sources, bounds, stations, interpolated_tts):
 
 
 def solve(show=False, n_tests=1, scenario_folder="scenarios",
-          optimize_depth=False, scenario=True, data_folder="data", parallel=False, adress=None):
+          optimize_depth=False, scenario=True, data_folder="data",
+          parallel=False, adress=None, interpolate=True):
     global ev_dict_list, times, phase_list, km, mod, pyrocko_stations, bounds, sources, source_dc, iiter, interpolated_tts
 
     km = 1000.
@@ -371,30 +372,30 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
     if scenario is True:
         test_events, pyrocko_stations = load_synthetic_test(n_tests, scenario_folder)
     else:
-        test_events, pyrocko_stations, ev_dict_list, ev_list_picks = load_data(data_folder)
+        test_events, pyrocko_stations, ev_dict_list, ev_list_picks = load_data(data_folder, nevent=n_tests)
     ev_iter = 0
     for ev in test_events:
         if parallel is False:
-            bounds.update({'lat%s' %ev_iter:(ev.lat-0.2, ev.lat+0.2)})
-            bounds.update({'lon%s'%ev_iter:(ev.lon-0.2, ev.lon+0.2)})
+            bounds.update({'lat%s' % ev_iter: (ev.lat-0.2, ev.lat+0.2)})
+            bounds.update({'lon%s' % ev_iter: (ev.lon-0.2, ev.lon+0.2)})
             if ev.depth is None:
-                bounds.update({'depth%s'%ev_iter:(0*km, 15*km)})
+                bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
             elif ev.depth >= 3*km:
-                bounds.update({'depth%s'%ev_iter:(ev.depth-3*km, ev.depth+3*km)})
+                bounds.update({'depth%s' % ev_iter: (ev.depth-3*km, ev.depth+3*km)})
             else:
-                bounds.update({'depth%s'%ev_iter:(0., ev.depth+3*km)})
+                bounds.update({'depth%s' % ev_iter: (0., ev.depth+3*km)})
 
-            bounds.update({'timeshift%s'%ev_iter:(-0.1, 0.1)})
+            bounds.update({'timeshift%s' % ev_iter: (-0.1, 0.1)})
         else:
             bounds = OrderedDict()
-            bounds.update({'lat%s' %ev_iter:(ev.lat-0.2, ev.lat+0.2)})
-            bounds.update({'lon%s'%ev_iter:(ev.lon-0.2, ev.lon+0.2)})
+            bounds.update({'lat%s' % ev_iter: (ev.lat-0.2, ev.lat+0.2)})
+            bounds.update({'lon%s' % ev_iter: (ev.lon-0.2, ev.lon+0.2)})
             if ev.depth >= 3*km:
-                bounds.update({'depth%s'%ev_iter:(ev.depth-3*km, ev.depth+3*km)})
+                bounds.update({'depth%s' % ev_iter: (ev.depth-3*km, ev.depth+3*km)})
             else:
-                bounds.update({'depth%s'%ev_iter:(0., ev.depth+3*km)})
+                bounds.update({'depth%s' % ev_iter: (0., ev.depth+3*km)})
 
-            bounds.update({'timeshift%s'%ev_iter:(-0.1, 0.1)})
+            bounds.update({'timeshift%s' % ev_iter: (-0.1, 0.1)})
             bounds_list.append(bounds)
 
         ev_iter = ev_iter+1
@@ -430,6 +431,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
     pPv3pPv3pP = cake.PhaseDef('pPv3pPv3pP')
     PmP = cake.PhaseDef('Pv(moho)p')
     Pn = cake.PhaseDef('Pv_(moho)p')
+
     # S-phase Definitions
     S = cake.PhaseDef('S')
     s = cake.PhaseDef('s')
@@ -447,8 +449,8 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
     sSv3sS = cake.PhaseDef('sSv3sS')
     sSv3sSv3sS = cake.PhaseDef('sSv3sSv3sS')
 
-    phase_list = [P, p, Sg, sg, pg, S, s, Pg, PG, pG, SS, PP, pS, SP, sP, sS,
-                  pP, pPv3pP, pPv3pPv3pP, sSv3sS, sSv3sSv3sS, SmS, PmP]
+#    phase_list = [P, p, Sg, sg, pg, S, s, Pg, PG, pG, SS, PP, pS, SP, sP, sS,
+#                  pP, pPv3pP, pPv3pPv3pP, sSv3sS, sSv3sSv3sS, SmS, PmP]
 
     phase_list = [P, p, Sg, S, s, Pg, pg, sg, SmS, PmP, Sn, Pn]
 
@@ -473,33 +475,33 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
         from bokeh.client import push_session, show_session
         from bokeh.io import curdoc
         from bokeh.plotting import figure
-        from bokeh.layouts import gridplot
+        from bokeh.layouts import gridplot, column
         from bokeh.models import Button
         f1 = figure(title='SciPy Optimisation Progress',
-                   x_axis_label='# Iteration',
-                   y_axis_label='Misfit',
-                   plot_width=1000,
-                   plot_height=500)
+                    x_axis_label='# Iteration',
+                    y_axis_label='Misfit',
+                    plot_width=1000,
+                    plot_height=500)
         p1 = f1.scatter([], [])
         f2 = figure(title='Map',
-                   x_axis_label='Lat',
-                   y_axis_label='Lon',
-                   plot_width=500,
-                   plot_height=500)
+                    x_axis_label='Lat',
+                    y_axis_label='Lon',
+                    plot_width=500,
+                    plot_height=500)
         p2 = f2.scatter([], [])
 
         f3 = figure(title='Lat with depth',
-                   x_axis_label='Depth [m]',
-                   y_axis_label='Lat',
-                   plot_width=500,
-                   plot_height=500)
+                    x_axis_label='Depth [m]',
+                    y_axis_label='Lat',
+                    plot_width=500,
+                    plot_height=500)
         p3 = f3.scatter([], [])
 
         f4 = figure(title='Lat with depth',
-                   x_axis_label='Depth [m]',
-                   y_axis_label='Lon',
-                   plot_width=500,
-                   plot_height=500)
+                    x_axis_label='Depth [m]',
+                    y_axis_label='Lon',
+                    plot_width=500,
+                    plot_height=500)
         p4 = f4.scatter([], [])
 
         def button_callback(a, b):
@@ -513,7 +515,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
 
         result = differential_evolution(
             picks_fit,
-            args=[p1, p2, p3, p4],
+            args=[p1, p2, p3, p4, interpolate],
             bounds=tuple(bounds.values()),
             seed=123,
             maxiter=25,
@@ -526,8 +528,8 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
         if optimize_depth is True:
             bounds = OrderedDict()
             for source in sources:
-                bounds.update({'depth%s' % ev_iter:(source.depth-300.,
-                                                    source.depth+300.)})
+                bounds.update({'depth%s' % ev_iter: (source.depth-300.,
+                                                     source.depth+300.)})
             result = differential_evolution(
                 depth_fit,
                 args=[plot],
