@@ -376,7 +376,7 @@ def optim_parallel(event, sources, bounds, stations, interpolated_tts,
         file = open(name, 'a+')
         event_result.dump(file)
         file.close()
-    except ZeroDivisionError:
+    except Exception:
         pass
 
 
