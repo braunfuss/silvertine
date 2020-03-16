@@ -393,6 +393,10 @@ def command_locate(args):
     project_dir = args[0]
     if options.show is not False:
         options.show = True
+    if options.parallel is not False:
+        options.parallel = True
+    if options.nevents == 0:
+        options.nevents = None
     result, best_model = silvertine.locate.locate1D.solve(scenario_folder=project_dir, show=options.show, n_tests=options.nevents, scenario=options.scenario, data_folder=options.data_folder, parallel=options.parallel, adress=options.adress)
 
 
@@ -412,7 +416,8 @@ def command_beam(args):
     project_dir = args[0]
     if options.show is not False:
         options.show = True
-    silvertine.beam_depth.abedeto.beam(project_dir, show=options.show, n_tests=options.nevents)
+    silvertine.beam_depth.abedeto.beam(project_dir, show=options.show,
+                                       n_tests=options.nevents)
 
 
 def command_beam_process(args):
@@ -431,18 +436,20 @@ def command_beam_process(args):
     project_dir = args[0]
     if options.show is not False:
         options.show = True
-    silvertine.beam_depth.abedeto.beam(project_dir, show=options.show, n_tests=options.nevents)
+    silvertine.beam_depth.abedeto.beam(project_dir, show=options.show,
+                                       n_tests=options.nevents)
 
     import argparse
 
-    parser = argparse.ArgumentParser('What was the depth, again?', add_help=False)
+    parser = argparse.ArgumentParser('What was the depth, again?',
+                                     add_help=False)
     parser.add_argument('--log', required=False, default='INFO')
 
     sp = parser.add_subparsers(dest='cmd')
 
     process_parser = sp.add_parser('beam_process', help='Create images')
     process_parser.add_argument('projects', help='default "all available"',
-                             nargs='*', default=".")
+                                nargs='*', default=".")
     process_parser.add_argument('--array-id', dest='array_id',
                                 help='array-id to process',
                                 required=False,
@@ -452,11 +459,12 @@ def command_beam_process(args):
                                 default=False,
                                 required=False)
     process_parser.add_argument('--cc_align',
-                        help='dummy argument at the moment',
-                        required=False)
+                                help='dummy argument at the moment',
+                                required=False)
     process_parser.add_argument('--store-superdirs',
-            help='super directory where to look for stores',
-            dest='store_superdirs', nargs='*', default=['stores'], required=False)
+                        help='super directory where to look for stores',
+                        dest='store_superdirs', nargs='*', default=['stores'],
+                        required=False)
     process_parser.add_argument('--store',
                         help='name of store id',
                         dest='store_id',
@@ -522,7 +530,8 @@ def command_beam_process(args):
                         help='overwrite former settings files', default=False,
                         action='store_true', required=False)
     args = parser.parse_args()
-    silvertine.beam_depth.abedeto.process(args, project_dir, show=options.show, n_tests=options.nevents)
+    silvertine.beam_depth.abedeto.process(args, project_dir, show=options.show,
+                                          n_tests=options.nevents)
 
 
 def command_scenario(args):
@@ -563,7 +572,8 @@ def command_scenario(args):
             '--mag_max', dest='magmax', type=int, default=3,
             help='maximum depth (default: %default)')
         parser.add_option(
-            '--stations_file', dest='stations_file', type=str, default="stations.raw.txt",
+            '--stations_file', dest='stations_file', type=str,
+            default="stations.raw.txt",
             help='maximum depth (default: %default)')
         parser.add_option(
             '--force', dest='force', action='store_true',
@@ -586,7 +596,6 @@ def command_scenario(args):
         magmax=options.magmax, latmin=options.latmin, latmax=options.latmax,
         lonmin=options.lonmin, lonmax=options.lonmax, depmin=options.depmin,
         depmax=options.depmax, stations_file=options.stations_file)
-
 
 
 def command_init(args):
@@ -949,7 +958,7 @@ def command_cluster(args):
         parser, options, args = cl_parse(
             'cluster', args[1:], setup=Clustering.cli_setup(method, setup),
             details='Available clustering methods: [%s]. Use '
-                    '"silvertine cluster <method> --help" to get list of method '
+                    '"silvertine cluster <method> --help" to get list of method'
                     'dependent options.' % ', '.join(methods))
 
         if method not in Clustering.name_to_class and not op.exists(method):
