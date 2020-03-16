@@ -496,6 +496,8 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
     from silvertine.util import ttt
     # Calculate Traveltime tabel for each phase (parallel)
     interpolated_tts, missing = ttt.load_sptree(phase_list, mod_name)
+    calculated_ttt = False
+
     if len(missing) != 0:
         print("Calculating travel time look up table,\
                 this may take some time.")
@@ -503,6 +505,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                                    adress=adress)
         interpolated_tts_new, missing = ttt.load_sptree(phase_list, mod_name)
         interpolated_tts = {**interpolated_tts, **interpolated_tts_new}
+        calculated_ttt = True
     if show is True:
         from bokeh.client import push_session, show_session
         from bokeh.io import curdoc
@@ -634,8 +637,8 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
             name = "scenarios/events.txt"
             file = open(name, 'w+')
             file.close()
-
-            ray.init(num_cpus=num_cpus-1, memory=28500 * 1024 * 1024)
+            if calculated_ttt is False:
+                ray.init(num_cpus=num_cpus-1, memory=28500 * 1024 * 1024)
             event_dict = []
             ray.get([optim_parallel.remote(ev_dict_list[i], sources[i], bounds_list[i], pyrocko_stations[i], interpolated_tts, result_sources, result_events, name) for i in range(len(ev_dict_list))])
             result = None
