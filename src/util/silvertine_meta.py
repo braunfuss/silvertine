@@ -105,7 +105,9 @@ def load_ev_dict_list(path=None, nevent=0):
     event_marker_out = []
     ev_dict_list = []
     if nevent is not None:
-        events = [events[nevent]]
+        events = events[0:nevent]
+        if len(events) == 1:
+            events = [events]
     for ev in events:
         date = str(ev[1])
         time = str(ev[2])

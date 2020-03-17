@@ -43,9 +43,9 @@ def calculate_ttt(stations, mod, phase_defs, mod_name, gridspacing=1000.,
     x_tolerance = num.array((10., 10.))       # in meters
     # Boundaries of the grid.
     xmin = 0.
-    xmax = 260000.
+    xmax = 360000.
     zmin = 0.
-    zmax = 20000.
+    zmax = 24000.
     x_bounds = num.array(((xmin, xmax), (zmin, zmax)))
     # In this example the receiver is located at the surface.
     receiver_depth = 0.

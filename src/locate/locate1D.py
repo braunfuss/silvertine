@@ -32,7 +32,7 @@ def update_sources(params):
         source.lat = float(params[0+4*i])
         source.lon = float(params[1+4*i])
         source.depth = float(params[2+4*i])
-        source.time = float(source_dc.time - params[3+4*i])
+        source.time = float(source_dc.time + params[3+4*i])
     return sources
 
 
@@ -53,7 +53,7 @@ def picks_fit_parallel(params, events=None, sources=None, source_dc=None,
         source.lat = float(params[0])
         source.lon = float(params[1])
         source.depth = float(params[2])
-        source.time = float(source_dc.time - params[3])
+        source.time = float(source_dc.time + params[3])
         for st in ev["phases"]:
             for stp in pyrocko_stations:
                 if stp.station == st["station"]:
@@ -116,15 +116,20 @@ def picks_fit_parallel(params, events=None, sources=None, source_dc=None,
 
 def picks_fit(params, line=None, line2=None, line3=None, line4=None,
               interpolate=True):
-    update_sources(params)
     global iiter
-    misfits = 0.
-    norms = 0.
+
     dists = []
     iter_event = 0
     iter_new = iiter + 1
     iiter = iter_new
+    misfit_stations = 0
     for ev, source in zip(ev_dict_list, sources):
+        misfits = 0.
+        norms = 0.
+        source.lat = float(params[0+4*iter_event])
+        source.lon = float(params[1+4*iter_event])
+        source.depth = float(params[2+4*iter_event])
+        source.time = float(ev["time"] + params[3+4*iter_event])
         for st in ev["phases"]:
             for stp in pyrocko_stations[iter_event]:
                 if stp.station == st["station"]:
@@ -179,6 +184,11 @@ def picks_fit(params, line=None, line2=None, line3=None, line4=None,
                         norms += num.sqrt(num.sum(onset**2))
                     except Exception:
                         pass
+        iter_event = iter_event + 1
+        try:
+            misfit_stations = misfit_stations + num.sqrt(misfits**2 / norms**2)
+        except:
+            pass
         if line2:
             data = {
                 'y': [source.lat],
@@ -197,8 +207,7 @@ def picks_fit(params, line=None, line2=None, line3=None, line4=None,
                 'x': [source.depth],
             }
             line4.data_source.stream(data)
-    misfit = num.sqrt(misfits**2 / norms**2)
-    iter_event = iter_event + 1
+    misfit = num.sqrt(misfit_stations**2 / len(ev_dict_list)**2)
     if line:
         data = {
             'y': [misfit],
@@ -351,8 +360,9 @@ def load_data(data_folder=None, nevent=0):
 @ray.remote
 def optim_parallel(event, sources, bounds, stations, interpolated_tts,
                    result_sources, result_events, name):
-    source_dc = sources
+
     try:
+        source_dc = sources
         result = differential_evolution(
             picks_fit_parallel,
             args=[event, sources, source_dc, stations, interpolated_tts],
@@ -370,26 +380,30 @@ def optim_parallel(event, sources, bounds, stations, interpolated_tts,
         event_result = model.event.Event(lat=source.lat, lon=source.lon,
                                          time=source_dc.time+source.time,
                                          depth=source.depth,
-                                         tags=[str(event["id"])],
-                                         extras={"misfit": result.fun})
+                                         tags=[str(event["id"])])
         result_events.append(event)
         file = open(name, 'a+')
-        event_result.dump(file)
+        event_result.olddumpf(file)
+        file.write('--------------------------------------------\n')
         file.close()
-    except Exception:
+    except:
         pass
-
 
 def solve(show=False, n_tests=1, scenario_folder="scenarios",
           optimize_depth=False, scenario=True, data_folder="data",
           parallel=True, adress=None, interpolate=True, mod_name="insheim",
-          singular=False):
+          singular=False, model="insheim", nboot=1):
     global ev_dict_list, times, phase_list, km, mod, pyrocko_stations, bounds, sources, source_dc, iiter, interpolated_tts, result_sources, result_events
 
     km = 1000.
     iiter = 0
-    if mod_name == "insheim":
+    if model == "insheim":
         mod = insheim_layered_model()
+    if model == "landau":
+        mod = landau_layered_model()
+    if model == "vsp":
+        mod = vsp_layered_model()
+
     result_sources = []
     result_events = []
     t = timesys.time()
@@ -407,23 +421,15 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
         if parallel is False and singular is False:
             bounds.update({'lat%s' % ev_iter: (ev.lat-0.5, ev.lat+0.5)})
             bounds.update({'lon%s' % ev_iter: (ev.lon-0.5, ev.lon+0.5)})
-            if ev.depth is None:
-                bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
-            elif ev.depth >= 3*km:
-#                bounds.update({'depth%s' % ev_iter: (ev.depth-3*km, ev.depth+3*km)})
-                bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
+            bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
 
-            else:
-#                bounds.update({'depth%s' % ev_iter: (0., ev.depth+3*km)})
-                bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
-
-            bounds.update({'timeshift%s' % ev_iter: (-0.5, 0.5)})
+            bounds.update({'timeshift%s' % ev_iter: (-0.01, 0.01)})
         else:
             bounds = OrderedDict()
-            bounds.update({'lat%s' % ev_iter: (ev.lat-0.2, ev.lat+0.2)})
-            bounds.update({'lon%s' % ev_iter: (ev.lon-0.2, ev.lon+0.2)})
+            bounds.update({'lat%s' % ev_iter: (ev.lat-0.5, ev.lat+0.5)})
+            bounds.update({'lon%s' % ev_iter: (ev.lon-0.5, ev.lon+0.5)})
             bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
-            bounds.update({'timeshift%s' % ev_iter: (-0.1, 0.1)})
+            bounds.update({'timeshift%s' % ev_iter: (-0.01, 0.01)})
             bounds_list.append(bounds)
 
         ev_iter = ev_iter+1
@@ -586,7 +592,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
             sources_copy = sources.copy()
             bounds_list_copy = bounds_list.copy()
             pyrocko_stations_copy = pyrocko_stations.copy()
-            for i in range(len(ev_dict_list)):
+            for i in range(len(ev_dict_list_copy)):
                 ev_dict_list = [ev_dict_list_copy[i]]
                 sources = [sources_copy[i]]
                 bounds = bounds_list_copy[i]
@@ -597,7 +603,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                     bounds=tuple(bounds.values()),
                     seed=123,
                     maxiter=25,
-                    tol=0.0001,
+                    tol=0.00001,
                     callback=lambda a, convergence: curdoc().add_next_tick_callback(button_callback(a, convergence)))
                 params_x = result.x
                 source = gf.DCSource(
@@ -609,13 +615,11 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                 event_result = model.event.Event(lat=source.lat, lon=source.lon,
                                                  time=source.time,
                                                  depth=source.depth,
-                                                 extras={"misfit":result.fun},
-                                                 tags=ev_dict_list[0]["id"])
-                result_events.append(event)
-                sources = update_sources(result.x)
+                                                 tags=[result.fun, ev_dict_list[i]["id"]])
+                result_events.append(event_result)
                 if optimize_depth is True:
                     bounds = OrderedDict()
-                    for source in sources:
+                    for source in [result_sources[i]]:
                         bounds.update({'depth%s' % ev_iter: (source.depth-300.,
                                                              source.depth+300.)})
                     result = differential_evolution(
@@ -632,7 +636,6 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                     result_sources.append(source)
 
     else:
-
         if parallel is True or parallel is "True":
             name = "scenarios/events.txt"
             file = open(name, 'w+')
@@ -649,7 +652,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                 sources_copy = sources.copy()
                 bounds_list_copy = bounds_list.copy()
                 pyrocko_stations_copy = pyrocko_stations.copy()
-                for i in range(len(ev_dict_list)):
+                for i in range(len(ev_dict_list_copy)):
                     ev_dict_list = [ev_dict_list_copy[i]]
                     sources = [sources_copy[i]]
                     bounds = bounds_list_copy[i]
@@ -659,7 +662,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                         args=[],
                         bounds=tuple(bounds.values()),
                         seed=123,
-                        maxiter=25,
+                        maxiter=15,
                         tol=0.0001)
                     params_x = result.x
                     source = gf.DCSource(
@@ -671,10 +674,8 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                     event_result = model.event.Event(lat=source.lat, lon=source.lon,
                                                      time=source.time,
                                                      depth=source.depth,
-                                                     extras={"misfit":result.fun},
-                                                     tags=ev_dict_list[0]["id"])
-                    result_events.append(event)
-                    sources = update_sources(result.x)
+                                                     tags=[result.fun, ev_dict_list[0]["id"]])
+                    result_events.append(event_result)
                     if optimize_depth is True:
                         bounds = OrderedDict()
                         for source in sources:
@@ -697,14 +698,20 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                     picks_fit,
                     args=[],
                     bounds=tuple(bounds.values()),
-                    maxiter=25,
+                    maxiter=65,
                     seed=123,
-                    tol=0.0001)
+                    tol=0.000001)
 
-                sources = update_sources(result.x)
-                for source in sources:
-                    source.regularize()
+                sources = []
+                params = result.x
 
+                for i, ev in enumerate(ev_dict_list):
+                    source = gf.DCSource()
+                    source.lat = float(params[0+4*i])
+                    source.lon = float(params[1+4*i])
+                    source.depth = float(params[2+4*i])
+                    source.time = float(ev["time"] + params[3+4*i])
+                    sources.append(source)
                 if optimize_depth is True:
                     bounds = OrderedDict()
                     for source in sources:
@@ -721,14 +728,16 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                     for source in sources:
                         sources = update_depth(result.x)
                 for source in sources:
-                        result_sources.append(source)
-                        event = model.event.Event(lat=source.lat, lon=source.lon,
-                                                  time=source.time, magnitude=source.magnitude)
-                        result_events.append(event)
+                    result_sources.append(source)
+                    event = model.event.Event(lat=source.lat, lon=source.lon,
+                                              time=source.time, magnitude=source.magnitude,
+                                              depth=source.depth)
+                    result_events.append(event)
     pr.disable()
     filename = 'profile.prof'
     pr.dump_stats(filename)
     for source in sources:
         print(source)
-    model.dump_events(result_events, scenario_folder+"result_events.pf")
+    if parallel is False:
+        model.dump_events(result_events, scenario_folder+"result_events.pf")
     return result, sources

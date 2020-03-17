@@ -385,19 +385,39 @@ def command_locate(args):
             '--parallel', dest='parallel', type=str, default=False,
             help='parallel location')
         parser.add_option(
+            '--singular', dest='singular', type=str, default=False,
+            help='parallel location')
+        parser.add_option(
             '--adress', dest='adress', type=str, default=None,
             help='Adress of ray instance for cluster computation')
+        parser.add_option(
+            '--model', dest='model', type=str, default="inheim",
+            help='Name of the refrence model, if crust the appropiate crust model will be used')
+        parser.add_option(
+            '--nboot', dest='nboot', type=int, default=1,
+            help='Number of bootstrap results, based on different velocity models')
     parser, options, args = cl_parse('locate', args, setup)
 
     from silvertine.locate import locate1D
     project_dir = args[0]
     if options.show is not False:
         options.show = True
+    if options.singular is not False:
+        options.singular = True
     if options.parallel is not False:
         options.parallel = True
     if options.nevents == 0:
         options.nevents = None
-    result, best_model = silvertine.locate.locate1D.solve(scenario_folder=project_dir, show=options.show, n_tests=options.nevents, scenario=options.scenario, data_folder=options.data_folder, parallel=options.parallel, adress=options.adress)
+    result, best_model = silvertine.locate.locate1D.solve(scenario_folder=project_dir,
+                                                          show=options.show,
+                                                          n_tests=options.nevents,
+                                                          scenario=options.scenario,
+                                                          data_folder=options.data_folder,
+                                                          parallel=options.parallel,
+                                                          adress=options.adress,
+                                                          singular=options.singular,
+                                                          model=options.model,
+                                                          nboot=options.nboot)
 
 
 def command_beam(args):
