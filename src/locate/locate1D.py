@@ -21,6 +21,7 @@ import scipy
 from pyrocko.gui.pile_viewer import PhaseMarker, EventMarker
 from ..util.ref_mods import *
 from ..util.differential_evolution import differential_evolution
+from ..util import store_variation
 import ray
 import psutil
 
@@ -389,71 +390,8 @@ def optim_parallel(event, sources, bounds, stations, interpolated_tts,
     except:
         pass
 
-def solve(show=False, n_tests=1, scenario_folder="scenarios",
-          optimize_depth=False, scenario=True, data_folder="data",
-          parallel=True, adress=None, interpolate=True, mod_name="insheim",
-          singular=False, model="insheim", nboot=1):
-    global ev_dict_list, times, phase_list, km, mod, pyrocko_stations, bounds, sources, source_dc, iiter, interpolated_tts, result_sources, result_events
 
-    km = 1000.
-    iiter = 0
-    if model == "insheim":
-        mod = insheim_layered_model()
-    if model == "landau":
-        mod = landau_layered_model()
-    if model == "vsp":
-        mod = vsp_layered_model()
-
-    result_sources = []
-    result_events = []
-    t = timesys.time()
-    sources = []
-    if parallel is False and singular is False:
-        bounds = OrderedDict()
-    else:
-        bounds_list = []
-    if scenario is True:
-        test_events, pyrocko_stations = load_synthetic_test(n_tests, scenario_folder)
-    else:
-        test_events, pyrocko_stations, ev_dict_list, ev_list_picks = load_data(data_folder, nevent=n_tests)
-    ev_iter = 0
-    for ev in test_events:
-        if parallel is False and singular is False:
-            bounds.update({'lat%s' % ev_iter: (ev.lat-0.5, ev.lat+0.5)})
-            bounds.update({'lon%s' % ev_iter: (ev.lon-0.5, ev.lon+0.5)})
-            bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
-
-            bounds.update({'timeshift%s' % ev_iter: (-0.01, 0.01)})
-        else:
-            bounds = OrderedDict()
-            bounds.update({'lat%s' % ev_iter: (ev.lat-0.5, ev.lat+0.5)})
-            bounds.update({'lon%s' % ev_iter: (ev.lon-0.5, ev.lon+0.5)})
-            bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
-            bounds.update({'timeshift%s' % ev_iter: (-0.01, 0.01)})
-            bounds_list.append(bounds)
-
-        ev_iter = ev_iter+1
-
-        time = ev.time
-        source_dc = DCSource(
-            lat=ev.lat,
-            lon=ev.lon,
-            depth=ev.depth,
-            time=time,
-            magnitude=ev.magnitude)
-
-        # start solution lat, lon
-        source = gf.DCSource(
-            lat=ev.lat,
-            lon=ev.lon,
-            depth=ev.depth,
-            time=time,
-            magnitude=ev.magnitude)
-        sources.append(source)
-    times = []
-
-    inp_cake = mod
-
+def get_phases_list():
     # P-phase definitions
     Pg = cake.PhaseDef('P<(moho)')
     pg = cake.PhaseDef('p<(moho)')
@@ -491,135 +429,177 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
 
     phase_list = [P, p, Sg, S, s, Pg, pg, sg, SmS, PmP, Sn, Pn]
 
-    if scenario is True:
-        ev_dict_list = []
-        synthetic_ray_tracing_setup(test_events, pyrocko_stations, inp_cake)
-    import cProfile
-    import pstats
-    pr = cProfile.Profile()
-    pr.enable()
+    return phase_list
 
-    from silvertine.util import ttt
-    # Calculate Traveltime tabel for each phase (parallel)
-    interpolated_tts, missing = ttt.load_sptree(phase_list, mod_name)
-    calculated_ttt = False
 
-    if len(missing) != 0:
-        print("Calculating travel time look up table,\
-                this may take some time.")
-        ttt.calculate_ttt_parallel(pyrocko_stations, mod, missing, mod_name,
-                                   adress=adress)
-        interpolated_tts_new, missing = ttt.load_sptree(phase_list, mod_name)
-        interpolated_tts = {**interpolated_tts, **interpolated_tts_new}
-        calculated_ttt = True
-    if show is True:
-        from bokeh.client import push_session, show_session
-        from bokeh.io import curdoc
-        from bokeh.plotting import figure
-        from bokeh.layouts import gridplot, column
-        from bokeh.models import Button
-        f1 = figure(title='SciPy Optimisation Progress',
-                    x_axis_label='# Iteration',
-                    y_axis_label='Misfit',
-                    plot_width=1000,
-                    plot_height=500)
-        p1 = f1.scatter([], [])
-        f2 = figure(title='Map',
-                    x_axis_label='Lat',
-                    y_axis_label='Lon',
-                    plot_width=500,
-                    plot_height=500)
-        p2 = f2.scatter([], [])
+def bokeh_plot():
+    from bokeh.client import push_session, show_session
+    from bokeh.io import curdoc
+    from bokeh.plotting import figure
+    from bokeh.layouts import gridplot, column
+    from bokeh.models import Button
+    f1 = figure(title='SciPy Optimisation Progress',
+                x_axis_label='# Iteration',
+                y_axis_label='Misfit',
+                plot_width=1000,
+                plot_height=500)
+    p1 = f1.scatter([], [])
+    f2 = figure(title='Map',
+                x_axis_label='Lat',
+                y_axis_label='Lon',
+                plot_width=500,
+                plot_height=500)
+    p2 = f2.scatter([], [])
 
-        f3 = figure(title='Lat with depth',
-                    x_axis_label='Depth [m]',
-                    y_axis_label='Lat',
-                    plot_width=500,
-                    plot_height=500)
-        p3 = f3.scatter([], [])
+    f3 = figure(title='Lat with depth',
+                x_axis_label='Depth [m]',
+                y_axis_label='Lat',
+                plot_width=500,
+                plot_height=500)
+    p3 = f3.scatter([], [])
 
-        f4 = figure(title='Lat with depth',
-                    x_axis_label='Depth [m]',
-                    y_axis_label='Lon',
-                    plot_width=500,
-                    plot_height=500)
-        p4 = f4.scatter([], [])
+    f4 = figure(title='Lat with depth',
+                x_axis_label='Depth [m]',
+                y_axis_label='Lon',
+                plot_width=500,
+                plot_height=500)
+    p4 = f4.scatter([], [])
 
-        def button_callback(a, b):
-            new_data = dict()
+    def button_callback(a, b):
+        new_data = dict()
 
-        button = Button(label="Update")
-        curdoc().add_root(gridplot([[f1]]))
-        curdoc().add_root(gridplot([[f3, f2], [None, f4]]))
-        session = push_session(curdoc())
-        session.show()
+    button = Button(label="Update")
+    curdoc().add_root(gridplot([[f1]]))
+    curdoc().add_root(gridplot([[f3, f2], [None, f4]]))
+    session = push_session(curdoc())
+    session.show()
 
-        if singular is False:
-            result = differential_evolution(
-                picks_fit,
-                args=[p1, p2, p3, p4, interpolate],
-                bounds=tuple(bounds.values()),
-                seed=123,
-                maxiter=25,
-                tol=0.0001,
-                callback=lambda a, convergence: curdoc().add_next_tick_callback(button_callback(a, convergence)))
+    return p1, p2, p3, p4, curdoc, session
 
-            sources = update_sources(result.x)
-            if optimize_depth is True:
-                bounds = OrderedDict()
-                for source in sources:
-                    bounds.update({'depth%s' % ev_iter: (source.depth-300.,
-                                                         source.depth+300.)})
-                result = differential_evolution(
-                    depth_fit,
-                    args=[plot],
-                    bounds=tuple(bounds.values()),
-                    seed=123,
-                    maxiter=6,
-                    tol=0.001,
-                    callback=lambda a, convergence: curdoc().add_next_tick_callback(button_callback(a, convergence)))
-                for source in sources:
-                    sources = update_depth(result.x)
-            for i, source in enumerate(sources):
-                result_sources.append(source)
-                event = model.event.Event(lat=source.lat, lon=source.lon,
-                                          time=source.time, magnitude=source.magnitude,
-                                          tags=[str(ev_dict_list[i]["id"])],
-                                          extras={"misfit":result.fun})
-                result_events.append(event)
+
+def get_bounds(test_events, parallel, singular, bounds, sources, bounds_list):
+    ev_iter = 0
+    for ev in test_events:
+        if parallel is False and singular is False:
+            bounds.update({'lat%s' % ev_iter: (ev.lat-0.5, ev.lat+0.5)})
+            bounds.update({'lon%s' % ev_iter: (ev.lon-0.5, ev.lon+0.5)})
+            bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
+
+            bounds.update({'timeshift%s' % ev_iter: (-0.01, 0.01)})
         else:
-            ev_dict_list_copy = ev_dict_list.copy()
-            sources_copy = sources.copy()
-            bounds_list_copy = bounds_list.copy()
-            pyrocko_stations_copy = pyrocko_stations.copy()
-            for i in range(len(ev_dict_list_copy)):
-                ev_dict_list = [ev_dict_list_copy[i]]
-                sources = [sources_copy[i]]
-                bounds = bounds_list_copy[i]
-                pyrocko_stations = [pyrocko_stations_copy[i]]
+            bounds = OrderedDict()
+            bounds.update({'lat%s' % ev_iter: (ev.lat-0.5, ev.lat+0.5)})
+            bounds.update({'lon%s' % ev_iter: (ev.lon-0.5, ev.lon+0.5)})
+            bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
+            bounds.update({'timeshift%s' % ev_iter: (-0.01, 0.01)})
+            bounds_list.append(bounds)
+        ev_iter = ev_iter+1
+
+        time = ev.time
+        source_dc = DCSource(
+            lat=ev.lat,
+            lon=ev.lon,
+            depth=ev.depth,
+            time=time,
+            magnitude=ev.magnitude)
+
+        # start solution lat, lon
+        source = gf.DCSource(
+            lat=ev.lat,
+            lon=ev.lon,
+            depth=ev.depth,
+            time=time,
+            magnitude=ev.magnitude)
+        sources.append(source)
+    return bounds, bounds_list, sources, source_dc
+
+
+def solve(show=False, n_tests=1, scenario_folder="scenarios",
+          optimize_depth=False, scenario=True, data_folder="data",
+          parallel=True, adress=None, interpolate=True, mod_name="insheim",
+          singular=False, nboot=1):
+    global ev_dict_list, times, phase_list, km, mod, pyrocko_stations, bounds, sources, source_dc, iiter, interpolated_tts, result_sources, result_events
+
+    km = 1000.
+    iiter = 0
+    if mod_name == "insheim":
+        mod = insheim_layered_model()
+    if mod_name == "landau":
+        mod = landau_layered_model()
+    if mod_name == "vsp":
+        mod = vsp_layered_model()
+
+    if nboot > 1:
+        pertubed_mods = store_variation.ensemble_earthmodel(mod, num_vary=nboot, error_depth=0.1,
+                                error_velocities=0.1, depth_limit_variation=600)
+    else:
+        pertubed_mods = [mod]
+
+    for kmod, mod in enumerate(pertubed_mods):
+
+        result_sources = []
+        result_events = []
+        t = timesys.time()
+        sources = []
+        bounds = OrderedDict()
+        bounds_list = []
+        times = []
+        inp_cake = mod
+
+        if scenario is True:
+            test_events, pyrocko_stations = load_synthetic_test(n_tests,
+                                                                scenario_folder)
+        else:
+            test_events, pyrocko_stations, ev_dict_list, ev_list_picks = load_data(data_folder, nevent=n_tests)
+
+        bounds, bounds_list, sources, source_dc = get_bounds(test_events,
+                                                             parallel,
+                                                             singular,
+                                                             bounds,
+                                                             sources,
+                                                             bounds_list)
+
+        phase_list = get_phases_list()
+
+        if scenario is True:
+            ev_dict_list = []
+            synthetic_ray_tracing_setup(test_events, pyrocko_stations, inp_cake)
+
+    # profiling
+    #    import cProfile
+#        import pstats
+#        pr = cProfile.Profile()
+#        pr.enable()
+
+        from silvertine.util import ttt
+        # Load/Calculate Traveltime tabel for each phase (parallel)
+        interpolated_tts, missing = ttt.load_sptree(phase_list, mod_name)
+        calculated_ttt = False
+
+        if len(missing) != 0:
+            print("Calculating travel time look up table,\
+                    this may take some time.")
+            ttt.calculate_ttt_parallel(pyrocko_stations, mod, missing, mod_name,
+                                       adress=adress)
+            interpolated_tts_new, missing = ttt.load_sptree(phase_list, mod_name)
+            interpolated_tts = {**interpolated_tts, **interpolated_tts_new}
+            calculated_ttt = True
+        if show is True:
+            p1, p2, p3, p4, curdoc, session = bokeh_plot()
+
+            if singular is False:
                 result = differential_evolution(
                     picks_fit,
                     args=[p1, p2, p3, p4, interpolate],
                     bounds=tuple(bounds.values()),
                     seed=123,
                     maxiter=25,
-                    tol=0.00001,
-                    callback=lambda a, convergence: curdoc().add_next_tick_callback(button_callback(a, convergence)))
-                params_x = result.x
-                source = gf.DCSource(
-                    lat=float(params_x[0]),
-                    lon=float(params_x[1]),
-                    depth=float(params_x[2]),
-                    time=float(params_x[3]))
-                result_sources.append(source)
-                event_result = model.event.Event(lat=source.lat, lon=source.lon,
-                                                 time=source.time,
-                                                 depth=source.depth,
-                                                 tags=[result.fun, ev_dict_list[i]["id"]])
-                result_events.append(event_result)
+                    tol=0.0001)
+
+                sources = update_sources(result.x)
                 if optimize_depth is True:
                     bounds = OrderedDict()
-                    for source in [result_sources[i]]:
+                    for source in sources:
                         bounds.update({'depth%s' % ev_iter: (source.depth-300.,
                                                              source.depth+300.)})
                     result = differential_evolution(
@@ -628,42 +608,34 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                         bounds=tuple(bounds.values()),
                         seed=123,
                         maxiter=6,
-                        tol=0.001,
-                        callback=lambda a, convergence: curdoc().add_next_tick_callback(button_callback(a, convergence)))
+                        tol=0.001)
                     for source in sources:
                         sources = update_depth(result.x)
-                for source in sources:
+                for i, source in enumerate(sources):
                     result_sources.append(source)
+                    event = model.event.Event(lat=source.lat, lon=source.lon,
+                                              time=source.time, magnitude=source.magnitude,
+                                             tags=[str(result.fun), str(ev_dict_list_copy[i]["id"])])
 
-    else:
-        if parallel is True or parallel is "True":
-            name = "scenarios/events.txt"
-            file = open(name, 'w+')
-            file.close()
-            if calculated_ttt is False:
-                ray.init(num_cpus=num_cpus-1, memory=28500 * 1024 * 1024)
-            event_dict = []
-            ray.get([optim_parallel.remote(ev_dict_list[i], sources[i], bounds_list[i], pyrocko_stations[i], interpolated_tts, result_sources, result_events, name) for i in range(len(ev_dict_list))])
-            result = None
-            source = None
-        else:
-            if singular is True:
+                    result_events.append(event)
+            else:
                 ev_dict_list_copy = ev_dict_list.copy()
                 sources_copy = sources.copy()
                 bounds_list_copy = bounds_list.copy()
                 pyrocko_stations_copy = pyrocko_stations.copy()
                 for i in range(len(ev_dict_list_copy)):
+                    #p1, p2, p3, p4, curdoc, session = bokeh_plot()
                     ev_dict_list = [ev_dict_list_copy[i]]
                     sources = [sources_copy[i]]
                     bounds = bounds_list_copy[i]
                     pyrocko_stations = [pyrocko_stations_copy[i]]
                     result = differential_evolution(
                         picks_fit,
-                        args=[],
+                        args=[p1, p2, p3, p4, interpolate],
                         bounds=tuple(bounds.values()),
                         seed=123,
-                        maxiter=15,
-                        tol=0.0001)
+                        maxiter=25,
+                        tol=0.00001)
                     params_x = result.x
                     source = gf.DCSource(
                         lat=float(params_x[0]),
@@ -674,8 +646,102 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                     event_result = model.event.Event(lat=source.lat, lon=source.lon,
                                                      time=source.time,
                                                      depth=source.depth,
-                                                     tags=[result.fun, ev_dict_list[0]["id"]])
+                                                     tags=[str(result.fun), str(ev_dict_list_copy[i]["id"])])
                     result_events.append(event_result)
+                    if optimize_depth is True:
+                        bounds = OrderedDict()
+                        for source in [result_sources[i]]:
+                            bounds.update({'depth%s' % ev_iter: (source.depth-300.,
+                                                                 source.depth+300.)})
+                        result = differential_evolution(
+                            depth_fit,
+                            args=[plot],
+                            bounds=tuple(bounds.values()),
+                            seed=123,
+                            maxiter=6,
+                            tol=0.001)
+                        for source in sources:
+                            sources = update_depth(result.x)
+                    for source in sources:
+                        result_sources.append(source)
+
+        else:
+            if parallel is True or parallel is "True":
+                name = "scenarios/events_parallel_%s.txt" % str(kmod)
+                file = open(name, 'w+')
+                file.close()
+                if calculated_ttt is False:
+                    ray.init(num_cpus=num_cpus-1, memory=28500 * 1024 * 1024)
+                event_dict = []
+                ray.get([optim_parallel.remote(ev_dict_list[i], sources[i], bounds_list[i], pyrocko_stations[i], interpolated_tts, result_sources, result_events, name) for i in range(len(ev_dict_list))])
+                result = None
+                source = None
+            else:
+                if singular is True:
+                    ev_dict_list_copy = ev_dict_list.copy()
+                    sources_copy = sources.copy()
+                    bounds_list_copy = bounds_list.copy()
+                    pyrocko_stations_copy = pyrocko_stations.copy()
+                    for i in range(len(ev_dict_list_copy)):
+                        ev_dict_list = [ev_dict_list_copy[i]]
+                        sources = [sources_copy[i]]
+                        bounds = bounds_list_copy[i]
+                        pyrocko_stations = [pyrocko_stations_copy[i]]
+                        result = differential_evolution(
+                            picks_fit,
+                            args=[],
+                            bounds=tuple(bounds.values()),
+                            seed=123,
+                            maxiter=15,
+                            tol=0.0001)
+                        params_x = result.x
+                        source = gf.DCSource(
+                            lat=float(params_x[0]),
+                            lon=float(params_x[1]),
+                            depth=float(params_x[2]),
+                            time=float(params_x[3]))
+                        result_sources.append(source)
+                        event_result = model.event.Event(lat=source.lat, lon=source.lon,
+                                                         time=source.time,
+                                                         depth=source.depth,
+                                                         tags=[result.fun, ev_dict_list[0]["id"]])
+                        result_events.append(event_result)
+                        if optimize_depth is True:
+                            bounds = OrderedDict()
+                            for source in sources:
+                                bounds.update({'depth%s' % ev_iter: (source.depth-300.,
+                                                                     source.depth+300.)})
+                            result = differential_evolution(
+                                depth_fit,
+                                args=[plot],
+                                bounds=tuple(bounds.values()),
+                                seed=123,
+                                maxiter=6,
+                                tol=0.001,
+                                callback=lambda a, convergence: curdoc().add_next_tick_callback(button_callback(a, convergence)))
+                            for source in sources:
+                                sources = update_depth(result.x)
+                        for source in sources:
+                            result_sources.append(source)
+                else:
+                    result = differential_evolution(
+                        picks_fit,
+                        args=[],
+                        bounds=tuple(bounds.values()),
+                        maxiter=65,
+                        seed=123,
+                        tol=0.000001)
+
+                    sources = []
+                    params = result.x
+
+                    for i, ev in enumerate(ev_dict_list):
+                        source = gf.DCSource()
+                        source.lat = float(params[0+4*i])
+                        source.lon = float(params[1+4*i])
+                        source.depth = float(params[2+4*i])
+                        source.time = float(ev["time"] + params[3+4*i])
+                        sources.append(source)
                     if optimize_depth is True:
                         bounds = OrderedDict()
                         for source in sources:
@@ -683,7 +749,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                                                                  source.depth+300.)})
                         result = differential_evolution(
                             depth_fit,
-                            args=[plot],
+                            args=[],
                             bounds=tuple(bounds.values()),
                             seed=123,
                             maxiter=6,
@@ -693,51 +759,15 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                             sources = update_depth(result.x)
                     for source in sources:
                         result_sources.append(source)
-            else:
-                result = differential_evolution(
-                    picks_fit,
-                    args=[],
-                    bounds=tuple(bounds.values()),
-                    maxiter=65,
-                    seed=123,
-                    tol=0.000001)
-
-                sources = []
-                params = result.x
-
-                for i, ev in enumerate(ev_dict_list):
-                    source = gf.DCSource()
-                    source.lat = float(params[0+4*i])
-                    source.lon = float(params[1+4*i])
-                    source.depth = float(params[2+4*i])
-                    source.time = float(ev["time"] + params[3+4*i])
-                    sources.append(source)
-                if optimize_depth is True:
-                    bounds = OrderedDict()
-                    for source in sources:
-                        bounds.update({'depth%s' % ev_iter: (source.depth-300.,
-                                                             source.depth+300.)})
-                    result = differential_evolution(
-                        depth_fit,
-                        args=[],
-                        bounds=tuple(bounds.values()),
-                        seed=123,
-                        maxiter=6,
-                        tol=0.001,
-                        callback=lambda a, convergence: curdoc().add_next_tick_callback(button_callback(a, convergence)))
-                    for source in sources:
-                        sources = update_depth(result.x)
-                for source in sources:
-                    result_sources.append(source)
-                    event = model.event.Event(lat=source.lat, lon=source.lon,
-                                              time=source.time, magnitude=source.magnitude,
-                                              depth=source.depth)
-                    result_events.append(event)
-    pr.disable()
-    filename = 'profile.prof'
-    pr.dump_stats(filename)
-    for source in sources:
-        print(source)
-    if parallel is False:
-        model.dump_events(result_events, scenario_folder+"result_events.pf")
+                        event = model.event.Event(lat=source.lat, lon=source.lon,
+                                                  time=source.time, magnitude=source.magnitude,
+                                                  depth=source.depth)
+                        result_events.append(event)
+    #    pr.disable()
+    #    filename = 'profile.prof'
+    #    pr.dump_stats(filename)
+        for source in sources:
+            print(source)
+        if parallel is False:
+            model.dump_events(result_events, scenario_folder+"result_events_%s.pf" % str(kmod))
     return result, sources

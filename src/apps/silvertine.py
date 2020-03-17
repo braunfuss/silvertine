@@ -391,7 +391,7 @@ def command_locate(args):
             '--adress', dest='adress', type=str, default=None,
             help='Adress of ray instance for cluster computation')
         parser.add_option(
-            '--model', dest='model', type=str, default="inheim",
+            '--model', dest='model', type=str, default="insheim",
             help='Name of the refrence model, if crust the appropiate crust model will be used')
         parser.add_option(
             '--nboot', dest='nboot', type=int, default=1,
@@ -416,7 +416,7 @@ def command_locate(args):
                                                           parallel=options.parallel,
                                                           adress=options.adress,
                                                           singular=options.singular,
-                                                          model=options.model,
+                                                          mod_name=options.model,
                                                           nboot=options.nboot)
 
 
