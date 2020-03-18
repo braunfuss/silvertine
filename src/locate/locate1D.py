@@ -93,20 +93,20 @@ def picks_fit_parallel(params, events=None, sources=None, source_dc=None,
                     if phase == "Sn":
                         phase = 'Sv_(moho)s'
                     cake_phase = cake.PhaseDef(phase)
-
-                    if interpolate is True:
-                        coords = num.array((dists_m, num.tile(source.depth, 1))).T
-                        onset = interpolated_tts[cake_phase.definition()].interpolate(coords)
-
-                    elif interpolate is False:
-                        tts = interpolated_tts[cake_phase.definition()]
-                        absolute_difference_function = lambda list_value: abs(abs(list_value[:][0][1] - given_value[1]))+abs(list_value[:][0][0] - given_value[0])
-                        d = [(k,v) for k,v in tts.f_values.items()]
-                        given_value = (dists_m, source_depth)
-                        onset = min(d, key=absolute_difference_function)[1]
-
-                    tdiff = st["pick"]
                     try:
+                        if interpolate is True:
+                            coords = num.array((dists_m, num.tile(source.depth, 1))).T
+                            onset = interpolated_tts[cake_phase.definition()].interpolate(coords)
+
+                        elif interpolate is False:
+                            tts = interpolated_tts[cake_phase.definition()]
+                            absolute_difference_function = lambda list_value: abs(abs(list_value[:][0][1] - given_value[1]))+abs(list_value[:][0][0] - given_value[0])
+                            d = [(k,v) for k,v in tts.f_values.items()]
+                            given_value = (dists_m, source_depth)
+                            onset = min(d, key=absolute_difference_function)[1]
+
+                        tdiff = st["pick"]
+
                         misfits += num.sqrt(num.sum((tdiff - onset)**2))
                         norms += num.sqrt(num.sum(onset**2))
                     except Exception:
@@ -169,18 +169,18 @@ def picks_fit(params, line=None, line2=None, line3=None, line4=None,
                     if phase == "Sn":
                         phase = 'Sv_(moho)s'
                     cake_phase = cake.PhaseDef(phase)
-
-                    if interpolate is True:
-                        coords = num.array((dists_m, num.tile(source.depth, 1))).T
-                        onset = interpolated_tts[cake_phase.definition()].interpolate(coords)
-                    elif interpolate is False:
-                        tts = interpolated_tts[cake_phase.definition()]
-                        absolute_difference_function = lambda list_value: abs(abs(list_value[:][0][1] - given_value[1]))+abs(list_value[:][0][0] - given_value[0])
-                        d = [(k, v) for k, v in tts.f_values.items()]
-                        given_value = (dists_m, source_depth)
-                        onset = min(d, key=absolute_difference_function)[1]
-                    tdiff = st["pick"]
                     try:
+                        if interpolate is True:
+                            coords = num.array((dists_m, num.tile(source.depth, 1))).T
+                            onset = interpolated_tts[cake_phase.definition()].interpolate(coords)
+                        elif interpolate is False:
+                            tts = interpolated_tts[cake_phase.definition()]
+                            absolute_difference_function = lambda list_value: abs(abs(list_value[:][0][1] - given_value[1]))+abs(list_value[:][0][0] - given_value[0])
+                            d = [(k, v) for k, v in tts.f_values.items()]
+                            given_value = (dists_m, source_depth)
+                            onset = min(d, key=absolute_difference_function)[1]
+                        tdiff = st["pick"]
+
                         misfits += num.sqrt(num.sum((tdiff - onset)**2))
                         norms += num.sqrt(num.sum(onset**2))
                     except Exception:
@@ -368,7 +368,7 @@ def optim_parallel(event, sources, bounds, stations, interpolated_tts,
             picks_fit_parallel,
             args=[event, sources, source_dc, stations, interpolated_tts],
             bounds=tuple(bounds.values()),
-            maxiter=25,
+            maxiter=1,
             seed=123,
             tol=0.0001)
         params_x = result.x
@@ -381,13 +381,14 @@ def optim_parallel(event, sources, bounds, stations, interpolated_tts,
         event_result = model.event.Event(lat=source.lat, lon=source.lon,
                                          time=source_dc.time+source.time,
                                          depth=source.depth,
-                                         tags=[str(event["id"])])
+                                         tags=[str(result.fun),
+                                               str(event["id"])])
         result_events.append(event)
         file = open(name, 'a+')
         event_result.olddumpf(file)
         file.write('--------------------------------------------\n')
         file.close()
-    except:
+    except Exception:
         pass
 
 
@@ -477,22 +478,58 @@ def bokeh_plot():
     return p1, p2, p3, p4, curdoc, session
 
 
-def get_bounds(test_events, parallel, singular, bounds, sources, bounds_list):
+def get_bounds(test_events, parallel, singular, bounds, sources, bounds_list, reference_events=None):
     ev_iter = 0
     for ev in test_events:
-        if parallel is False and singular is False:
-            bounds.update({'lat%s' % ev_iter: (ev.lat-0.5, ev.lat+0.5)})
-            bounds.update({'lon%s' % ev_iter: (ev.lon-0.5, ev.lon+0.5)})
-            bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
+        no_reference = True
+        if reference_events is not None:
+            for ref_ev in reference_events:
+                if ev.time > ref_ev.time-5. and ev.time < ref_ev.time+5.:
+                    if parallel is False and singular is False:
+                        bounds.update({'lat%s' % ev_iter: (ref_ev.lat-0.01, ref_ev.lat+0.01)})
+                        bounds.update({'lon%s' % ev_iter: (ref_ev.lon-0.01, ref_ev.lon+0.01)})
+                        bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
 
-            bounds.update({'timeshift%s' % ev_iter: (-0.01, 0.01)})
+                        bounds.update({'timeshift%s' % ev_iter: (-0.01, 0.01)})
+                    else:
+                        bounds = OrderedDict()
+                        bounds.update({'lat%s' % ev_iter: (ref_ev.lat-0.01, ref_ev.lat+0.01)})
+                        bounds.update({'lon%s' % ev_iter: (ref_ev.lon-0.01, ref_ev.lon+0.01)})
+                        bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
+                        bounds.update({'timeshift%s' % ev_iter: (-0.01, 0.01)})
+                        bounds_list.append(bounds)
+                    no_reference = False
+                    print("reference found")
+            if no_reference is True:
+                print("no reference")
+                if parallel is False and singular is False:
+                    bounds.update({'lat%s' % ev_iter: (ev.lat-0.1, ev.lat+0.1)})
+                    bounds.update({'lon%s' % ev_iter: (ev.lon-0.1, ev.lon+0.1)})
+                    bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
+
+                    bounds.update({'timeshift%s' % ev_iter: (-0.05, 0.05)})
+                else:
+                    bounds = OrderedDict()
+                    bounds.update({'lat%s' % ev_iter: (ev.lat-0.01, ev.lat+0.01)})
+                    bounds.update({'lon%s' % ev_iter: (ev.lon-0.01, ev.lon+0.01)})
+                    bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
+                    bounds.update({'timeshift%s' % ev_iter: (-0.01, 0.01)})
+                    bounds_list.append(bounds)
+
         else:
-            bounds = OrderedDict()
-            bounds.update({'lat%s' % ev_iter: (ev.lat-0.5, ev.lat+0.5)})
-            bounds.update({'lon%s' % ev_iter: (ev.lon-0.5, ev.lon+0.5)})
-            bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
-            bounds.update({'timeshift%s' % ev_iter: (-0.01, 0.01)})
-            bounds_list.append(bounds)
+            if parallel is False and singular is False:
+                bounds.update({'lat%s' % ev_iter: (ev.lat-0.01, ev.lat+0.01)})
+                bounds.update({'lon%s' % ev_iter: (ev.lon-0.01, ev.lon+0.01)})
+                bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
+
+                bounds.update({'timeshift%s' % ev_iter: (-0.01, 0.01)})
+            else:
+                bounds = OrderedDict()
+                bounds.update({'lat%s' % ev_iter: (ev.lat-0.01, ev.lat+0.01)})
+                bounds.update({'lon%s' % ev_iter: (ev.lon-0.01, ev.lon+0.01)})
+                bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
+                bounds.update({'timeshift%s' % ev_iter: (-0.01, 0.01)})
+                bounds_list.append(bounds)
         ev_iter = ev_iter+1
 
         time = ev.time
@@ -519,7 +556,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
           parallel=True, adress=None, interpolate=True, mod_name="insheim",
           singular=False, nboot=1):
     global ev_dict_list, times, phase_list, km, mod, pyrocko_stations, bounds, sources, source_dc, iiter, interpolated_tts, result_sources, result_events
-
+    reference_events = model.load_events("data/events_ler.pf")
     km = 1000.
     iiter = 0
     if mod_name == "insheim":
@@ -557,7 +594,8 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                                                              singular,
                                                              bounds,
                                                              sources,
-                                                             bounds_list)
+                                                             bounds_list,
+                                                             reference_events=reference_events)
 
         phase_list = get_phases_list()
 
@@ -593,7 +631,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                     args=[p1, p2, p3, p4, interpolate],
                     bounds=tuple(bounds.values()),
                     seed=123,
-                    maxiter=25,
+                    maxiter=1,
                     tol=0.0001)
 
                 sources = update_sources(result.x)
@@ -607,7 +645,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                         args=[plot],
                         bounds=tuple(bounds.values()),
                         seed=123,
-                        maxiter=6,
+                        maxiter=1,
                         tol=0.001)
                     for source in sources:
                         sources = update_depth(result.x)
@@ -634,14 +672,15 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                         args=[p1, p2, p3, p4, interpolate],
                         bounds=tuple(bounds.values()),
                         seed=123,
-                        maxiter=25,
+                        maxiter=1,
                         tol=0.00001)
                     params_x = result.x
                     source = gf.DCSource(
                         lat=float(params_x[0]),
                         lon=float(params_x[1]),
                         depth=float(params_x[2]),
-                        time=float(params_x[3]))
+                        magnitude=ev_dict_list_copy[i]["mag"],
+                        time=ev_dict_list_copy[i]["time"]+ float(params_x[3]))
                     result_sources.append(source)
                     event_result = model.event.Event(lat=source.lat, lon=source.lon,
                                                      time=source.time,
@@ -658,7 +697,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                             args=[plot],
                             bounds=tuple(bounds.values()),
                             seed=123,
-                            maxiter=6,
+                            maxiter=1,
                             tol=0.001)
                         for source in sources:
                             sources = update_depth(result.x)
@@ -671,7 +710,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                 file = open(name, 'w+')
                 file.close()
                 if calculated_ttt is False:
-                    ray.init(num_cpus=num_cpus-1, memory=28500 * 1024 * 1024)
+                    ray.init(num_cpus=num_cpus-1)
                 event_dict = []
                 ray.get([optim_parallel.remote(ev_dict_list[i], sources[i], bounds_list[i], pyrocko_stations[i], interpolated_tts, result_sources, result_events, name) for i in range(len(ev_dict_list))])
                 result = None
@@ -695,16 +734,25 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                             maxiter=15,
                             tol=0.0001)
                         params_x = result.x
-                        source = gf.DCSource(
-                            lat=float(params_x[0]),
-                            lon=float(params_x[1]),
-                            depth=float(params_x[2]),
-                            time=float(params_x[3]))
+                        try:
+                            source = gf.DCSource(
+                                lat=float(params_x[0]),
+                                lon=float(params_x[1]),
+                                depth=float(params_x[2]),
+                                magnitude= float(ev_dict_list_copy[i]["mag"]),
+                                time=float(ev_dict_list_copy[i]["time"])+float(params_x[3]))
+                        except:
+                            source = gf.DCSource(
+                                lat=float(params_x[0]),
+                                lon=float(params_x[1]),
+                                depth=float(params_x[2]),
+                                time=float(ev_dict_list_copy[i]["time"])+float(params_x[3]))
                         result_sources.append(source)
                         event_result = model.event.Event(lat=source.lat, lon=source.lon,
                                                          time=source.time,
                                                          depth=source.depth,
-                                                         tags=[result.fun, ev_dict_list[0]["id"]])
+                                                         magnitude=source.magnitude,
+                                                         tags=[str(result.fun), str(ev_dict_list[0]["id"])])
                         result_events.append(event_result)
                         if optimize_depth is True:
                             bounds = OrderedDict()
@@ -716,7 +764,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                                 args=[plot],
                                 bounds=tuple(bounds.values()),
                                 seed=123,
-                                maxiter=6,
+                                maxiter=1,
                                 tol=0.001,
                                 callback=lambda a, convergence: curdoc().add_next_tick_callback(button_callback(a, convergence)))
                             for source in sources:
@@ -728,7 +776,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                         picks_fit,
                         args=[],
                         bounds=tuple(bounds.values()),
-                        maxiter=65,
+                        maxiter=1,
                         seed=123,
                         tol=0.000001)
 
@@ -752,7 +800,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                             args=[],
                             bounds=tuple(bounds.values()),
                             seed=123,
-                            maxiter=6,
+                            maxiter=1,
                             tol=0.001,
                             callback=lambda a, convergence: curdoc().add_next_tick_callback(button_callback(a, convergence)))
                         for source in sources:
