@@ -484,6 +484,8 @@ def get_bounds(test_events, parallel, singular, bounds, sources, bounds_list, re
         no_reference = True
         if reference_events is not None:
             for ref_ev in reference_events:
+                ev.lat = ref_ev.lat
+                ev.lon = ref_ev.lon
                 if ev.time > ref_ev.time-5. and ev.time < ref_ev.time+5.:
                     if parallel is False and singular is False:
                         bounds.update({'lat%s' % ev_iter: (ref_ev.lat-0.01, ref_ev.lat+0.01)})
@@ -499,9 +501,7 @@ def get_bounds(test_events, parallel, singular, bounds, sources, bounds_list, re
                         bounds.update({'timeshift%s' % ev_iter: (-0.01, 0.01)})
                         bounds_list.append(bounds)
                     no_reference = False
-                    print("reference found")
             if no_reference is True:
-                print("no reference")
                 if parallel is False and singular is False:
                     bounds.update({'lat%s' % ev_iter: (ev.lat-0.1, ev.lat+0.1)})
                     bounds.update({'lon%s' % ev_iter: (ev.lon-0.1, ev.lon+0.1)})
@@ -631,7 +631,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                     args=[p1, p2, p3, p4, interpolate],
                     bounds=tuple(bounds.values()),
                     seed=123,
-                    maxiter=1,
+                    maxiter=15,
                     tol=0.0001)
 
                 sources = update_sources(result.x)
@@ -645,7 +645,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                         args=[plot],
                         bounds=tuple(bounds.values()),
                         seed=123,
-                        maxiter=1,
+                        maxiter=15,
                         tol=0.001)
                     for source in sources:
                         sources = update_depth(result.x)
@@ -672,7 +672,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                         args=[p1, p2, p3, p4, interpolate],
                         bounds=tuple(bounds.values()),
                         seed=123,
-                        maxiter=1,
+                        maxiter=15,
                         tol=0.00001)
                     params_x = result.x
                     source = gf.DCSource(
@@ -697,7 +697,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                             args=[plot],
                             bounds=tuple(bounds.values()),
                             seed=123,
-                            maxiter=1,
+                            maxiter=15,
                             tol=0.001)
                         for source in sources:
                             sources = update_depth(result.x)
@@ -734,24 +734,24 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                             maxiter=15,
                             tol=0.0001)
                         params_x = result.x
-                        try:
-                            source = gf.DCSource(
-                                lat=float(params_x[0]),
-                                lon=float(params_x[1]),
-                                depth=float(params_x[2]),
-                                magnitude= float(ev_dict_list_copy[i]["mag"]),
-                                time=float(ev_dict_list_copy[i]["time"])+float(params_x[3]))
-                        except:
-                            source = gf.DCSource(
-                                lat=float(params_x[0]),
-                                lon=float(params_x[1]),
-                                depth=float(params_x[2]),
-                                time=float(ev_dict_list_copy[i]["time"])+float(params_x[3]))
+                    #    try:
+                    #        source = gf.DCSource(
+                    #            lat=float(params_x[0]),
+                    #            lon=float(params_x[1]),
+                    #            depth=float(params_x[2]),
+                    #            magnitude= float(ev_dict_list_copy[i]["mag"]),
+                    #            time=float(ev_dict_list_copy[i]["time"])+float(params_x[3]))
+                    #    except:
+                        source = gf.DCSource(
+                            lat=float(params_x[0]),
+                            lon=float(params_x[1]),
+                            depth=float(params_x[2]),
+                            time=float(ev_dict_list_copy[i]["time"])+float(params_x[3]))
                         result_sources.append(source)
                         event_result = model.event.Event(lat=source.lat, lon=source.lon,
                                                          time=source.time,
                                                          depth=source.depth,
-                                                         magnitude=source.magnitude,
+                                                        # magnitude=source.magnitude,
                                                          tags=[str(result.fun), str(ev_dict_list[0]["id"])])
                         result_events.append(event_result)
                         if optimize_depth is True:
@@ -764,7 +764,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                                 args=[plot],
                                 bounds=tuple(bounds.values()),
                                 seed=123,
-                                maxiter=1,
+                                maxiter=15,
                                 tol=0.001,
                                 callback=lambda a, convergence: curdoc().add_next_tick_callback(button_callback(a, convergence)))
                             for source in sources:
@@ -776,7 +776,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                         picks_fit,
                         args=[],
                         bounds=tuple(bounds.values()),
-                        maxiter=1,
+                        maxiter=15,
                         seed=123,
                         tol=0.000001)
 
@@ -800,7 +800,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                             args=[],
                             bounds=tuple(bounds.values()),
                             seed=123,
-                            maxiter=1,
+                            maxiter=15,
                             tol=0.001,
                             callback=lambda a, convergence: curdoc().add_next_tick_callback(button_callback(a, convergence)))
                         for source in sources:
@@ -814,8 +814,6 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
     #    pr.disable()
     #    filename = 'profile.prof'
     #    pr.dump_stats(filename)
-        for source in sources:
-            print(source)
-        if parallel is False:
-            model.dump_events(result_events, scenario_folder+"result_events_%s.pf" % str(kmod))
+        if parallel is not True:
+            model.dump_events(result_events, "result_events_%s.pf" % str(kmod))
     return result, sources
