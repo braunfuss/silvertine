@@ -488,32 +488,32 @@ def get_bounds(test_events, parallel, singular, bounds, sources, bounds_list, re
                 ev.lon = ref_ev.lon
                 if ev.time > ref_ev.time-5. and ev.time < ref_ev.time+5.:
                     if parallel is False and singular is False:
-                        bounds.update({'lat%s' % ev_iter: (ref_ev.lat-0.01, ref_ev.lat+0.01)})
-                        bounds.update({'lon%s' % ev_iter: (ref_ev.lon-0.01, ref_ev.lon+0.01)})
-                        bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
+                        bounds.update({'lat%s' % ev_iter: (ref_ev.lat-0.1, ref_ev.lat+0.1)})
+                        bounds.update({'lon%s' % ev_iter: (ref_ev.lon-0.1, ref_ev.lon+0.1)})
+                        bounds.update({'depth%s' % ev_iter: (0*km, 10*km)})
 
-                        bounds.update({'timeshift%s' % ev_iter: (-0.01, 0.01)})
+                        bounds.update({'timeshift%s' % ev_iter: (-0.2, 0.2)})
                     else:
                         bounds = OrderedDict()
-                        bounds.update({'lat%s' % ev_iter: (ref_ev.lat-0.01, ref_ev.lat+0.01)})
-                        bounds.update({'lon%s' % ev_iter: (ref_ev.lon-0.01, ref_ev.lon+0.01)})
-                        bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
-                        bounds.update({'timeshift%s' % ev_iter: (-0.01, 0.01)})
+                        bounds.update({'lat%s' % ev_iter: (ref_ev.lat-0.1, ref_ev.lat+0.1)})
+                        bounds.update({'lon%s' % ev_iter: (ref_ev.lon-0.1, ref_ev.lon+0.1)})
+                        bounds.update({'depth%s' % ev_iter: (0*km, 10*km)})
+                        bounds.update({'timeshift%s' % ev_iter: (-0.2, 0.2)})
                         bounds_list.append(bounds)
                     no_reference = False
             if no_reference is True:
                 if parallel is False and singular is False:
-                    bounds.update({'lat%s' % ev_iter: (ev.lat-0.1, ev.lat+0.1)})
-                    bounds.update({'lon%s' % ev_iter: (ev.lon-0.1, ev.lon+0.1)})
-                    bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
+                    bounds.update({'lat%s' % ev_iter: (ev.lat-0.2, ev.lat+0.2)})
+                    bounds.update({'lon%s' % ev_iter: (ev.lon-0.2, ev.lon+0.2)})
+                    bounds.update({'depth%s' % ev_iter: (0*km, 10*km)})
 
-                    bounds.update({'timeshift%s' % ev_iter: (-0.05, 0.05)})
+                    bounds.update({'timeshift%s' % ev_iter: (-0.5, 0.5)})
                 else:
                     bounds = OrderedDict()
-                    bounds.update({'lat%s' % ev_iter: (ev.lat-0.01, ev.lat+0.01)})
-                    bounds.update({'lon%s' % ev_iter: (ev.lon-0.01, ev.lon+0.01)})
-                    bounds.update({'depth%s' % ev_iter: (0*km, 15*km)})
-                    bounds.update({'timeshift%s' % ev_iter: (-0.01, 0.01)})
+                    bounds.update({'lat%s' % ev_iter: (ev.lat-0.2, ev.lat+0.2)})
+                    bounds.update({'lon%s' % ev_iter: (ev.lon-0.2, ev.lon+0.2)})
+                    bounds.update({'depth%s' % ev_iter: (0*km, 10*km)})
+                    bounds.update({'timeshift%s' % ev_iter: (-0.5, 0.5)})
                     bounds_list.append(bounds)
 
         else:
@@ -672,7 +672,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                         args=[p1, p2, p3, p4, interpolate],
                         bounds=tuple(bounds.values()),
                         seed=123,
-                        maxiter=15,
+                        maxiter=25,
                         tol=0.00001)
                     params_x = result.x
                     source = gf.DCSource(
@@ -697,7 +697,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                             args=[plot],
                             bounds=tuple(bounds.values()),
                             seed=123,
-                            maxiter=15,
+                            maxiter=25,
                             tol=0.001)
                         for source in sources:
                             sources = update_depth(result.x)
@@ -731,7 +731,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                             args=[],
                             bounds=tuple(bounds.values()),
                             seed=123,
-                            maxiter=15,
+                            maxiter=25,
                             tol=0.0001)
                         params_x = result.x
                     #    try:
@@ -764,7 +764,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                                 args=[plot],
                                 bounds=tuple(bounds.values()),
                                 seed=123,
-                                maxiter=15,
+                                maxiter=25,
                                 tol=0.001,
                                 callback=lambda a, convergence: curdoc().add_next_tick_callback(button_callback(a, convergence)))
                             for source in sources:
@@ -776,7 +776,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                         picks_fit,
                         args=[],
                         bounds=tuple(bounds.values()),
-                        maxiter=15,
+                        maxiter=125,
                         seed=123,
                         tol=0.000001)
 
@@ -800,7 +800,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                             args=[],
                             bounds=tuple(bounds.values()),
                             seed=123,
-                            maxiter=15,
+                            maxiter=45,
                             tol=0.001,
                             callback=lambda a, convergence: curdoc().add_next_tick_callback(button_callback(a, convergence)))
                         for source in sources:
