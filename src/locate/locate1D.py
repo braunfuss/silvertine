@@ -854,7 +854,6 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                                                   time=source.time, magnitude=source.magnitude,
                                                   depth=source.depth,
                                                   tags=[str(result.fun), str(ev_dict_list[i]["id"])])
-)
                         result_events.append(event)
     #    pr.disable()
     #    filename = 'profile.prof'
