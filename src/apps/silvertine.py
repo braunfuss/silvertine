@@ -408,6 +408,8 @@ def command_locate(args):
         options.parallel = True
     if options.nevents == 0:
         options.nevents = None
+    if options.scenario is not True:
+        options.scenario = False
     result, best_model = silvertine.locate.locate1D.solve(scenario_folder=project_dir,
                                                           show=options.show,
                                                           n_tests=options.nevents,
