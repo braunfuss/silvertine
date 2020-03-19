@@ -507,13 +507,13 @@ def get_bounds(test_events, parallel, singular, bounds, sources, bounds_list, re
                     bounds.update({'lon%s' % ev_iter: (ev.lon-0.2, ev.lon+0.2)})
                     bounds.update({'depth%s' % ev_iter: (0*km, 10*km)})
 
-                    bounds.update({'timeshift%s' % ev_iter: (-0.5, 0.5)})
+                    bounds.update({'timeshift%s' % ev_iter: (-0.01, 0.01)})
                 else:
                     bounds = OrderedDict()
                     bounds.update({'lat%s' % ev_iter: (ev.lat-0.2, ev.lat+0.2)})
                     bounds.update({'lon%s' % ev_iter: (ev.lon-0.2, ev.lon+0.2)})
                     bounds.update({'depth%s' % ev_iter: (0*km, 10*km)})
-                    bounds.update({'timeshift%s' % ev_iter: (-0.5, 0.5)})
+                    bounds.update({'timeshift%s' % ev_iter: (-0.01, 0.01)})
                     bounds_list.append(bounds)
 
         else:
@@ -672,7 +672,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                         args=[p1, p2, p3, p4, interpolate],
                         bounds=tuple(bounds.values()),
                         seed=123,
-                        maxiter=25,
+                        maxiter=35,
                         tol=0.00001)
                     params_x = result.x
                     source = gf.DCSource(
@@ -697,7 +697,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                             args=[plot],
                             bounds=tuple(bounds.values()),
                             seed=123,
-                            maxiter=25,
+                            maxiter=35,
                             tol=0.001)
                         for source in sources:
                             sources = update_depth(result.x)
@@ -731,7 +731,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                             args=[],
                             bounds=tuple(bounds.values()),
                             seed=123,
-                            maxiter=25,
+                            maxiter=35,
                             tol=0.0001)
                         params_x = result.x
                     #    try:
@@ -764,7 +764,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                                 args=[plot],
                                 bounds=tuple(bounds.values()),
                                 seed=123,
-                                maxiter=25,
+                                maxiter=35,
                                 tol=0.001,
                                 callback=lambda a, convergence: curdoc().add_next_tick_callback(button_callback(a, convergence)))
                             for source in sources:
