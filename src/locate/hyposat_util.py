@@ -1,8 +1,11 @@
 import math
 from pyrocko.guts import Object, String, Float, List
 from collections import defaultdict
-
+from pyrocko.gui.pile_viewer import PhaseMarker, EventMarker
+from pyrocko import util, model
 zero_level_km = 0
+import numpy as num
+import subprocess
 
 def nsl_str(nsl):
     return '.'.join(nsl)
@@ -32,115 +35,50 @@ def to_min_sec(lat, lon):
                                                math.floor(lon), mlon, slon, ew)
 
 
+def hyposat_inp():
+    hypo_param_tmpl = '''  hyposat-parameter
+*GLOBAL MODEL 2                     : iasp91
+GLOBAL MODEL                       : %(global_model)s
+LOCAL OR REGIONAL MODEL            : %(locreg_model)s
+PHASE INDEX FOR LOCAL MODEL        : 0000
+OUTPUT OF REGIONAL MODEL (DEF 0)   : 1
+STATION FILE                       : stations.dat
+STATION CORRECTION FILE            : %(stations_correction_file)s
+P-VELOCITY TO CORRECT ELEVATION    : %(vp_to_correct_elevation)g
+S-VELOCITY TO CORRECT ELEVATION    : %(vs_to_correct_elevation)g
+RG GROUP-VELOCITY (DEF 2.5  [km/s]): %(rg_group_velocity)g
+LG GROUP-VELOCITY (DEF 3.5  [km/s]): 3.5752
+LQ GROUP-VELOCITY (DEF 4.4  [km/s]):  4.4
+LR GROUP-VELOCITY (DEF 3.95 [km/s]): 2.85
+STARTING SOURCE TIME (EPOCHAL TIME): %(starting_source_time)s
+STARTING TIME ERROR       [s]      : 0.2
+STARTING SOURCE DEPTH     [km]     : %(starting_source_depth_km)g
+STARTING DEPTH ERROR      [km]     : 2.
+DEPTH FLAG (f,b,d,F,B,D)           : d
+STARTING SOURCE LATITUDE  [deg]    : 49.2
+STARTING LATITUDE ERROR   [deg]    : 1
+STARTING SOURCE LONGITUDE [deg]    : 8.2
+STARTING LONGITUDE ERROR  [deg]    : 1.
+MAGNITUDE CALCULATION (DEF 0)      : 1
+P-ATTENUATION MODEL (G-R or V-C)   : V-C
+S-ATTENUATION MODEL (IASPEI or R-P): R-P
+MAXIMUM # OF ITERATIONS            : 600
+# TO SEARCH OSCILLATIONS (DEF 4)   : 20
+LOCATION ACCURACY [km] (DEFAULT 1) : 0.1
+CONSTRAIN SOLUTION (0/1)           : 1
+CONFIDENCE LEVEL  (68.3 - 99.99 %%) : 99.
+EPICENTER ERROR ELLIPSE (DEF 1)    : 1
+MAXIMUM AZIMUTH ERROR     [deg]    : 20.
+MAXIMUM SLOWNESS ERROR    [s/deg]  : 3.
+SLOWNESS [S/DEG] ( 0 = APP. VEL)   : 0
+FLAG USING TRAVEL-TIME DIFFERENCES : 1
+INPUT FILE NAME (DEF hyposat-in)   : _
+OUTPUT FILE NAME (DEF hyposat-out) : _
+OUTPUT SWITCH  (YES = 1, DEFAULT)  : 1
+OUTPUT LEVEL                       : 4
+'''
 
-class hyposat_inp(Object):
-    '''Returns hyposat input files'''
-    phase_selection = String.T()
-    fallback_time = Float.T(optional=True)
-
-    def __init__(self):
-        starting_source_depth_km = 0.1
-        zero_level_km = 0
-        rg_group_velocity = 2.6
-        vp_to_correct_elevation = 3.8
-        vs_to_correct_elevation = 2.1
-        p_stddev = 0.1
-        s_stddev = 0.2
-
-        crust_51_keys = [
-            'Off',
-            'For station corrections',
-            'For local/regional model',
-            'For station corrections, local/regional model and surface\
-                        reflection corrections']
-
-        crust_51_choices = dict(
-            [(b, a) for (a, b) in enumerate(crust_51_keys)])
-
-        crust_51 = "Off"
-
-        locreg_model = "insheim.dat"
-        global_model = "ak135"
-
-        params = {}
-        params['starting_source_depth_km'] = starting_source_depth_km + zero_level_km
-        params['global_model'] = global_model
-        params['locreg_model'] = locreg_model
-        params['vp_to_correct_elevation'] = vp_to_correct_elevation
-        params['vs_to_correct_elevation'] = vs_to_correct_elevation
-        params['crust_51'] = crust_51_choices[crust_51]
-        params['rg_group_velocity'] = rg_group_velocity
-        params['stations_correction_file'] = "station_corrections_insheim.txt"
-
-        hypo_param_tmpl = '''  hyposat-parameter
-        *GLOBAL MODEL 2                     : iasp91
-        GLOBAL MODEL                       : %(global_model)s
-        LOCAL OR REGIONAL MODEL            : %(locreg_model)s
-        PHASE INDEX FOR LOCAL MODEL        : 0000
-        OUTPUT OF REGIONAL MODEL (DEF 0)   : 1
-        STATION FILE                       : stations.dat
-        STATION CORRECTION FILE            : %(stations_correction_file)s
-        P-VELOCITY TO CORRECT ELEVATION    : %(vp_to_correct_elevation)g
-        S-VELOCITY TO CORRECT ELEVATION    : %(vs_to_correct_elevation)g
-        RG GROUP-VELOCITY (DEF 2.5  [km/s]): %(rg_group_velocity)g
-        LG GROUP-VELOCITY (DEF 3.5  [km/s]): 3.5752
-        LQ GROUP-VELOCITY (DEF 4.4  [km/s]):  4.4
-        LR GROUP-VELOCITY (DEF 3.95 [km/s]): 2.85
-        STARTING SOURCE TIME (EPOCHAL TIME): %(starting_source_time)s
-        STARTING TIME ERROR       [s]      : 0.2
-        STARTING SOURCE DEPTH     [km]     : %(starting_source_depth_km)g
-        STARTING DEPTH ERROR      [km]     : 2.
-        DEPTH FLAG (f,b,d,F,B,D)           : d
-        STARTING SOURCE LATITUDE  [deg]    : 49.2
-        STARTING LATITUDE ERROR   [deg]    : 1
-        STARTING SOURCE LONGITUDE [deg]    : 8.2
-        STARTING LONGITUDE ERROR  [deg]    : 1.
-        MAGNITUDE CALCULATION (DEF 0)      : 1
-        P-ATTENUATION MODEL (G-R or V-C)   : V-C
-        S-ATTENUATION MODEL (IASPEI or R-P): R-P
-        MAXIMUM # OF ITERATIONS            : 600
-        # TO SEARCH OSCILLATIONS (DEF 4)   : 6
-        LOCATION ACCURACY [km] (DEFAULT 1) : 1.
-        CONSTRAIN SOLUTION (0/1)           : 1
-        CONFIDENCE LEVEL  (68.3 - 99.99 %%) : 95.
-        EPICENTER ERROR ELLIPSE (DEF 1)    : 1
-        MAXIMUM AZIMUTH ERROR     [deg]    : 20.
-        MAXIMUM SLOWNESS ERROR    [s/deg]  : 3.
-        SLOWNESS [S/DEG] ( 0 = APP. VEL)   : 0
-        FLAG USING TRAVEL-TIME DIFFERENCES : 1
-        INPUT FILE NAME (DEF hyposat-in)   : _
-        OUTPUT FILE NAME (DEF hyposat-out) : _
-        OUTPUT SWITCH  (YES = 1, DEFAULT)  : 1
-        OUTPUT LEVEL                       : 4
-        '''
-
-
-        def load_stations_from_meta(self, fn=None, db=None):
-            if fn is not None:
-                stations_landau = num.loadtxt(fn, delimiter=",", dtype='str')
-                stations = []
-                for st in stations_landau:
-                    stations.append(model.station.Station(station=st[0], network="GR", lat=float(st[1]), lon=float(st[2]), elevation=float(st[3])))
-                return stations
-            elif db == "landau":
-                stations_landau = num.loadtxt("stations_landau.pf", delimiter=",", dtype='str')
-                stations_landau_pyrocko = []
-                for st in stations_landau:
-                    stations_landau_pyrocko.append(model.station.Station(station=st[0], network="GR", lat=float(st[1]), lon=float(st[2]), elevation=float(st[3])))
-                return stations_landau_pyrocko
-
-            elif db == "insheim":
-                stations_insheim = num.loadtxt("stations_insheim.pf", delimiter=",", dtype='str')
-                stations_insheim_pyrocko = []
-                for st in stations_insheim:
-                    stations_insheim_pyrocko.append(model.station.Station(station=st[0], network="GR", lat=float(st[1]), lon=float(st[2]), elevation=float(st[3])))
-                return stations_insheim_pyrocko
-            elif db == "meta":
-                stations_meta_pyrocko = []
-                stations_meta = num.loadtxt("meta.txt", delimiter=",", dtype='str')
-                for st in stations_meta:
-                    stations_meta_pyrocko.append(model.station.Station(station=st[0], network="GR", lat=float(st[1]), lon=float(st[2]), elevation=float(st[3])))
-                return stations_meta_pyrocko
+    return hypo_param_tmpl
 
 
 def read_hypo_output():
@@ -189,7 +127,7 @@ def read_hypo_output():
                 except:
                     dh = 0.
                 rms = float(toks[14])
-                event = model.Event(lat, lon, t, depth=depth-(zero_level_km*1000.), name='HYPOSAT-%i' % kind)
+                event = model.Event(lat=lat, lon=lon, time=t, depth=depth-(zero_level_km*1000.), name='HYPOSAT-%i' % kind)
                 event.ellipse_major = ellipse_major
                 event.ellipse_minor = ellipse_minor
                 event.ellipse_azimuth = ellipse_azimuth
@@ -197,7 +135,7 @@ def read_hypo_output():
                 event_markers.append(evmark)
                 evmark.set_kind(kind)
                 ev_marker_hyposat.append(evmark)
-                return(evmark, dh, dz, rms, float(toks[6]))
+                return(event, evmark, dh, dz, rms, float(toks[6]))
                 phmarks = []
                 kind += 1
                 state = 0
@@ -242,3 +180,151 @@ def read_hypo_output():
                     ellipse_minor = float(toks[8])*1000.
                 elif toks[0] == 'Azimuth:':
                     ellipse_azimuth = float(toks[1])
+
+
+def write_hyposat_earthmodel(mod, name, folder=None):
+    file = open("data/"+name, 'w+')
+    file.write("5.\n")
+    for lay in mod.layers():
+        file.write("     %s     %s     %s\n" % (lay.zbot/1000., (lay.mbot.vp), (lay.mbot.vs)))
+    file.close()
+
+
+def run_hyposat(ev, event, ev_list, stations_hyposat, mod, mod_name):
+    starting_source_depth_km = 0.1
+    zero_level_km = 0
+    rg_group_velocity = 2.6
+    vp_to_correct_elevation = 3.8
+    vs_to_correct_elevation = 2.1
+    p_stddev = 0.5
+    s_stddev = 0.5
+    event_marker_out = []
+
+    crust_51_keys = [
+        'Off',
+        'For station corrections',
+        'For local/regional model',
+        'For station corrections, local/regional model and surface\
+                    reflection corrections']
+
+    crust_51_choices = dict(
+        [(b, a) for (a, b) in enumerate(crust_51_keys)])
+
+    crust_51 = "Off"
+
+    write_hyposat_earthmodel(mod, mod_name)
+    locreg_model = mod_name
+    global_model = "ak135"
+
+    params = {}
+    params['starting_source_depth_km'] = starting_source_depth_km + zero_level_km
+    params['global_model'] = global_model
+    params['locreg_model'] = locreg_model
+    params['vp_to_correct_elevation'] = vp_to_correct_elevation
+    params['vs_to_correct_elevation'] = vs_to_correct_elevation
+    params['crust_51'] = crust_51_choices[crust_51]
+    params['rg_group_velocity'] = rg_group_velocity
+    params['stations_correction_file'] = "_"
+    station_phase_to_nslc = {}
+    hypo_param_tmpl = hyposat_inp()
+    hypo_in = []
+    for ev_phase_markers in ev_list:
+        for marker in ev_phase_markers:
+            if not isinstance(marker, PhaseMarker):
+                continue
+            phasename = marker.get_phasename()
+            phase = phasename
+            if phase == "P<(moho)":
+                phase = "Pg"
+            if phase == "p<(moho)":
+                phase = pg
+            if phase == "S<(moho)":
+                phase = "Sg"
+            if phase == "s<(moho)":
+                phase = "sg"
+            if phase == "P>(moho)":
+                phase = "PG"
+            if phase == "p>(moho)":
+                phase = "pG"
+            if phase == "S>(moho)":
+                phase = "SG"
+            if phase == "s>(moho)":
+                phase = "sG"
+            if phase == 'Sv(moho)s':
+                phase = "SmS"
+            if phase == 'Pv(moho)p':
+                phase = "PmP"
+            if phase == 'Pv_(moho)p':
+                phase = "Pn"
+            if phase == 'Sv_(moho)s':
+                phase = "Sn"
+            if phase == 'p':
+                phase = "P"
+            if phase == 's':
+                phase = "S"
+            phasename = phase
+            nslcs = list(marker.nslc_ids)
+            station = nslcs[1]
+
+            station_phase_to_nslc[station, phasename] = nslcs[0]
+
+            backazi = -1.
+            backazi_stddev = 0.0
+            slowness = -1.
+            slowness_stddev = 0.0
+            period = 0.0
+            amplitude = 0.0
+            flags = 'T__DR_'
+            t = marker.tmin
+
+            date_str = util.time_to_str(t, '%Y %m %d %H %M %S.3FRAC')
+            if phasename[0] == 'P':
+                t_stddev = p_stddev
+            elif phasename[0] == 'S':
+                t_stddev = s_stddev
+            else:
+                t_stddev = p_stddev
+            hypo_in.append((station, phasename, date_str, t_stddev,
+                            backazi, backazi_stddev, slowness,
+                            slowness_stddev, flags, period, amplitude))
+
+        hypo_in.sort()
+        print(hypo_in)
+        if len(hypo_in) == 0:
+            pass
+        else:
+            f = open("hyposat-in", 'w')
+            f.write('\n')
+            for vals in hypo_in:
+                s = '%-5s %-8s %s %5.3f %6.2f %5.2f %5.2f %5.2f %-6s %6.3f %12.2f' % vals
+
+                f.write(s+'\n')
+
+            f.close()
+    try:
+
+        params['starting_source_time'] = util.time_to_str(num.min(event.time)-60.)
+
+        f = open('stations.dat', 'w')
+        sta_lat_lon = []
+        for sta in stations_hyposat:
+            s = '%-5s%1s%s%7.1f' % (
+                sta.station, ' ', to_min_sec(sta.lat, sta.lon),
+                sta.elevation - zero_level_km*1000.)
+
+            f.write(s+'\n')
+            sta_lat_lon.append((sta.lat, sta.lon))
+        f.close()
+
+        f = open("hyposat-parameter", 'w')
+        f.write(hypo_param_tmpl % params)
+        f.close()
+
+        subprocess.run(["tcsh", "hypo.tcsh"])
+        event, marker, dh, dz, rms, depth = read_hypo_output()
+        event_marker_out.append(marker)
+        event.tags = [str(rms), str(ev["id"])]
+
+    except:
+        event = model.Event(lat=ev["lat"], lon=ev["lon"], time=ev["time"], depth=ev["depth"], name="non hypo")
+    return event

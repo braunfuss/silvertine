@@ -106,8 +106,6 @@ def load_ev_dict_list(path=None, nevent=0):
     ev_dict_list = []
     if nevent is not None:
         events = events[0:nevent]
-        if len(events) == 1:
-            events = [events]
     for ev in events:
         date = str(ev[1])
         time = str(ev[2])

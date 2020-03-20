@@ -6,15 +6,11 @@ import os.path as op
 from pyrocko.moment_tensor import MomentTensor
 from collections import OrderedDict
 from pyrocko import util, model, io, trace, config
-from pyrocko.gf import Target, DCSource, RectangularSource
-from pyrocko import gf
-from pyrocko.fdsn import ws
-from pyrocko.fdsn import station as fs
+from pyrocko.gf import DCSource, RectangularSource
 from pyrocko.guts import Object, Int, String
 import os
 from pyrocko import orthodrome as ortho
-from pyrocko import cake
-from pyrocko import model
+from pyrocko import cake, model, gf
 from pyrocko.gf import meta
 import time as timesys
 import scipy
@@ -25,17 +21,9 @@ from ..util import store_variation
 import ray
 import psutil
 from pathlib import Path
+from silvertine.util import ttt
 
-num_cpus = psutil.cpu_count(logical=False)-1
-
-
-def update_sources(params):
-    for i, source in enumerate(sources):
-        source.lat = float(params[0+4*i])
-        source.lon = float(params[1+4*i])
-        source.depth = float(params[2+4*i])
-        source.time = float(source_dc.time + params[3+4*i])
-    return sources
+num_cpus = psutil.cpu_count(logical=False)
 
 
 def update_depth(params):
@@ -346,6 +334,7 @@ def synthetic_ray_tracing_setup(events, stations, mod):
 
         ev_list = []
         ev_list.append(phase_markers)
+    return ev_list, ev_dict_list
 
 
 def load_data(data_folder=None, nevent=0):
@@ -498,14 +487,12 @@ def associate_waveforms(test_events, reference_events=None,
                 traces = io.load(path)
                 for tr in traces:
                     tr.chop(ev.time-10, ev.time+60)
-                print(event)
 
 
 def get_bounds(test_events, parallel, singular, bounds, sources, bounds_list,
-               reference_events=None):
+               minimum_vel=False, reference_events=None, minimum_vel_mod=None):
     ev_iter = 0
     for ev in test_events:
-        print(ev.time)
         no_reference = True
         if reference_events is not None:
             for ref_ev in reference_events:
@@ -571,29 +558,269 @@ def get_bounds(test_events, parallel, singular, bounds, sources, bounds_list,
             time=time,
             magnitude=ev.magnitude)
         sources.append(source)
+    if minimum_vel is True:
+        pertub = 0.01
+        layers = minimum_vel_mod.layers()
+        for i in range(0, minimum_vel_mod.nlayers):
+            layer = next(layers)
+            p_vel = ((layer.mbot.vp + layer.mtop.vp)/2.)/1000.
+            s_vel = ((layer.mbot.vs + layer.mtop.vs)/2.)/1000.
+            if i == 0:
+                bounds.update({'p_vel%s' %i:(p_vel*(1-pertub), p_vel*(1+pertub))})
+                bounds.update({'s_vel%s'%i:(s_vel*(1-pertub), s_vel*(1+pertub))})
+            else:
+                bounds.update({'p_vel_up%s' %i:(p_vel*(1-pertub), p_vel*(1+pertub))})
+                bounds.update({'s_vel_up%s'%i:(s_vel*(1-pertub), s_vel*(1+pertub))})
+
     return bounds, bounds_list, sources, source_dc
+
+
+def update_sources(ev_dict_list, params):
+    sources = []
+    for i, ev in enumerate(ev_dict_list):
+        source = gf.DCSource()
+        source.lat = float(params[0+4*i])
+        source.lon = float(params[1+4*i])
+        source.depth = float(params[2+4*i])
+        source.time = float(ev["time"] + params[3+4*i])
+        sources.append(source)
+    return sources
+
+
+def get_result_events(params, sources, result, ev_dict_list):
+    result_events = []
+    for i, source in enumerate(sources):
+        source.time = float(ev_dict_list[i]["time"] + params[3+4*i])
+        result_sources.append(source)
+        try:
+            event = model.event.Event(lat=source.lat, lon=source.lon,
+                                      time=source.time,
+                                      magnitude=source.magnitude,
+                                      depth=source.depth,
+                                      tags=[str(result.fun),
+                                            str(ev_dict_list[i]["id"])])
+        except:
+            event = model.event.Event(lat=source.lat, lon=source.lon,
+                                      time=source.time,
+                                      depth=source.depth,
+                                      tags=[str(result.fun),
+                                            str(ev_dict_list[i]["id"])])
+
+        result_events.append(event)
+    return result_events
+
+
+def get_single_result_event(ev_dict_list_copy, params_x, result, i=0):
+    try:
+        source = gf.DCSource(
+            lat=float(params_x[0]),
+            lon=float(params_x[1]),
+            depth=float(params_x[2]),
+            magnitude=ev_dict_list_copy[i]["mag"],
+            time=ev_dict_list_copy[i]["time"]+ float(params_x[3]))
+        result_sources.append(source)
+        event_result = model.event.Event(lat=source.lat, lon=source.lon,
+                                         time=source.time,
+                                         depth=source.depth,
+                                         magnitude=source.magnitude,
+                                         tags=[str(result.fun), str(ev_dict_list_copy[i]["id"])])
+    except:
+        source = gf.DCSource(
+            lat=float(params_x[0]),
+            lon=float(params_x[1]),
+            depth=float(params_x[2]),
+            time=ev_dict_list_copy[i]["time"]+ float(params_x[3]))
+        result_sources.append(source)
+        event_result = model.event.Event(lat=source.lat, lon=source.lon,
+                                         time=source.time,
+                                         depth=source.depth,
+                                         tags=[str(result.fun), str(ev_dict_list_copy[i]["id"])])
+    return event_result, source
+
+
+def str_float_vals(vals):
+    return ' '.join(['%e' % val for val in vals])
+
+
+def update_layered_model(mod, params, nevents):
+    srows = []
+    k = 1000.
+    scanned_mod = mod.to_scanlines()
+    print(params, len(params), mod.nlayers, nevents)
+    s = 0
+    print(scanned_mod)
+    rows = scanned_mod
+    rows_cut = scanned_mod[1::2]
+    for i in range(0, mod.nlayers):
+        print(i)
+        depth, vp, vs, rho, qp, qs = rows_cut[i]
+        if i == 0:
+            depth, vp, vs, rho, qp, qs = rows[0]
+            vp_mod = params[0+4*nevents]
+            vs_mod = params[1+4*nevents]
+            s = s+1
+        elif (i % 2) != 0:
+            print(s, s*2+0+4*nevents)
+            try:
+                vp_mod = params[s*2+0+4*nevents]
+                vs_mod = params[s*2+1+4*nevents]
+            except:
+                vp_mod = params[s-1*2+0+4*nevents]
+                vs_mod = params[s-1*2+1+4*nevents]
+        else:
+            vp_mod = params[s*2+0+4*nevents]
+            vs_mod = params[s*2+1+4*nevents]
+            s = s+1
+        print(vp_mod, vs_mod)
+        row = [depth / k, vp_mod, vs_mod, rho]
+        srows.append('%15s' % (str_float_vals(row)))
+        if i != 0:
+            srows.append('%15s' % (str_float_vals(row)))
+
+    d = '\n'.join(srows)
+    mod_modified = cake.LayeredModel.from_scanlines(cake.read_nd_model_str(d))
+    print(mod_modified)
+    return mod_modified
+
+
+def update_layered_model_insheim(params, nevents):
+    mod = cake.LayeredModel.from_scanlines(cake.read_nd_model_str('''
+  0.             %s            %s           2.7         1264.           600.
+  0.54           %s           %s           2.7         1264.           600.
+  0.54           %s           %s            2.7         1264.           600.
+  0.77           %s           %s            2.7         1264.           600.
+  0.77           %s           %s            2.7         1264.           600.
+  1.07           %s           %s            2.7         1264.           600.
+  1.07           %s            %s            2.7         1264.           600.
+  2.25           %s            %s            2.7         1264.           600.
+  2.25           %s            %s            2.7         1264.           600.
+  2.40           %s            %s            2.7         1264.           600.
+  2.40           %s            %s            2.7         1264.           600.
+  2.55           %s            %s            2.7         1264.           600.
+  2.55           %s            %s            2.7         1264.           600.
+  3.28           %s            %s            2.7         1264.           600.
+  3.28           %s            %s            2.7         1264.           600.
+  3.550          %s           %s            2.7         1264.           600.
+  3.550          %s           %s            2.7         1264.           600.
+  5.100          %s           %s            2.7         1264.           600.
+  5.100          %s           %s            2.7         1264.           600.
+  15.00          6.18          3.57           2.7         1264.           600.
+  15.00          6.18          3.57           2.7         1264.           600.
+  20.00          6.25          3.61           2.7         1264.           600.
+  20.00          6.25          3.61           2.7         1264.           600.
+  21.00          6.88          3.97           2.7         1264.           600.
+  21.00          6.88          3.97           2.7         1264.           600.
+ 24.             8.1            4.69           2.7         1264.           600.
+mantle
+ 24.             8.1            4.69           2.7         1264.           600.'''.lstrip() % (params[1+4*nevents], params[2+4*nevents],
+                                                                                               params[3+4*nevents], params[4+4*nevents], params[3+4*nevents], params[4+4*nevents],
+                                                                                               params[5+4*nevents], params[6+4*nevents], params[5+4*nevents], params[6+4*nevents],
+                                                                                               params[7+4*nevents], params[8+4*nevents], params[7+4*nevents], params[8+4*nevents],
+                                                                                               params[9+4*nevents], params[10+4*nevents], params[9+4*nevents], params[10+4*nevents],
+                                                                                               params[11+4*nevents], params[12+4*nevents], params[11+4*nevents], params[12+4*nevents],
+                                                                                               params[13+4*nevents], params[14+4*nevents], params[13+4*nevents], params[14+4*nevents],
+                                                                                               params[15+4*nevents], params[16+4*nevents], params[15+4*nevents], params[16+4*nevents],
+                                                                                               params[17+4*nevents], params[18+4*nevents], params[17+4*nevents], params[18+4*nevents],
+                                                                                               params[19+4*nevents], params[20+4*nevents], params[19+4*nevents], params[20+4*nevents])))
+
+    return mod
+
+
+def minimum_1d_fit(params, mod, line=None):
+    global iiter
+
+    mod = update_layered_model(mod, params, len(ev_dict_list))
+    dists = []
+    iter_event = 0
+    iter_new = iiter + 1
+    iiter = iter_new
+    misfit_stations = 0
+    for ev, source in zip(ev_dict_list, sources):
+        misfits = 0.
+        norms = 0.
+        source.lat = float(params[0+4*iter_event])
+        source.lon = float(params[1+4*iter_event])
+        source.depth = float(params[2+4*iter_event])
+        source.time = float(ev["time"] + params[3+4*iter_event])
+        for st in ev["phases"]:
+            for stp in pyrocko_stations[iter_event]:
+                if stp.station == st["station"]:
+                    phase = st["phase"]
+                    dists = ortho.distance_accurate50m(source.lat, source.lon,
+                                                       stp.lat,
+                                                       stp.lon)*cake.m2d
+
+                    try:
+                        for phase_p in phase_list:
+                            for i, arrival in enumerate(mod.arrivals([dists],
+                                                        phases=[phase_p],
+                                                        zstart=source.depth)):
+
+                                tdiff = st["pick"]
+                                if phase == "Pg":
+                                    phase = "P<(moho)"
+                                if phase == "pg":
+                                    phase = "p<(moho)"
+                                if phase == "Sg":
+                                    phase = "S<(moho)"
+                                if phase == "sg":
+                                    phase = "s<(moho)"
+                                if phase == "PG":
+                                    phase = "P>(moho)"
+                                if phase == "pG":
+                                    phase = "p>(moho)"
+                                if phase == "SG":
+                                    phase = "S>(moho)"
+                                if phase == "sG":
+                                    phase = "s>(moho)"
+                                if phase == "P*":
+                                    phase = "P"
+                                if phase == "S*":
+                                    phase = "S"
+                                if phase == "SmS":
+                                    phase = 'Sv(moho)s'
+                                if phase == "PmP":
+                                    phase = 'Pv(moho)p'
+                                if phase == "Pn":
+                                    phase = 'Pv_(moho)p'
+                                if phase == "Sn":
+                                    phase = 'Sv_(moho)s'
+                                used_phase = arrival.used_phase()
+
+                                if phase == used_phase.given_name():
+                                    misfits += num.sqrt(num.sum((tdiff - arrival.t)**2))
+                                    norms += num.sqrt(num.sum(arrival.t**2))
+                    except:
+                        pass
+
+    misfit = num.sqrt(misfits**2 / norms**2)
+    iter_event = iter_event + 1
+    if line:
+        data = {
+            'y': [misfit],
+            'x': [iiter],
+        }
+        line.data_source.stream(data)
+
+    return misfit
 
 
 def solve(show=False, n_tests=1, scenario_folder="scenarios",
           optimize_depth=False, scenario=True, data_folder="data",
           parallel=True, adress=None, interpolate=True, mod_name="insheim",
-          singular=False, nboot=1, hybrid=False):
+          singular=False, nboot=1, hybrid=False,
+          minimum_vel=False, reference="catalog",):
     global ev_dict_list, times, phase_list, km, mod, pyrocko_stations, bounds, sources, source_dc, iiter, interpolated_tts, result_sources, result_events
 
     if scenario is False:
-        reference_events = model.load_events("data/events_ler.pf")
+        if reference == "catalog":
+            reference_events = model.load_events("data/events_ler.pf")
         maxiter = 55
-        print("reference")
         folder_waveforms = "/md3/projects3/seiger/acquisition"
     else:
         reference_events = None
         maxiter = 25
-        print("no reference")
         folder_waveforms = "scenarios/"
-
-    if hybrid is True:
-        waveforms = associate_waveforms(test_events, reference_events=None,
-                                folder=folder_waveforms, scenario=scenario)
 
     km = 1000.
     iiter = 0
@@ -605,8 +832,11 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
         mod = vsp_layered_model()
 
     if nboot > 1:
-        pertubed_mods = store_variation.ensemble_earthmodel(mod, num_vary=nboot, error_depth=0.1,
-                                error_velocities=0.1, depth_limit_variation=600)
+        pertubed_mods = store_variation.ensemble_earthmodel(mod,
+                                                            num_vary=nboot,
+                                                            error_depth=0.1,
+                                                            error_velocities=0.1,
+                                                            depth_limit_variation=600)
     else:
         pertubed_mods = [mod]
 
@@ -621,45 +851,59 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
         times = []
         inp_cake = mod
 
+        phase_list = get_phases_list()
+
         if scenario is True:
             test_events, pyrocko_stations = load_synthetic_test(n_tests,
                                                                 scenario_folder)
+            ev_dict_list = []
+            ev_list, ev_dict_list = synthetic_ray_tracing_setup(test_events,
+                                                                pyrocko_stations,
+                                                                inp_cake)
+            if reference == "hyposat":
+                from .hyposat_util import run_hyposat
+                for i, ev in enumerate(test_events):
+                    run_hyposat(ev_dict_list[i], ev, [ev_list[i]], pyrocko_stations[i])
         else:
             test_events, pyrocko_stations, ev_dict_list, ev_list_picks = load_data(data_folder, nevent=n_tests)
-
+            if reference == "hyposat":
+                reference_events = []
+                from .hyposat_util import run_hyposat
+                for i, ev in enumerate(test_events):
+                    mod_name_hyposat = "pertubed_%s_%s.dat" % (mod_name, kmod)
+                    event = run_hyposat(ev_dict_list[i], ev,
+                                        [ev_list_picks[i]],
+                                        pyrocko_stations[i], mod,
+                                        mod_name_hyposat)
+                    reference_events.append(event)
         bounds, bounds_list, sources, source_dc = get_bounds(test_events,
                                                              parallel,
                                                              singular,
                                                              bounds,
                                                              sources,
                                                              bounds_list,
-                                                             reference_events=reference_events)
+                                                             minimum_vel=minimum_vel,
+                                                             reference_events=reference_events,
+                                                             minimum_vel_mod=mod)
 
-        phase_list = get_phases_list()
+        if hybrid is True:
+            waveforms = associate_waveforms(test_events, reference_events=None,
+                                            folder=folder_waveforms,
+                                            scenario=scenario)
 
-        if scenario is True:
-            ev_dict_list = []
-            synthetic_ray_tracing_setup(test_events, pyrocko_stations, inp_cake)
-
-    # profiling
-    #    import cProfile
-#        import pstats
-#        pr = cProfile.Profile()
-#        pr.enable()
-
-        from silvertine.util import ttt
         # Load/Calculate Traveltime tabel for each phase (parallel)
         interpolated_tts, missing = ttt.load_sptree(phase_list, mod_name)
         calculated_ttt = False
+        if minimum_vel is False:
+            if len(missing) != 0:
+                print("Calculating travel time look up table,\
+                        this may take some time.")
+                ttt.calculate_ttt_parallel(pyrocko_stations, mod, missing, mod_name,
+                                           adress=adress)
+                interpolated_tts_new, missing = ttt.load_sptree(phase_list, mod_name)
+                interpolated_tts = {**interpolated_tts, **interpolated_tts_new}
+                calculated_ttt = True
 
-        if len(missing) != 0:
-            print("Calculating travel time look up table,\
-                    this may take some time.")
-            ttt.calculate_ttt_parallel(pyrocko_stations, mod, missing, mod_name,
-                                       adress=adress)
-            interpolated_tts_new, missing = ttt.load_sptree(phase_list, mod_name)
-            interpolated_tts = {**interpolated_tts, **interpolated_tts_new}
-            calculated_ttt = True
         if show is True:
             p1, p2, p3, p4, curdoc, session = bokeh_plot()
 
@@ -672,7 +916,6 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                     maxiter=maxiter,
                     tol=0.0001)
 
-                sources = update_sources(result.x)
                 if optimize_depth is True:
                     bounds = OrderedDict()
                     for source in sources:
@@ -687,18 +930,11 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                         tol=0.001)
                     for source in sources:
                         sources = update_depth(result.x)
-                params = result.x
-                for i, source in enumerate(sources):
-                    source.time = float(ev_dict_list[i]["time"] + params[3+4*i])
-                    result_sources.append(source)
-                    event = model.event.Event(lat=source.lat, lon=source.lon,
-                                              time=source.time,
-                                              magnitude=source.magnitude,
-                                              depth=source.depth,
-                                              tags=[str(result.fun),
-                                                    str(ev_dict_list[i]["id"])])
 
-                    result_events.append(event)
+                sources = update_sources(ev_dict_list, result.x)
+                result_events = get_result_events(result.x, sources, result,
+                                                  ev_dict_list)
+
             else:
                 ev_dict_list_copy = ev_dict_list.copy()
                 sources_copy = sources.copy()
@@ -717,19 +953,13 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                         seed=123,
                         maxiter=maxiter,
                         tol=0.00001)
-                    params_x = result.x
-                    source = gf.DCSource(
-                        lat=float(params_x[0]),
-                        lon=float(params_x[1]),
-                        depth=float(params_x[2]),
-                        magnitude=ev_dict_list_copy[i]["mag"],
-                        time=ev_dict_list_copy[i]["time"]+ float(params_x[3]))
-                    result_sources.append(source)
-                    event_result = model.event.Event(lat=source.lat, lon=source.lon,
-                                                     time=source.time,
-                                                     depth=source.depth,
-                                                     tags=[str(result.fun), str(ev_dict_list_copy[i]["id"])])
+
+                    event_result, source = get_single_result_event(ev_dict_list_copy,
+                                                                   result.x,
+                                                                   result,
+                                                                   i=i)
                     result_events.append(event_result)
+
                     if optimize_depth is True:
                         bounds = OrderedDict()
                         for source in [result_sources[i]]:
@@ -755,7 +985,13 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                 if calculated_ttt is False:
                     ray.init(num_cpus=num_cpus-1)
                 event_dict = []
-                ray.get([optim_parallel.remote(ev_dict_list[i], sources[i], bounds_list[i], pyrocko_stations[i], interpolated_tts, result_sources, result_events, name) for i in range(len(ev_dict_list))])
+                ray.get([optim_parallel.remote(ev_dict_list[i], sources[i],
+                                               bounds_list[i],
+                                               pyrocko_stations[i],
+                                               interpolated_tts,
+                                               result_sources,
+                                               result_events,
+                                               name) for i in range(len(ev_dict_list))])
                 result = None
                 source = None
             else:
@@ -776,27 +1012,14 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                             seed=123,
                             maxiter=maxiter,
                             tol=0.0001)
-                        params_x = result.x
-                    #    try:
-                    #        source = gf.DCSource(
-                    #            lat=float(params_x[0]),
-                    #            lon=float(params_x[1]),
-                    #            depth=float(params_x[2]),
-                    #            magnitude= float(ev_dict_list_copy[i]["mag"]),
-                    #            time=float(ev_dict_list_copy[i]["time"])+float(params_x[3]))
-                    #    except:
-                        source = gf.DCSource(
-                            lat=float(params_x[0]),
-                            lon=float(params_x[1]),
-                            depth=float(params_x[2]),
-                            time=float(ev_dict_list_copy[i]["time"])+float(params_x[3]))
+
+                        event_result, source = get_single_result_event(ev_dict_list_copy,
+                                                                       result.x,
+                                                                       result,
+                                                                       i=i)
                         result_sources.append(source)
-                        event_result = model.event.Event(lat=source.lat, lon=source.lon,
-                                                         time=source.time,
-                                                         depth=source.depth,
-                                                        # magnitude=source.magnitude,
-                                                         tags=[str(result.fun), str(ev_dict_list[0]["id"])])
                         result_events.append(event_result)
+
                         if optimize_depth is True:
                             bounds = OrderedDict()
                             for source in sources:
@@ -815,49 +1038,72 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                         for source in sources:
                             result_sources.append(source)
                 else:
-                    result = differential_evolution(
-                        picks_fit,
-                        args=[],
-                        bounds=tuple(bounds.values()),
-                        maxiter=maxiter,
-                        seed=123,
-                        tol=0.000001)
-
-                    sources = []
-                    params = result.x
-
-                    for i, ev in enumerate(ev_dict_list):
-                        source = gf.DCSource()
-                        source.lat = float(params[0+4*i])
-                        source.lon = float(params[1+4*i])
-                        source.depth = float(params[2+4*i])
-                        source.time = float(ev["time"] + params[3+4*i])
-                        sources.append(source)
-                    if optimize_depth is True:
-                        bounds = OrderedDict()
-                        for source in sources:
-                            bounds.update({'depth%s' % ev_iter: (source.depth-300.,
-                                                                 source.depth+300.)})
+                    if minimum_vel is False:
                         result = differential_evolution(
-                            depth_fit,
+                            picks_fit,
                             args=[],
                             bounds=tuple(bounds.values()),
-                            seed=123,
                             maxiter=maxiter,
-                            tol=0.001,
-                            callback=lambda a, convergence: curdoc().add_next_tick_callback(button_callback(a, convergence)))
-                        for source in sources:
-                            sources = update_depth(result.x)
-                    for i, source in enumerate(sources):
-                        result_sources.append(source)
-                        event = model.event.Event(lat=source.lat, lon=source.lon,
-                                                  time=source.time, magnitude=source.magnitude,
-                                                  depth=source.depth,
-                                                  tags=[str(result.fun), str(ev_dict_list[i]["id"])])
-                        result_events.append(event)
-    #    pr.disable()
-    #    filename = 'profile.prof'
-    #    pr.dump_stats(filename)
+                            seed=123,
+                            tol=0.000001)
+
+                        sources = update_sources(ev_dict_list, result.x)
+
+                        if optimize_depth is True:
+                            bounds = OrderedDict()
+                            for source in sources:
+                                bounds.update({'depth%s' % ev_iter: (source.depth-300.,
+                                                                     source.depth+300.)})
+                            result = differential_evolution(
+                                depth_fit,
+                                args=[],
+                                bounds=tuple(bounds.values()),
+                                seed=123,
+                                maxiter=maxiter,
+                                tol=0.001)
+                            for source in sources:
+                                sources = update_depth(result.x)
+                        for i, source in enumerate(sources):
+                            result_sources.append(source)
+                            event = model.event.Event(lat=source.lat, lon=source.lon,
+                                                      time=source.time, magnitude=source.magnitude,
+                                                      depth=source.depth,
+                                                      tags=[str(result.fun), str(ev_dict_list[i]["id"])])
+                            result_events.append(event)
+                    else:
+                        from ..minimum_1d.minimum_1d import update_layered_model_insheim
+                        result = differential_evolution(
+                            minimum_1d_fit,
+                            args=[mod],
+                            bounds=tuple(bounds.values()),
+                            maxiter=maxiter,
+                            seed=123,
+                            tol=0.000001)
+
+                        sources = update_sources(ev_dict_list, result.x)
+
+                        if optimize_depth is True:
+                            bounds = OrderedDict()
+                            for source in sources:
+                                bounds.update({'depth%s' % ev_iter: (source.depth-300.,
+                                                                     source.depth+300.)})
+                            result = differential_evolution(
+                                depth_fit,
+                                args=[],
+                                bounds=tuple(bounds.values()),
+                                seed=123,
+                                maxiter=maxiter,
+                                tol=0.001)
+                            for source in sources:
+                                sources = update_depth(result.x)
+                        for i, source in enumerate(sources):
+                            result_sources.append(source)
+                            event = model.event.Event(lat=source.lat, lon=source.lon,
+                                                      time=source.time, magnitude=source.magnitude,
+                                                      depth=source.depth,
+                                                      tags=[str(result.fun), str(ev_dict_list[i]["id"])])
+                            result_events.append(event)
+
         if parallel is not True:
             model.dump_events(result_events, "result_events_%s.pf" % str(kmod))
     return result, sources

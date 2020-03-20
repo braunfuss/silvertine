@@ -396,6 +396,12 @@ def command_locate(args):
         parser.add_option(
             '--nboot', dest='nboot', type=int, default=1,
             help='Number of bootstrap results, based on different velocity models')
+        parser.add_option(
+            '--minimum_vel', dest='minimum_vel', type=str, default=False,
+            help='minimum 1d model')
+        parser.add_option(
+            '--reference', dest='reference', type=str, default="catalog",
+            help='Use reference events, either catalog or hyposat')
     parser, options, args = cl_parse('locate', args, setup)
 
     from silvertine.locate import locate1D
@@ -410,6 +416,8 @@ def command_locate(args):
         options.nevents = None
     if options.scenario is not True:
         options.scenario = False
+    if options.minimum_vel is not False:
+        options.minimum_vel = True
     result, best_model = silvertine.locate.locate1D.solve(scenario_folder=project_dir,
                                                           show=options.show,
                                                           n_tests=options.nevents,
@@ -419,7 +427,9 @@ def command_locate(args):
                                                           adress=options.adress,
                                                           singular=options.singular,
                                                           mod_name=options.model,
-                                                          nboot=options.nboot)
+                                                          nboot=options.nboot,
+                                                          minimum_vel=options.minimum_vel,
+                                                          reference=options.reference)
 
 
 def command_beam(args):
