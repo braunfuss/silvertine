@@ -2,9 +2,15 @@ import subprocess
 import os
 
 
-def live_steam(adress="eida.gfz-potsdam.de", path="GR.*.*.BHZ", delay=200, seiger=True):
+def live_steam(adress="eida.gfz-potsdam.de", path="GR.*.*.BHZ", delay=200, seiger=False, save=True):
     if seiger is True:
-        os.system("snuffler seedlink://"+"/eida.bgr.de"+"/"+"GR.INS*.*.*"+" --follow="+str(delay))
+        if save is False:
+            os.system("snuffler seedlink://"+"/eida.bgr.de"+"/"+"GR.INS*.*.*"+" --follow="+str(delay))
+        else:
+            os.system("snuffler seedlink://"+"/eida.bgr.de"+"/"+"GR.INS*.*.*"+" --follow="+str(delay)+" --store-path='datadump/%(network)s.%(station)s.%(location)s.%(channel)s.%(tmin)s.mseed'")
 
     else:
-        os.system("snuffler seedlink://"+adress+"/"+path+" --follow="+str(delay))
+        if save is False:
+            os.system("snuffler seedlink://"+adress+"/"+path+" --follow="+str(delay))
+        else:
+            os.system("snuffler seedlink://"+adress+"/"+path+" --follow="+str(delay)+ " --store-interval=30 --store-path='datadump/%(network)s.%(station)s.%(location)s.%(channel)s.%(tmin)s.mseed'")
