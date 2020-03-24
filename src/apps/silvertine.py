@@ -44,6 +44,7 @@ subcommand_descriptions = {
     'init': 'initialise new project structure or print configuration',
     'scenario': 'create a forward-modelled scenario project',
     'locate': 'locate a single or a set of earthquakes',
+    'monitor': 'Monitor stations',
     'beam': 'beamform for a single or a set of earthquakes',
     'beam_process': 'beam_process for a single or a set of earthquakes',
     'events': 'print available event names for given configuration',
@@ -70,6 +71,7 @@ subcommand_usages = {
         'init <example> <projectdir> [options]'),
     'scenario': 'scenario [options] <projectdir>',
     'locate': 'locate [options] <projectdir>',
+    'monitor': 'monitor [options] <projectdir>',
     'events': 'events <configfile>',
     'beam': 'beams [options] <projectdir>',
     'beam_process': 'beam_process [options] <projectdir>',
@@ -124,6 +126,7 @@ Subcommands:
 
     scenario        %(scenario)s
     locate        %(locate)s
+    monitor        %(monitor)s
     beam        %(beam)s
     beam_process        %(beam_process)s
     init            %(init)s
@@ -430,6 +433,18 @@ def command_locate(args):
                                                           nboot=options.nboot,
                                                           minimum_vel=options.minimum_vel,
                                                           reference=options.reference)
+
+
+def command_monitor(args):
+
+    def setup(parser):
+        parser.add_option(
+            '--show', dest='show', type=str, default=False,
+            help='Display progress of localisation for each event in browser')
+    parser, options, args = cl_parse('locate', args, setup)
+
+    from silvertine.monitoring import stream
+    stream.live_steam()
 
 
 def command_beam(args):
