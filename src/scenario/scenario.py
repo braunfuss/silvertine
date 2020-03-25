@@ -268,7 +268,6 @@ def gen_induced_event(scenario_id, magmin=1., magmax=3.,
     return event
 
 
-
 def gen_noise_events(targets, synthetics, engine, noise_sources=1, delay=40):
 
     noise_events = []
@@ -296,16 +295,15 @@ def gen_noise_events(targets, synthetics, engine, noise_sources=1, delay=40):
 
 
 def save(synthetic_traces, event, stations, savedir, noise_events=False):
+    model.dump_stations(stations, savedir+'model.txt')
+    io.save(synthetic_traces, savedir+'traces.mseed')
+    model.dump_events(event, savedir+'event.txt')
+    model.dump_stations(stations, savedir+'stations.pf')
+    if noise_events is not False:
+        model.dump_events(noise_events, savedir+'events_noise.txt')
 
-        model.dump_stations(stations, savedir+'model.txt')
-        io.save(synthetic_traces, savedir+'traces.mseed')
-        model.dump_events(event, savedir+'event.txt')
-        model.dump_stations(stations, savedir+'stations.pf')
-        if noise_events is not False:
-            model.dump_events(noise_events, savedir+'events_noise.txt')
 
-
-def gen_white_noise(synthetic_traces,scale=2e-8, scale_spectral='False'):
+def gen_white_noise(synthetic_traces, scale=2e-8, scale_spectral='False'):
 
     if scale_spectral == 'True':
         noise_refrence = io.load('bfo_150901_0411.bhz')
@@ -314,7 +312,8 @@ def gen_white_noise(synthetic_traces,scale=2e-8, scale_spectral='False'):
 
         nsamples = len(tr.ydata)
         randdata = num.random.normal(size=nsamples)*scale
-        white_noise = trace.Trace(deltat=tr.deltat, tmin=tr.tmin, ydata=randdata)
+        white_noise = trace.Trace(deltat=tr.deltat, tmin=tr.tmin,
+                                  ydata=randdata)
         tr.add(white_noise)
 
 
@@ -337,10 +336,10 @@ def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,
         if choice == 1:
 
             event = gen_induced_event(scenario, magmin=magmin,
-                                                magmax=magmax, depmin=depmin,
-                                                depmax=depmax, latmin=latmin,
-                                                latmax=latmax, lonmin=lonmin,
-                                                lonmax=lonmax)
+                                      magmax=magmax, depmin=depmin,
+                                      depmax=depmax, latmin=latmin,
+                                      latmax=latmax, lonmin=lonmin,
+                                      lonmax=lonmax)
 
             source, events = rand_source(event, SourceType='MT')
 
@@ -364,7 +363,8 @@ def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,
 
                 targets.append(target)
         if shakemap is True:
-            shakemap_fwd.make_shakemap(engine, source, store_id, savedir)
+            shakemap_fwd.make_shakemap(engine, source, store_id,
+                                       savedir, stations=stations)
         gen_loop = True
 
         response = engine.process(source, targets)
@@ -378,11 +378,13 @@ def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,
 
 
 def silvertineScenario(projdir, scenarios=10, modelled_channel_codes='ENZ',
-                   store_id='landau_100hz', magmin=1., magmax=3.,
-                   depmin=5, depmax=10,
-                   latmin=48.9586, latmax=49.3,
-                   lonmin=8.1578, lonmax=8.4578,
-                   stations_file=None, ratio_events=1,
-                   shakemap=True):
+                       store_id='landau_100hz', magmin=1., magmax=3.,
+                       depmin=5, depmax=10,
+                       latmin=48.9586, latmax=49.3,
+                       lonmin=8.1578, lonmax=8.4578,
+                       stations_file=None, ratio_events=1,
+                       shakemap=True):
 
-    gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin, magmax, depmin, depmax, latmin, latmax, lonmin, lonmax, stations_file, shakemap=True)
+    gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,
+                magmax, depmin, depmax, latmin, latmax, lonmin, lonmax,
+                stations_file, shakemap=True)

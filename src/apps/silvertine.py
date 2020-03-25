@@ -629,20 +629,24 @@ def command_scenario(args):
             '--gf-store-superdirs',
             dest='gf_store_superdirs',
             help='Comma-separated list of directories containing GF stores')
-
+        parser.add_option(
+            '--shakemap', dest='shakemap', type=str, default=False,
+            help='Generate synthetic shakemaps for the scenario')
     parser, options, args = cl_parse('scenario', args, setup)
 
     gf_store_superdirs = None
     if options.gf_store_superdirs:
         gf_store_superdirs = options.gf_store_superdirs.split(',')
-
+    if options.shakemap is not False:
+        options.shakemap = True
     from silvertine import scenario as silvertine_scenario
     project_dir = args[0]
     scenario = silvertine.scenario.silvertineScenario(
         project_dir, scenarios=options.scenarios, magmin=options.magmin,
         magmax=options.magmax, latmin=options.latmin, latmax=options.latmax,
         lonmin=options.lonmin, lonmax=options.lonmax, depmin=options.depmin,
-        depmax=options.depmax, stations_file=options.stations_file)
+        depmax=options.depmax, stations_file=options.stations_file,
+        shakemap=options.shakemap)
 
 
 def command_init(args):

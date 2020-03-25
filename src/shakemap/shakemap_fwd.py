@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 
 from pyrocko.guts import Float
 
-from pyrocko import gf, trace, plot, beachball, util
+from pyrocko import gf, trace, plot, beachball, util, orthodrome
 from pyrocko import moment_tensor as pmt
 
 km = 1000.
@@ -13,24 +13,30 @@ km = 1000.
 util.setup_logging('gf_shakemap')
 
 
-def make_shakemap(engine, source, store_id, folder):
-    # scenario setup is hard-coded in the make_scenario() function
+def make_shakemap(engine, source, store_id, folder, stations=None):
     targets, norths, easts, stf_spec = get_scenario(engine,
                                                     source,
                                                     store_id)
-
-    # model raw displacement seismograms
     response = engine.process(source, targets)
-
-    # show some computational infos
-    #print(response.stats)
-
-    # convolve displacement seismograms with STF and convert to acceleration
     values = post_process(response, norths, easts, stf_spec)
 
-    print('Maximum PGA: %g m/s^2' % num.max(values))
+    if stations is not None:
+        targets_stations, norths_stations, easts_stations, stf_spec = get_scenario(engine,
+                                                                                   source,
+                                                                                   store_id,
+                                                                                   stations=stations)
+        response_stations = engine.process(source, targets_stations)
+        values_stations = post_process(response_stations, norths_stations,
+                                       easts_stations,
+                                       stf_spec)
+        print(values_stations)
+        plot_shakemap(source, norths, easts, values, 'gf_shakemap.pdf', folder,
+                      values_stations=values_stations,
+                      norths_stations=norths_stations,
+                      easts_stations=easts_stations)
 
-    plot_shakemap(source, norths, easts, values, 'gf_shakemap.pdf', folder)
+    else:
+        plot_shakemap(source, norths, easts, values, 'gf_shakemap.pdf', folder)
 
 
 def get_scenario(engine, source, store_id, extent=30, ngrid=50,
@@ -41,7 +47,6 @@ def get_scenario(engine, source, store_id, extent=30, ngrid=50,
 
     # physical grid size in [m]
     grid_extent = extent*km
-    #store_id = "crust2_m5_hardtop_16Hz"
     lat, lon = source.lat, source.lon
     # number of grid points
     nnorth = neast = ngrid
@@ -49,17 +54,16 @@ def get_scenario(engine, source, store_id, extent=30, ngrid=50,
         stf_spec = BruneResponse(duration=source.duration)
     except AttributeError:
         stf_spec = BruneResponse(duration=0.5)
-
-    # receiver grid
-    r = grid_extent / 2.0
-
-    norths = num.linspace(-r, r, nnorth)
-    easts = num.linspace(-r, r, neast)
-
     store = engine.get_store(store_id)
 
-    norths2, easts2 = coords_2d(norths, easts)
     if stations is None:
+        # receiver grid
+        r = grid_extent / 2.0
+
+        norths = num.linspace(-r, r, nnorth)
+        easts = num.linspace(-r, r, neast)
+
+        norths2, easts2 = coords_2d(norths, easts)
         targets = []
         for i in range(norths2.size):
 
@@ -73,28 +77,41 @@ def get_scenario(engine, source, store_id, extent=30, ngrid=50,
                     east_shift=float(easts2[i]),
                     store_id=store_id,
                     interpolation='nearest_neighbor')
+                print("grid",target)
 
                 # in case we have not calculated GFs for zero distance
                 if source.distance_to(target) >= store.config.distance_min:
                     targets.append(target)
     else:
         targets = []
-        for st in stations:
-            for i in range(norths2.size):
-                for cha in st.channels:
-                    target = gf.Target(
-                        quantity='displacement',
-                        codes=(st.network, st.station, st.location, cha.name),
-                        lat=lat,
-                        lon=lon,
-                        north_shift=float(norths2[i]),
-                        east_shift=float(easts2[i]),
-                        store_id=store_id,
-                        interpolation='nearest_neighbor')
-
-                # in case we have not calculated GFs for zero distance
-                if source.distance_to(target) >= store.config.distance_min:
-                    targets.append(target)
+        norths = []
+        easts = []
+        # here maybe use common ne frame?
+        for i, st in enumerate(stations):
+            north, east = orthodrome.latlon_to_ne_numpy(
+                lat,
+                lon,
+                st.lat,
+                st.lon,
+                )
+            norths.append(north)
+            easts.append(east)
+            norths2, easts2 = coords_2d(north, east)
+            for cha in st.channels:
+                target = gf.Target(
+                    quantity='displacement',
+                    codes=(str(st.network), i, str(st.location),
+                           str(cha.name)),
+                    lat=lat,
+                    lon=lon,
+                    north_shift=float(norths2),
+                    east_shift=float(easts2),
+                    store_id=store_id,
+                    interpolation='nearest_neighbor')
+                print(target)
+            # in case we have not calculated GFs for zero distance
+            if source.distance_to(target) >= store.config.distance_min:
+                targets.append(target)
 
     return targets, norths, easts, stf_spec
 
@@ -141,7 +158,9 @@ def post_process(response, norths, easts, stf_spec):
     return values
 
 
-def plot_shakemap(source, norths, easts, values, filename, folder):
+def plot_shakemap(source, norths, easts, values, filename, folder,
+                  values_stations=None, easts_stations=None,
+                  norths_stations=None):
     plot.mpl_init()
     fig = plt.figure(figsize=plot.mpl_papersize('a5', 'landscape'))
     axes = fig.add_subplot(1, 1, 1, aspect=1.0)
