@@ -13,65 +13,42 @@ km = 1000.
 util.setup_logging('gf_shakemap')
 
 
-def main():
-    engine = gf.get_engine()
-
+def make_shakemap(engine, source, store_id, folder):
     # scenario setup is hard-coded in the make_scenario() function
-    source, targets, store_id, norths, easts, stf_spec = make_scenario(engine)
-
-    print(source)
+    targets, norths, easts, stf_spec = get_scenario(engine,
+                                                    source,
+                                                    store_id)
 
     # model raw displacement seismograms
     response = engine.process(source, targets)
 
     # show some computational infos
-    print(response.stats)
+    #print(response.stats)
 
     # convolve displacement seismograms with STF and convert to acceleration
     values = post_process(response, norths, easts, stf_spec)
 
     print('Maximum PGA: %g m/s^2' % num.max(values))
 
-    plot_shakemap(source, norths, easts, values, 'gf_shakemap.pdf')
+    plot_shakemap(source, norths, easts, values, 'gf_shakemap.pdf', folder)
 
 
-def make_scenario(engine):
+def get_scenario(engine, source, store_id, extent=30, ngrid=50,
+                 stations=None):
     '''
     Setup scenario with source model, STF and a rectangular grid of targets.
     '''
 
     # physical grid size in [m]
-    grid_extent = 200*km
-
+    grid_extent = extent*km
+    #store_id = "crust2_m5_hardtop_16Hz"
+    lat, lon = source.lat, source.lon
     # number of grid points
-    nnorth = neast = 50
-
-    # Green's functions to use
-    store_id = 'crust2_m5_hardtop_16Hz'
-
-    # Munich
-    lat, lon = 48.133333, 11.566667
-
-    # source time function (STF) based on Brune source model, to get
-    # spectra roughly realistic
-    radius = 2*km
-    stress_drop = 6.0e6
-    magnitude = float(pmt.moment_to_magnitude(
-        16./7. * stress_drop * radius**3))
-    rupture_velocity = 0.9 * 3000.
-    duration = 1.5 * radius / rupture_velocity
-    stf_spec = BruneResponse(duration=duration)
-
-    # source model without STF, will convolve afterwards, manually
-    source = gf.DCSource(
-        time=util.str_to_time('2019-04-01 13:13:13'),
-        lat=lat,
-        lon=lon,
-        depth=20.*km,
-        magnitude=magnitude,
-        strike=111.,
-        dip=85.,
-        rake=5.)
+    nnorth = neast = ngrid
+    try:
+        stf_spec = BruneResponse(duration=source.duration)
+    except AttributeError:
+        stf_spec = BruneResponse(duration=0.5)
 
     # receiver grid
     r = grid_extent / 2.0
@@ -82,26 +59,44 @@ def make_scenario(engine):
     store = engine.get_store(store_id)
 
     norths2, easts2 = coords_2d(norths, easts)
+    if stations is None:
+        targets = []
+        for i in range(norths2.size):
 
-    targets = []
-    for i in range(norths2.size):
+            for component in 'ZNE':
+                target = gf.Target(
+                    quantity='displacement',
+                    codes=('', '%04i' % i, '', component),
+                    lat=lat,
+                    lon=lon,
+                    north_shift=float(norths2[i]),
+                    east_shift=float(easts2[i]),
+                    store_id=store_id,
+                    interpolation='nearest_neighbor')
 
-        for component in 'ZNE':
-            target = gf.Target(
-                quantity='displacement',
-                codes=('', '%04i' % i, '', component),
-                lat=lat,
-                lon=lon,
-                north_shift=float(norths2[i]),
-                east_shift=float(easts2[i]),
-                store_id=store_id,
-                interpolation='nearest_neighbor')
+                # in case we have not calculated GFs for zero distance
+                if source.distance_to(target) >= store.config.distance_min:
+                    targets.append(target)
+    else:
+        targets = []
+        for st in stations:
+            for i in range(norths2.size):
+                for cha in st.channels:
+                    target = gf.Target(
+                        quantity='displacement',
+                        codes=(st.network, st.station, st.location, cha.name),
+                        lat=lat,
+                        lon=lon,
+                        north_shift=float(norths2[i]),
+                        east_shift=float(easts2[i]),
+                        store_id=store_id,
+                        interpolation='nearest_neighbor')
 
-            # in case we have not calculated GFs for zero distance
-            if source.distance_to(target) >= store.config.distance_min:
-                targets.append(target)
+                # in case we have not calculated GFs for zero distance
+                if source.distance_to(target) >= store.config.distance_min:
+                    targets.append(target)
 
-    return source, targets, store_id, norths, easts, stf_spec
+    return targets, norths, easts, stf_spec
 
 
 def post_process(response, norths, easts, stf_spec):
@@ -146,7 +141,7 @@ def post_process(response, norths, easts, stf_spec):
     return values
 
 
-def plot_shakemap(source, norths, easts, values, filename):
+def plot_shakemap(source, norths, easts, values, filename, folder):
     plot.mpl_init()
     fig = plt.figure(figsize=plot.mpl_papersize('a5', 'landscape'))
     axes = fig.add_subplot(1, 1, 1, aspect=1.0)
@@ -175,7 +170,7 @@ def plot_shakemap(source, norths, easts, values, filename):
         zorder=2,
         size=20.)
 
-    fig.savefig(filename)
+    fig.savefig(folder+filename)
     plt.show()
 
 
@@ -191,7 +186,3 @@ class BruneResponse(trace.FrequencyResponse):
 
     def evaluate(self, freqs):
         return 1.0 / (1.0 + (freqs*self.duration)**2)
-
-
-if __name__ == '__main__':
-    main()

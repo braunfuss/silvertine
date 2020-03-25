@@ -102,7 +102,11 @@ setup(
         'silvertine.clustering',
         'silvertine.scenario',
         'silvertine.locate',
+        'silvertine.minimum_1d',
         'silvertine.util',
+        'silvertine.report',
+        'silvertine.shakemap',
+        'silvertine.monitoring',
         'silvertine.beam_depth',
     ],
     entry_points={

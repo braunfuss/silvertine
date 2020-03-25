@@ -6,13 +6,36 @@ import os.path as op
 from pyrocko.moment_tensor import MomentTensor
 
 from pyrocko import util, model, io, trace, config
-from pyrocko.gf import Target, DCSource, RectangularSource, PorePressureLineSource, PorePressurePointSource, VLVDSource
+from pyrocko.gf import Target, DCSource, RectangularSource, PorePressureLineSource, PorePressurePointSource, VLVDSource, MTSource
 from pyrocko import gf
 from pyrocko.fdsn import ws
 from pyrocko.fdsn import station as fs
 from pyrocko.guts import Object, Int, String
+from silvertine.shakemap import shakemap_fwd
+from pyrocko import moment_tensor as pmt
+
 import os
 km = 1000.
+from numpy import random, where, cos, sin, arctan2, abs
+
+def get_random_ellipse(n, x0, y0):
+
+    xout = numpy.zeros(n)
+    yout = numpy.zeros(n)
+
+    nkeep=0
+
+    while nkeep < n:
+        x=2*x0*(random.random(n-nkeep) - 0.5)
+        y=2*y0*(random.random(n-nkeep) - 0.5)
+
+        w,=where( ( (x/x0)**2 + (y/y0)**2 ) < 1 )
+        if w.size > 0:
+            xout[nkeep:nkeep+w.size] = x[w]
+            yout[nkeep:nkeep+w.size] = y[w]
+            nkeep += w.size
+
+    return xout,yout
 
 
 def rand(mi, ma):
@@ -86,17 +109,14 @@ def rand_source(event, SourceType="MT"):
     if SourceType == "MT":
         mt = MomentTensor.random_dc(magnitude=event.magnitude)
         event.moment_tensor = mt
-        source = DCSource(
+        source = MTSource(
             lat=event.lat,
             lon=event.lon,
             north_shift=event.north_shift,
             east_shift=event.east_shift,
             depth=event.depth,
-            strike=mt.strike1,
-            dip=mt.dip1,
-            rake=mt.rake1,
-            time=event.time,
-            magnitude=event.magnitude)
+            m6=mt.m6(),
+            time=event.time)
 
     if SourceType == "VLVD":
         mt = MomentTensor.random_dc(magnitude=event.magnitude)
@@ -217,11 +237,43 @@ def gen_random_tectonic_event(scenario_id, magmin=1., magmax=3.,
     return event
 
 
+def gen_induced_event(scenario_id, magmin=1., magmax=3.,
+                      depmin=5, depmax=10,
+                      latmin=48.9586, latmax=49.3,
+                      lonmin=8.1578, lonmax=8.4578,
+                      radius_min=0.001, radius_max=0.2,
+                      stress_drop_min=4.e06, stress_drop_max=7e6,
+                      velocity=3000.,
+                      timemin=util.str_to_time('2007-01-01 16:10:00.000'),
+                      timemax=util.str_to_time('2020-01-01 16:10:00.000')):
+
+    name = scenario_id
+    depth = rand(depmin, depmax)*km
+    # source time function (STF) based on Brune source model, to get
+    # spectra roughly realistic
+    radius = randlat(radius_min, radius_max)
+    stress_drop = rand(stress_drop_min, stress_drop_max)
+    magnitude = float(pmt.moment_to_magnitude(
+        16./7. * stress_drop * radius**3))
+    rupture_velocity = 0.9 * velocity
+    duration = 1.5 * radius / rupture_velocity
+    lat = randlat(latmin, latmax)
+    lon = rand(lonmin, lonmax)
+    time = rand(timemin, timemax)
+    event = model.Event(name=name, lat=lat, lon=lon,
+                        magnitude=magnitude, depth=depth,
+                        time=time, duration=duration,
+                        tags=[str(stress_drop)])
+
+    return event
+
+
+
 def gen_noise_events(targets, synthetics, engine, noise_sources=1, delay=40):
 
     noise_events = []
     for i in range(noise_sources):
-        event = gen_event(i, magmin=-1.,magmax=0.)
+        event = gen_random_tectonic_event(i, magmin=-1.,magmax=0.)
         time = rand(event.time-delay, event.time+delay)
         mt = MomentTensor.random_dc(magnitude=event.magnitude)
         source = DCSource(
@@ -266,10 +318,12 @@ def gen_white_noise(synthetic_traces,scale=2e-8, scale_spectral='False'):
         tr.add(white_noise)
 
 
-def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin, magmax, depmin, depmax, latmin, latmax, lonmin, lonmax, stations_file):
-    engine = gf.LocalEngine(store_superdirs=['/home/steinberg/silvertine/grond/gf_stores'])
+def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,
+                magmax, depmin, depmax, latmin, latmax, lonmin, lonmax,
+                stations_file, shakemap=True):
+    engine = gf.LocalEngine(store_superdirs=['/home/asteinbe/gf_stores'])
     for scenario in range(scenarios):
-
+        # TODO couple to ETAS
         choice = num.random.choice(2,1)
         if choice == 0:
             event = gen_random_tectonic_event(scenario, magmin=magmin,
@@ -283,14 +337,14 @@ def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin, ma
         if choice == 1:
 
             event = gen_induced_event(scenario, magmin=magmin,
-                                              magmax=magmax, depmin=depmin,
-                                              depmax=depmax, latmin=latmin,
-                                              latmax=latmax, lonmin=lonmin,
-                                              lonmax=lonmax)
+                                                magmax=magmax, depmin=depmin,
+                                                depmax=depmax, latmin=latmin,
+                                                latmax=latmax, lonmin=lonmin,
+                                                lonmax=lonmax)
 
-            source, events = rand_source(event, SourceType='VLVD')
+            source, events = rand_source(event, SourceType='MT')
 
-        savedir = projdir + 'scenario_' + str(scenario) + '/'
+        savedir = projdir + '/scenario_' + str(scenario) + '/'
         if not os.path.exists(savedir):
             os.makedirs(savedir)
 
@@ -309,6 +363,8 @@ def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin, ma
                         codes=st.nsl() + (cha,))
 
                 targets.append(target)
+        if shakemap is True:
+            shakemap_fwd.make_shakemap(engine, source, store_id, savedir)
         gen_loop = True
 
         response = engine.process(source, targets)
@@ -326,6 +382,7 @@ def silvertineScenario(projdir, scenarios=10, modelled_channel_codes='ENZ',
                    depmin=5, depmax=10,
                    latmin=48.9586, latmax=49.3,
                    lonmin=8.1578, lonmax=8.4578,
-                   stations_file=None, ratio_events=1):
+                   stations_file=None, ratio_events=1,
+                   shakemap=True):
 
-    gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin, magmax, depmin, depmax, latmin, latmax, lonmin, lonmax, stations_file)
+    gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin, magmax, depmin, depmax, latmin, latmax, lonmin, lonmax, stations_file, shakemap=True)
