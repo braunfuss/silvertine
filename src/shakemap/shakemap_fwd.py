@@ -19,7 +19,6 @@ def make_shakemap(engine, source, store_id, folder, stations=None):
                                                     store_id)
     response = engine.process(source, targets)
     values = post_process(response, norths, easts, stf_spec)
-
     if stations is not None:
         targets_stations, norths_stations, easts_stations, stf_spec = get_scenario(engine,
                                                                                    source,
@@ -28,8 +27,9 @@ def make_shakemap(engine, source, store_id, folder, stations=None):
         response_stations = engine.process(source, targets_stations)
         values_stations = post_process(response_stations, norths_stations,
                                        easts_stations,
-                                       stf_spec)
-        print(values_stations)
+                                       stf_spec, stations=True)
+        values_stations = values_stations[0][0:len(stations)]
+
         plot_shakemap(source, norths, easts, values, 'gf_shakemap.pdf', folder,
                       values_stations=values_stations,
                       norths_stations=norths_stations,
@@ -62,7 +62,6 @@ def get_scenario(engine, source, store_id, extent=30, ngrid=50,
 
         norths = num.linspace(-r, r, nnorth)
         easts = num.linspace(-r, r, neast)
-
         norths2, easts2 = coords_2d(norths, easts)
         targets = []
         for i in range(norths2.size):
@@ -77,8 +76,6 @@ def get_scenario(engine, source, store_id, extent=30, ngrid=50,
                     east_shift=float(easts2[i]),
                     store_id=store_id,
                     interpolation='nearest_neighbor')
-                print("grid",target)
-
                 # in case we have not calculated GFs for zero distance
                 if source.distance_to(target) >= store.config.distance_min:
                     targets.append(target)
@@ -87,15 +84,15 @@ def get_scenario(engine, source, store_id, extent=30, ngrid=50,
         norths = []
         easts = []
         # here maybe use common ne frame?
-        for i, st in enumerate(stations):
+        for i, st in enumerate(stations):#
             north, east = orthodrome.latlon_to_ne_numpy(
                 lat,
                 lon,
                 st.lat,
                 st.lon,
                 )
-            norths.append(north)
-            easts.append(east)
+            norths.append(north[0])
+            easts.append(east[0])
             norths2, easts2 = coords_2d(north, east)
             for cha in st.channels:
                 target = gf.Target(
@@ -108,15 +105,15 @@ def get_scenario(engine, source, store_id, extent=30, ngrid=50,
                     east_shift=float(easts2),
                     store_id=store_id,
                     interpolation='nearest_neighbor')
-                print(target)
-            # in case we have not calculated GFs for zero distance
-            if source.distance_to(target) >= store.config.distance_min:
-                targets.append(target)
-
+                # in case we have not calculated GFs for zero distance
+                if source.distance_to(target) >= store.config.distance_min:
+                    targets.append(target)
+        norths = num.asarray(norths)
+        easts = num.asarray(easts)
     return targets, norths, easts, stf_spec
 
 
-def post_process(response, norths, easts, stf_spec):
+def post_process(response, norths, easts, stf_spec, stations=False):
     nnorth = norths.size
     neast = easts.size
 
@@ -153,7 +150,6 @@ def post_process(response, norths, easts, stf_spec):
             values[i] = ymax
             if norths2[i] == easts2[i]:
                 plot_trs.extend(trs)
-
     values = values.reshape((norths.size, easts.size))
     return values
 
@@ -188,6 +184,8 @@ def plot_shakemap(source, norths, easts, values, filename, folder,
         color_t='black',
         zorder=2,
         size=20.)
+    if values_stations is not None:
+        plt.scatter(easts_stations/km, norths_stations/km, c=values_stations, s=36, cmap=plt.get_cmap('YlOrBr'), vmin=0., vmax=vmax, edgecolor="k")
 
     fig.savefig(folder+filename)
     plt.show()
