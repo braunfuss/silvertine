@@ -30,13 +30,13 @@ def make_shakemap(engine, source, store_id, folder, stations=None):
                                        stf_spec, stations=True)
         values_stations = values_stations[0][0:len(stations)]
 
-        plot_shakemap(source, norths, easts, values, 'gf_shakemap.pdf', folder,
+        plot_shakemap(source, norths, easts, values, 'gf_shakemap.d100.png', folder,
                       values_stations=values_stations,
                       norths_stations=norths_stations,
                       easts_stations=easts_stations)
 
     else:
-        plot_shakemap(source, norths, easts, values, 'gf_shakemap.pdf', folder)
+        plot_shakemap(source, norths, easts, values, 'gf_shakemap.d100.png', folder)
 
 
 def get_scenario(engine, source, store_id, extent=30, ngrid=50,

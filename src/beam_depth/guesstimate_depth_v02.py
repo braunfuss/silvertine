@@ -186,9 +186,9 @@ def plot(settings, show=False):
         s.depth = float(d)
         test_sources.append(s)
     if settings.store_superdirs:
-        engine = LocalEngine(store_superdirs=["/home/steinberg/silvertine/grond/gf_stores"])
+        engine = LocalEngine(store_superdirs=["/home/steinberg/silvertine/silvertine/gf_stores"])
     else:
-        engine = LocalEngine(store_superdirs=["/home/steinberg/silvertine/grond/gf_stores"])
+        engine = LocalEngine(store_superdirs=["/home/steinberg/silvertine/silvertine/gf_stores"])
     try:
         store = engine.get_store(settings.store_id)
     except seismosizer.NoSuchStore as e:

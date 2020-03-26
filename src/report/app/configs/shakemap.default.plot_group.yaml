@@ -1,0 +1,43 @@
+--- !silvertine.PlotGroup
+name: shakemap
+section: shakemap
+title: Shakemap
+description: '
+
+  Model acceptance and accepted model popularities.
+
+
+  The plots in this section can be used to investigate performance and
+
+  characteristics of the optimisation algorithm.
+
+  '
+formats:
+- !silvertine.PDF {}
+variant: default
+feather_icon: check
+size_cm:
+- 21.0
+- 14.9
+items:
+- !silvertine.PlotItem
+  name: gf_shakemap
+  attributes: {}
+  description: '
+
+    Acceptance rate (black line) within a moving window of 200 iterations.
+
+
+    A model is considered accepted, if it is accepted in at least one chain. The
+
+    popularity of accepted models is shown as blue dots. Popularity is defined as
+
+    the percentage of chains accepting the model (100% meaning acceptance in all
+
+    chains). A moving average of the popularities is shown as blue line (same
+
+    averaging interval as for the acceptance rate). Different background colors
+
+    represent different sampler phases.
+
+    '

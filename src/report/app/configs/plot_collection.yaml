@@ -1,0 +1,4 @@
+--- !silvertine.PlotCollection
+group_refs:
+- - shakemap
+  - default

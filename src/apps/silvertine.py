@@ -1287,7 +1287,6 @@ def command_report(args):
 
     from pyrocko import parimap
 
-    from silvertine.environment import Environment
     from silvertine.report import \
         report_index, report_archive, serve_ip, serve_report, read_config, \
         write_config, ReportConfig

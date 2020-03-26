@@ -88,13 +88,13 @@ setup(
 
     name='silvertine',
 
-    description='Monitoring and relocation of induced earthquakes',
+    description='Monitoring, location and analysis of induced earthquakes',
 
     version=version,
 
     author='The silvertine Developers',
 
-    author_email='andreas.steinberg@ifg.uni-kiel.de',
+    author_email='andreas.steinberg@bgr.de',
 
     packages=[
         'silvertine',
@@ -104,6 +104,7 @@ setup(
         'silvertine.locate',
         'silvertine.minimum_1d',
         'silvertine.util',
+        'silvertine.plot',
         'silvertine.report',
         'silvertine.shakemap',
         'silvertine.monitoring',
@@ -123,6 +124,7 @@ setup(
             'report/app/templates/*.html',
             'report/app/css/*.css',
             'report/app/js/*.js',
+            'report/app/configs/*.yaml',
 
             'data/snippets/*.gronf',
             'data/snippets/*.md',
