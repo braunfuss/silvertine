@@ -13,10 +13,11 @@ from pyrocko.fdsn import station as fs
 from pyrocko.guts import Object, Int, String
 from silvertine.shakemap import shakemap_fwd
 from pyrocko import moment_tensor as pmt
+from numpy import random, where, cos, sin, arctan2, abs
 
 import os
 km = 1000.
-from numpy import random, where, cos, sin, arctan2, abs
+
 
 def get_random_ellipse(n, x0, y0):
 
@@ -44,11 +45,13 @@ def rand(mi, ma):
     ma = float(ma)
     return random.random()*(ma-mi) + mi
 
+
 def randlat(mi, ma):
 
     mi_ = 0.5*(math.sin(mi * math.pi/180.)+1.)
     ma_ = 0.5*(math.sin(ma * math.pi/180.)+1.)
     return math.asin(rand(mi_, ma_)*2.-1.)*180./math.pi
+
 
 def xjoin(basepath, path):
     if path is None and basepath is not None:

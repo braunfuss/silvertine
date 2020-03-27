@@ -22,6 +22,9 @@ import ray
 import psutil
 from pathlib import Path
 from silvertine.util import ttt
+from matplotlib import pyplot as plt
+from pyrocko.guts import Float
+from pyrocko import plot
 
 num_cpus = psutil.cpu_count(logical=False)
 
@@ -272,7 +275,7 @@ def depth_fit(params, line=None):
     return misfit
 
 
-def load_synthetic_test(n_tests, scenario_folder, nstart=1, nend=None):
+def load_synthetic_test(n_tests, scenario_folder, nstart=0, nend=None):
     events = []
     stations = []
     for i in range(nstart, n_tests):
@@ -820,7 +823,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
     else:
         reference_events = None
         maxiter = 25
-        folder_waveforms = "scenarios/"
+        folder_waveforms = scenario_folder
 
     km = 1000.
     iiter = 0
@@ -863,7 +866,8 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
             if reference == "hyposat":
                 from .hyposat_util import run_hyposat
                 for i, ev in enumerate(test_events):
-                    run_hyposat(ev_dict_list[i], ev, [ev_list[i]], pyrocko_stations[i])
+                    run_hyposat(ev_dict_list[i], ev, [ev_list[i]],
+                                pyrocko_stations[i])
         else:
             test_events, pyrocko_stations, ev_dict_list, ev_list_picks = load_data(data_folder, nevent=n_tests)
             if reference == "hyposat":
@@ -979,7 +983,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
 
         else:
             if parallel is True or parallel is "True":
-                name = "scenarios/events_parallel_%s.txt" % str(kmod)
+                name = scenario_folder+"/events_parallel_%s.txt" % str(kmod)
                 file = open(name, 'w+')
                 file.close()
                 if calculated_ttt is False:
@@ -1105,5 +1109,15 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                             result_events.append(event)
 
         if parallel is not True:
-            model.dump_events(result_events, "result_events_%s.pf" % str(kmod))
-    return result, sources
+            model.dump_events(result_events, scenario_folder+"/result_events_%s.pf" % str(kmod))
+    for i, event in enumerate(result_events):
+        savedir = scenario_folder + '/scenario_' + str(i) + '/'
+        plot.mpl_init()
+        fig = plt.figure(figsize=plot.mpl_papersize('a5', 'landscape'))
+        axes = fig.add_subplot(1, 1, 1, aspect=1.0)
+        axes.set_xlabel('Lat')
+        axes.set_ylabel('Lon')
+        axes.scatter(source.lat, source.lon)
+        fig.savefig(savedir+'location.png')
+        plt.close()
+    return result, result_events

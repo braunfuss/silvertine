@@ -30,13 +30,13 @@ def make_shakemap(engine, source, store_id, folder, stations=None):
                                        stf_spec, stations=True)
         values_stations = values_stations[0][0:len(stations)]
 
-        plot_shakemap(source, norths, easts, values, 'gf_shakemap.d100.png', folder,
+        plot_shakemap(source, norths, easts, values, 'gf_shakemap.png', folder,
                       values_stations=values_stations,
                       norths_stations=norths_stations,
                       easts_stations=easts_stations)
 
     else:
-        plot_shakemap(source, norths, easts, values, 'gf_shakemap.d100.png', folder)
+        plot_shakemap(source, norths, easts, values, 'gf_shakemap.png', folder)
 
 
 def get_scenario(engine, source, store_id, extent=30, ngrid=50,
@@ -113,7 +113,8 @@ def get_scenario(engine, source, store_id, extent=30, ngrid=50,
     return targets, norths, easts, stf_spec
 
 
-def post_process(response, norths, easts, stf_spec, stations=False):
+def post_process(response, norths, easts, stf_spec, stations=Falses,
+                 show=True):
     nnorth = norths.size
     neast = easts.size
 
@@ -188,8 +189,10 @@ def plot_shakemap(source, norths, easts, values, filename, folder,
         plt.scatter(easts_stations/km, norths_stations/km, c=values_stations, s=36, cmap=plt.get_cmap('YlOrBr'), vmin=0., vmax=vmax, edgecolor="k")
 
     fig.savefig(folder+filename)
-    plt.show()
-
+    if show is True:
+        plt.show()
+    else:
+        plt.close()
 
 def coords_2d(norths, easts):
     norths2 = num.repeat(norths, easts.size)

@@ -147,23 +147,23 @@ def report(env, report_config=None, update_without_plotting=True,
     util.ensuredir(entry_path)
     plots_dir_out = op.join(entry_path, 'plots')
     util.ensuredir(plots_dir_out)
-    rundir_path = env.get_rundir_path()
-    util.ensuredir("%s/shakemap/default/" % (plots_dir_out))
-
-    os.system("cp %s/*.png %s/shakemap/default/shakemap.default.gf_shakemap.d100.png" % (rundir_path, plots_dir_out))
     configs_dir = op.join(op.split(__file__)[0], 'app/configs/')
+    rundir_path = env.get_rundir_path()
     os.system("cp %s/plot_collection.yaml %s" % (configs_dir, plots_dir_out))
-    print(plots_dir_out)
-    print("%s/plot_collection.yaml" % configs_dir)
+
+    util.ensuredir("%s/shakemap/default/" % (plots_dir_out))
+    os.system("cp %s/*shakemap.png %s/shakemap/default/shakemap.default.gf_shakemap.d100.png" % (rundir_path, plots_dir_out))
     os.system("cp %s/shakemap.default.plot_group.yaml %s/shakemap/default/" % (configs_dir, plots_dir_out))
+
+    util.ensuredir("%s/location/default/" % (plots_dir_out))
+    os.system("cp %s/*location.png %s/location/default/location.default.location.d100.png" % (rundir_path, plots_dir_out))
+    os.system("cp %s/location.default.plot_group.yaml %s/location/default/" % (configs_dir, plots_dir_out))
 
     event = model.load_events(rundir_path+"event.txt")[0]
     guts.dump(event, filename=op.join(entry_path, 'event.reference.yaml'))
 
-#    if not update_without_plotting:
     from silvertine import plot
     pcc = report_config.plot_config_collection.get_weeded(env)
-    print(pcc)
     plot.make_plots(
         env,
         plots_path=op.join(entry_path, 'plots'),

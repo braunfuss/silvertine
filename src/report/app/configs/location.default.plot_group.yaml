@@ -1,11 +1,10 @@
 --- !silvertine.PlotGroup
-name: shakemap
-section: shakemap
-title: Shakemap
+name: location
+section: location
+title: Location
 description: '
 
-Shakemap
-
+Earthquake location
   '
 formats:
 - !silvertine.PDF {}
@@ -16,10 +15,9 @@ size_cm:
 - 14.9
 items:
 - !silvertine.PlotItem
-  name: gf_shakemap
+  name: location
   attributes: {}
   description: '
 
-Shakemap
 
     '

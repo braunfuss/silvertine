@@ -2,3 +2,5 @@
 group_refs:
 - - shakemap
   - default
+- - location
+  - default
