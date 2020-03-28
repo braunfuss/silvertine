@@ -4,3 +4,5 @@ group_refs:
   - default
 - - location
   - default
+- - waveforms
+  - default

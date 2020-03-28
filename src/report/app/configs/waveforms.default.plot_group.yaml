@@ -1,0 +1,23 @@
+--- !silvertine.PlotGroup
+name: waveforms
+section: waveforms
+title: waveforms
+description: '
+
+Waveforms
+  '
+formats:
+- !silvertine.PDF {}
+variant: default
+feather_icon: check
+size_cm:
+- 21.0
+- 14.9
+items:
+- !silvertine.PlotItem
+  name: waveforms
+  attributes: {}
+  description: '
+
+
+    '

@@ -159,6 +159,10 @@ def report(env, report_config=None, update_without_plotting=True,
     os.system("cp %s/*location.png %s/location/default/location.default.location.d100.png" % (rundir_path, plots_dir_out))
     os.system("cp %s/location.default.plot_group.yaml %s/location/default/" % (configs_dir, plots_dir_out))
 
+    util.ensuredir("%s/waveforms/default/" % (plots_dir_out))
+    os.system("cp %s/waveforms.png %s/waveforms/default/waveforms.default.waveforms.d100.png" % (rundir_path, plots_dir_out))
+    os.system("cp %s/waveforms.default.plot_group.yaml %s/waveforms/default/" % (configs_dir, plots_dir_out))
+
     event = model.load_events(rundir_path+"event.txt")[0]
     guts.dump(event, filename=op.join(entry_path, 'event.reference.yaml'))
 

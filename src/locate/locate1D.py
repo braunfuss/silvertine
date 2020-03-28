@@ -471,25 +471,37 @@ def bokeh_plot():
     return p1, p2, p3, p4, curdoc, session
 
 
-def associate_waveforms(test_events, reference_events=None,
-                        folder="/md3/projects3/seiger/acquisition",
+def associate_waveforms(test_events, stations_list, reference_events=None,
+                        folder=None, plot=True,
                         scenario=False):
     ev_iter = 0
-    traces_dict = {}
+    traces_dict = OrderedDict()
+    from silvertine.util.waveform import plot_waveforms
+    if scenario is False:
+        # hardcoded for bgr envs
+        pathlist = Path(folder).glob('day*')
+        for path in sorted(pathlist):
+            d1 = str(path)[4:16]
+            d2 = str(path)[17:]
+            for ev in test_events:
+                no_reference = True
+                #if reference_events is not None:
+                #    for ref_ev in reference_events:
+                event_time = ev.time
+                if ev.time > d1 and ev.time < d2:
+                    traces = io.load(path)
+                    for tr in traces:
+                        tr.chop(ev.time-10, ev.time+60)
+    if scenario is True:
+        for i, event in enumerate(test_events):
+            stations = stations_list[i]
+            savedir = folder + '/scenario_' + str(i) + '/'
+            traces = io.load(savedir+"traces.mseed")
+            traces_dict.update({'%s' % i: traces})
 
-    pathlist = Path(folder).glob('day*')
-    for path in sorted(pathlist):
-        d1 = str(path)[4:16]
-        d2 = str(path)[17:]
-        for ev in test_events:
-            no_reference = True
-            #if reference_events is not None:
-            #    for ref_ev in reference_events:
-            event_time = ev.time
-            if ev.time > d1 and ev.time < d2:
-                traces = io.load(path)
-                for tr in traces:
-                    tr.chop(ev.time-10, ev.time+60)
+            if plot is True:
+                plot_waveforms(traces, event, stations, savedir)
+    return traces_dict
 
 
 def get_bounds(test_events, parallel, singular, bounds, sources, bounds_list,
@@ -620,24 +632,26 @@ def get_single_result_event(ev_dict_list_copy, params_x, result, i=0):
             lon=float(params_x[1]),
             depth=float(params_x[2]),
             magnitude=ev_dict_list_copy[i]["mag"],
-            time=ev_dict_list_copy[i]["time"]+ float(params_x[3]))
+            time=ev_dict_list_copy[i]["time"] + float(params_x[3]))
         result_sources.append(source)
         event_result = model.event.Event(lat=source.lat, lon=source.lon,
                                          time=source.time,
                                          depth=source.depth,
                                          magnitude=source.magnitude,
-                                         tags=[str(result.fun), str(ev_dict_list_copy[i]["id"])])
-    except:
+                                         tags=[str(result.fun),
+                                               str(ev_dict_list_copy[i]["id"])])
+    except Exception:
         source = gf.DCSource(
             lat=float(params_x[0]),
             lon=float(params_x[1]),
             depth=float(params_x[2]),
-            time=ev_dict_list_copy[i]["time"]+ float(params_x[3]))
+            time=ev_dict_list_copy[i]["time"] + float(params_x[3]))
         result_sources.append(source)
         event_result = model.event.Event(lat=source.lat, lon=source.lon,
                                          time=source.time,
                                          depth=source.depth,
-                                         tags=[str(result.fun), str(ev_dict_list_copy[i]["id"])])
+                                         tags=[str(result.fun),
+                                               str(ev_dict_list_copy[i]["id"])])
     return event_result, source
 
 
@@ -811,7 +825,7 @@ def minimum_1d_fit(params, mod, line=None):
 def solve(show=False, n_tests=1, scenario_folder="scenarios",
           optimize_depth=False, scenario=True, data_folder="data",
           parallel=True, adress=None, interpolate=True, mod_name="insheim",
-          singular=False, nboot=1, hybrid=False,
+          singular=False, nboot=1, hybrid=True,
           minimum_vel=False, reference="catalog",):
     global ev_dict_list, times, phase_list, km, mod, pyrocko_stations, bounds, sources, source_dc, iiter, interpolated_tts, result_sources, result_events
 
@@ -891,7 +905,8 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                                                              minimum_vel_mod=mod)
 
         if hybrid is True:
-            waveforms = associate_waveforms(test_events, reference_events=None,
+            waveforms = associate_waveforms(test_events, pyrocko_stations,
+                                            reference_events=None,
                                             folder=folder_waveforms,
                                             scenario=scenario)
 
@@ -902,7 +917,8 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
             if len(missing) != 0:
                 print("Calculating travel time look up table,\
                         this may take some time.")
-                ttt.calculate_ttt_parallel(pyrocko_stations, mod, missing, mod_name,
+                ttt.calculate_ttt_parallel(pyrocko_stations, mod, missing,
+                                           mod_name,
                                            adress=adress)
                 interpolated_tts_new, missing = ttt.load_sptree(phase_list, mod_name)
                 interpolated_tts = {**interpolated_tts, **interpolated_tts_new}
