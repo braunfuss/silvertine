@@ -7,18 +7,20 @@ from pyrocko.guts import Float
 
 from pyrocko import gf, trace, plot, beachball, util, orthodrome
 from pyrocko import moment_tensor as pmt
+import _pickle as pickle
 
 km = 1000.
 
 util.setup_logging('gf_shakemap')
 
 
-def make_shakemap(engine, source, store_id, folder, stations=None):
+def make_shakemap(engine, source, store_id, folder, stations=None, save=False):
     targets, norths, easts, stf_spec = get_scenario(engine,
                                                     source,
                                                     store_id)
     response = engine.process(source, targets)
-    values = post_process(response, norths, easts, stf_spec)
+    values = post_process(response, norths, easts, stf_spec, savedir=folder,
+                          save=save)
     if stations is not None:
         targets_stations, norths_stations, easts_stations, stf_spec = get_scenario(engine,
                                                                                    source,
@@ -27,7 +29,8 @@ def make_shakemap(engine, source, store_id, folder, stations=None):
         response_stations = engine.process(source, targets_stations)
         values_stations = post_process(response_stations, norths_stations,
                                        easts_stations,
-                                       stf_spec, stations=True)
+                                       stf_spec, stations=True,
+                                       savedir=folder, save=save)
         values_stations = values_stations[0][0:len(stations)]
 
         plot_shakemap(source, norths, easts, values, 'gf_shakemap.png', folder,
@@ -116,7 +119,7 @@ def get_scenario(engine, source, store_id, extent=30, ngrid=50,
 
 
 def post_process(response, norths, easts, stf_spec, stations=False,
-                 show=True):
+                 show=True, savedir=None, save=False):
     nnorth = norths.size
     neast = easts.size
 
@@ -131,8 +134,6 @@ def post_process(response, norths, easts, stf_spec, stations=False,
             [trans, stf_spec])
 
         tr = tr.transfer(transfer_function=trans)
-        # tr = tr.transfer(tfade=10., freqlimits=(0., 0.05, 10, 100.),
-        #                  transfer_function=trans)
 
         tr.highpass(4, 0.5)
         tr.lowpass(4, 4.0)
@@ -154,12 +155,26 @@ def post_process(response, norths, easts, stf_spec, stations=False,
             if norths2[i] == easts2[i]:
                 plot_trs.extend(trs)
     values = values.reshape((norths.size, easts.size))
+    if save is True:
+        path = savedir + '/shakemap.pkl'
+        f = open(path, 'wb')
+        pickle.dump([values, easts, norths], f)
+        f.close()
+
     return values
+
+
+def load_shakemap(path):
+    path = savedir + '/shakemap.pkl'
+    f = open(path, 'rb')
+    values, easts, norths = pickle.load(f)
+    f.close()
+    return values easts, norths
 
 
 def plot_shakemap(source, norths, easts, values, filename, folder, stations,
                   values_stations=None, easts_stations=None,
-                  norths_stations=None, latlon=True, show=True):
+                  norths_stations=None, latlon=True, show=False):
     plot.mpl_init()
     fig = plt.figure(figsize=plot.mpl_papersize('a5', 'landscape'))
     axes = fig.add_subplot(1, 1, 1, aspect=1.0)
@@ -227,6 +242,7 @@ def plot_shakemap(source, norths, easts, values, filename, folder, stations,
         plt.show()
     else:
         plt.close()
+
 
 def coords_2d(norths, easts):
     norths2 = num.repeat(norths, easts.size)
