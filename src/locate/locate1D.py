@@ -1134,6 +1134,10 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
         axes.set_xlabel('Lat')
         axes.set_ylabel('Lon')
         axes.scatter(source.lat, source.lon)
+        stations = pyrocko_stations[i]
+        for st in stations:
+            axes.scatter(st.lat, st.lon,)
+            axes.text(st.lat, st.lon, str(st.station))
         fig.savefig(savedir+'location.png')
         plt.close()
     return result, result_events

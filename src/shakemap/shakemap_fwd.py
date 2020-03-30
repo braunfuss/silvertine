@@ -31,12 +31,14 @@ def make_shakemap(engine, source, store_id, folder, stations=None):
         values_stations = values_stations[0][0:len(stations)]
 
         plot_shakemap(source, norths, easts, values, 'gf_shakemap.png', folder,
+                      stations,
                       values_stations=values_stations,
                       norths_stations=norths_stations,
                       easts_stations=easts_stations)
 
     else:
-        plot_shakemap(source, norths, easts, values, 'gf_shakemap.png', folder)
+        plot_shakemap(source, norths, easts, values, 'gf_shakemap.png', folder,
+                      stations)
 
 
 def get_scenario(engine, source, store_id, extent=30, ngrid=50,
@@ -113,7 +115,7 @@ def get_scenario(engine, source, store_id, extent=30, ngrid=50,
     return targets, norths, easts, stf_spec
 
 
-def post_process(response, norths, easts, stf_spec, stations=Falses,
+def post_process(response, norths, easts, stf_spec, stations=False,
                  show=True):
     nnorth = norths.size
     neast = easts.size
@@ -155,38 +157,70 @@ def post_process(response, norths, easts, stf_spec, stations=Falses,
     return values
 
 
-def plot_shakemap(source, norths, easts, values, filename, folder,
+def plot_shakemap(source, norths, easts, values, filename, folder, stations,
                   values_stations=None, easts_stations=None,
-                  norths_stations=None):
+                  norths_stations=None, latlon=True, show=True):
     plot.mpl_init()
     fig = plt.figure(figsize=plot.mpl_papersize('a5', 'landscape'))
     axes = fig.add_subplot(1, 1, 1, aspect=1.0)
-
-    axes.set_xlim(easts.min()/km, easts.max()/km)
-    axes.set_ylim(norths.min()/km, norths.max()/km)
-
-    axes.set_xlabel('Easting [km]')
-    axes.set_ylabel('Northing [km]')
-
+    mt = source.pyrocko_moment_tensor()
     _, vmax = num.min(values), num.max(values)
 
-    im = axes.contourf(
-        easts/km, norths/km, values,
-        vmin=0., vmax=vmax,
-        cmap=plt.get_cmap('YlOrBr'))
+    if latlon is False:
+        axes.set_xlim(easts.min()/km, easts.max()/km)
+        axes.set_ylim(norths.min()/km, norths.max()/km)
 
-    fig.colorbar(im, label='Acceleration [m/s^2]')
+        axes.set_xlabel('Easting [km]')
+        axes.set_ylabel('Northing [km]')
 
-    mt = source.pyrocko_moment_tensor()
+        im = axes.contourf(
+            easts/km, norths/km, values,
+            vmin=0., vmax=vmax,
+            cmap=plt.get_cmap('YlOrBr'))
 
-    beachball.plot_beachball_mpl(
-        mt, axes,
-        position=(0., 0.),
-        color_t='black',
-        zorder=2,
-        size=20.)
-    if values_stations is not None:
-        plt.scatter(easts_stations/km, norths_stations/km, c=values_stations, s=36, cmap=plt.get_cmap('YlOrBr'), vmin=0., vmax=vmax, edgecolor="k")
+        fig.colorbar(im, label='Acceleration [m/s^2]')
+
+        beachball.plot_beachball_mpl(
+            mt, axes,
+            position=(0., 0.),
+            color_t='black',
+            zorder=2,
+            size=20.)
+        if values_stations is not None:
+            plt.scatter(easts_stations/km, norths_stations/km,
+                        c=values_stations, s=36, cmap=plt.get_cmap('YlOrBr'),
+                        vmin=0., vmax=vmax, edgecolor="k")
+    else:
+        lats = []
+        lons = []
+        for east, north in zip(easts, norths):
+            lat, lon = orthodrome.ne_to_latlon(source.lat, source.lon,
+                                               north, east)
+            lats.append(lat)
+            lons.append(lon)
+    #    axes.set_xlim(lats.min()/km, lats.max()/km)
+    #    axes.set_ylim(norths.min()/km, norths.max()/km)
+        beachball.plot_beachball_mpl(
+            mt, axes,
+            position=(source.lat, source.lon),
+            color_t='black',
+            zorder=2,
+            size=20.)
+
+        im = axes.contourf(
+            lats, lons, values.T,
+            vmin=0., vmax=vmax,
+            cmap=plt.get_cmap('YlOrBr'))
+
+        fig.colorbar(im, label='Acceleration [m/s^2]')
+        if values_stations is not None:
+            st_lats, st_lons = [], []
+            for st in stations:
+                st_lats.append(st.lat)
+                st_lons.append(st.lon)
+            plt.scatter(st_lats, st_lons,
+                        c=values_stations, s=36, cmap=plt.get_cmap('YlOrBr'),
+                        vmin=0., vmax=vmax, edgecolor="k")
 
     fig.savefig(folder+filename)
     if show is True:

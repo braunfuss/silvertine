@@ -384,7 +384,7 @@ def silvertineScenario(projdir, scenarios=10, modelled_channel_codes='ENZ',
                        store_id='landau_100hz', magmin=1., magmax=3.,
                        depmin=5, depmax=10,
                        latmin=48.9586, latmax=49.3,
-                       lonmin=8.1578, lonmax=8.4578,
+                       lonmin=8.1578, lonmax=8.25,
                        stations_file=None, ratio_events=1,
                        shakemap=True):
 
