@@ -44,6 +44,7 @@ subcommand_descriptions = {
     'init': 'initialise new project structure or print configuration',
     'scenario': 'create a forward-modelled scenario project',
     'locate': 'locate a single or a set of earthquakes',
+    'optimize': 'optimize',
     'monitor': 'Monitor stations',
     'beam': 'beamform for a single or a set of earthquakes',
     'beam_process': 'beam_process for a single or a set of earthquakes',
@@ -71,6 +72,7 @@ subcommand_usages = {
         'init <example> <projectdir> [options]'),
     'scenario': 'scenario [options] <projectdir>',
     'locate': 'locate [options] <projectdir>',
+    'optimize': 'optimize [options] <projectdir>',
     'monitor': 'monitor [options] <projectdir>',
     'events': 'events <configfile>',
     'beam': 'beams [options] <projectdir>',
@@ -126,6 +128,7 @@ Subcommands:
 
     scenario        %(scenario)s
     locate        %(locate)s
+    optimize      %(optimize)s
     monitor        %(monitor)s
     beam        %(beam)s
     beam_process        %(beam_process)s
@@ -434,6 +437,22 @@ def command_locate(args):
                                                           minimum_vel=options.minimum_vel,
                                                           reference=options.reference)
 
+
+def command_optimize(args):
+
+    def setup(parser):
+        parser.add_option(
+            '--show', dest='show', type=str, default=False,
+            help='Display progress of localisation for each event in browser')
+    parser, options, args = cl_parse('locate', args, setup)
+
+    project_dir = args[0]
+    rundir = "gruns"
+    from silvertine import mechanism
+    mechanism.run_grond(rundir,
+                       project_dir,
+                       "scenario",
+                      "landau6")
 
 def command_monitor(args):
 

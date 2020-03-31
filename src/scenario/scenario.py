@@ -14,6 +14,7 @@ from pyrocko.guts import Object, Int, String
 from silvertine.shakemap import shakemap_fwd
 from pyrocko import moment_tensor as pmt
 from numpy import random, where, cos, sin, arctan2, abs
+from pyrocko.io import stationxml
 
 import os
 km = 1000.
@@ -24,7 +25,7 @@ def get_random_ellipse(n, x0, y0):
     xout = numpy.zeros(n)
     yout = numpy.zeros(n)
 
-    nkeep=0
+    nkeep = 0
 
     while nkeep < n:
         x=2*x0*(random.random(n-nkeep) - 0.5)
@@ -227,7 +228,7 @@ def gen_random_tectonic_event(scenario_id, magmin=1., magmax=3.,
               timemin=util.str_to_time('2007-01-01 16:10:00.000'),
               timemax=util.str_to_time('2020-01-01 16:10:00.000')):
 
-    name = scenario_id
+    name = "scenario"+scenario_id
     depth = rand(depmin, depmax)*km
     magnitude = rand(magmin, magmax)
     lat = randlat(latmin, latmax)
@@ -250,7 +251,7 @@ def gen_induced_event(scenario_id, magmin=1., magmax=3.,
                       timemin=util.str_to_time('2007-01-01 16:10:00.000'),
                       timemax=util.str_to_time('2020-01-01 16:10:00.000')):
 
-    name = scenario_id
+    name = "scenario"+scenario_id
     depth = rand(depmin, depmax)*km
     # source time function (STF) based on Brune source model, to get
     # spectra roughly realistic
@@ -302,6 +303,9 @@ def save(synthetic_traces, event, stations, savedir, noise_events=False):
     io.save(synthetic_traces, savedir+'traces.mseed')
     model.dump_events(event, savedir+'event.txt')
     model.dump_stations(stations, savedir+'stations.pf')
+    st_xml = stationxml.FDSNStationXML.from_pyrocko_stations(stations,
+                                                            add_flat_responses_from='M')
+    st_xml.dump_xml(filename=savedir+'stations.xml')
     if noise_events is not False:
         model.dump_events(noise_events, savedir+'events_noise.txt')
 
@@ -352,18 +356,28 @@ def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,
 
         if stations_file is not None:
             stations = model.load_stations(projdir + "/" + stations_file)
-        targets = []
-        for st in stations:
-            channel_codes = modelled_channel_codes
-            for cha in channel_codes:
-                target = Target(
-                        lat=st.lat,
-                        lon=st.lon,
-                        store_id=store_id,
-                        interpolation='multilinear',
-                        quantity='displacement',
-                        codes=st.nsl() + (cha,))
-
+            targets = []
+            for st in stations:
+                for cha in st.channels:
+                    target = Target(
+                            lat=st.lat,
+                            lon=st.lon,
+                            store_id=store_id,
+                            interpolation='multilinear',
+                            quantity='displacement',
+                            codes=st.nsl() + (cha.name,))
+        else:
+            targets = []
+            for st in stations:
+                channels = modelled_channel_codes
+                for cha in channels:
+                    target = Target(
+                            lat=st.lat,
+                            lon=st.lon,
+                            store_id=store_id,
+                            interpolation='multilinear',
+                            quantity='displacement',
+                            codes=st.nsl() + (cha,))
                 targets.append(target)
         if shakemap is True:
             shakemap_fwd.make_shakemap(engine, source, store_id,
