@@ -9,22 +9,39 @@ import sys
 import numpy as num
 
 from grond.monitor import GrondMonitor
-from pyrocko import gf, util
+from pyrocko import gf, util, guts
 from pyrocko.parimap import parimap
 from grond.optimisers.highscore import UniformSamplerPhase, DirectedSamplerPhase
+from pyrocko.guts import String, Float, Dict, StringChoice, Int
 
 import grond
 logger = logging.getLogger('grond.silvertine')
 #import solverscipy
 
+
+class STFType(StringChoice):
+    choices = ['HalfSinusoidSTF', 'ResonatorSTF']
+
+    cls = {
+        'HalfSinusoidSTF': gf.HalfSinusoidSTF,
+        'ResonatorSTF': gf.ResonatorSTF}
+
+    @classmethod
+    def base_stf(cls, name):
+        return cls.cls[name]()
+
+
+class MTType(StringChoice):
+    choices = ['full', 'deviatoric', 'dc']
+
+
 def run_grond(rundir, datafolder, eventname, store_id, domain="time_domain"):
     km = 1000.
-    print(datafolder)
     ds = grond.Dataset(event_name=eventname)
-    ds.add_waveforms(paths=['%s/waveforms' % datafolder])
+    ds.add_waveforms(paths=['%s' % datafolder])
     ds.add_events(filename='%s/event.txt' % datafolder)
-    ds.add_stations(stationxml_filenames=['%s/waveforms/stations.xml' % datafolder])
-    ds.add_responses(stationxml_filenames=['%s/waveforms/stations.xml' % datafolder])
+    ds.add_stations(stationxml_filenames=['%s/stations.xml' % datafolder])
+    ds.add_responses(stationxml_filenames=['%s/stations.xml' % datafolder])
 
     ds._event_name = eventname
 
@@ -33,47 +50,60 @@ def run_grond(rundir, datafolder, eventname, store_id, domain="time_domain"):
 
     quantity = 'displacement'
     group = 'all'
-
+    tmin = '{stored:begin}'
+    tmax = '{stored:begin}+3'
+    fmin = 1.
+    fmax = 20.
+    ffactor = 1
     engine = gf.LocalEngine(store_superdirs=['/home/asteinbe/gf_stores'])
     gf_interpolation = 'nearest_neighbor'
-    imc_P = grond.WaveformMisfitConfig(
-        fmin=1.,
-        fmax=20.,
-        ffactor=1.5,
-        tmin='{stored:begin}+2',
-        tmax='{stored:begin}+3',
+    imc_Z = grond.WaveformMisfitConfig(
+        fmin=fmin,
+        fmax=fmax,
+        ffactor=ffactor,
+        tmin=tmin,
+        tmax=tmax,
         norm_exponent=1,
         domain=domain,
         quantity=quantity)
-    cha_P ='Z'
+    cha_Z = 'Z'
 
-    imc_S = grond.WaveformMisfitConfig(
-        fmin=1.,
-        fmax=20.,
-        ffactor=1.5,
-        tmin='{stored:begin}+2',
-        tmax='{stored:begin}+3',
+    imc_T = grond.WaveformMisfitConfig(
+        fmin=fmin,
+        fmax=fmax,
+        ffactor=ffactor,
+        tmin=tmin,
+        tmax=tmax,
         norm_exponent=1,
         domain=domain,
         quantity=quantity,)
-    cha_S ='T'
+    cha_T = 'T'
+
+    imc_R = grond.WaveformMisfitConfig(
+        fmin=fmin,
+        fmax=fmax,
+        ffactor=ffactor,
+        tmin=tmin,
+        tmax=tmax,
+        norm_exponent=1,
+        domain=domain,
+        quantity=quantity,)
+    cha_R = 'R'
 
     event = ds.get_events()[0]
     event_origin = gf.Source(
         lat=event.lat,
         lon=event.lon)
 
-    ##
+
     if event.depth is None:
         event.depth = 7*km
 
-    # define distance minimum
     distance_min = None
     distance_max = 30000.
     targets = []
-    ## first for P phases
     for st in ds.get_stations():
-        for cha in cha_P:
+        for cha in cha_Z:
             target = grond.WaveformMisfitTarget(
                 interpolation=gf_interpolation,
                 store_id=store_id,
@@ -81,24 +111,17 @@ def run_grond(rundir, datafolder, eventname, store_id, domain="time_domain"):
                 lat=st.lat,
                 lon=st.lon,
                 quantity=quantity,
-                misfit_config=imc_P,
+                misfit_config=imc_Z,
                 normalisation_family="td",
-    	    path="P")
+                path="Z")
             _, bazi = event_origin.azibazi_to(target)
-            if cha == 'R':
-                target.azimuth = bazi - 180.
-                target.dip = 0.
-            elif cha == 'T':
-                target.azimuth = bazi - 90.
-                target.dip = 0.
-            elif cha == 'Z':
+            if cha == 'Z':
                 target.azimuth = 0.
                 target.dip = -90.
             target.set_dataset(ds)
             targets.append(target)
-    # for S phases
     for st in ds.get_stations():
-        for cha in cha_S:
+        for cha in cha_T:
             target = grond.WaveformMisfitTarget(
                 codes=st.nsl() + (cha,),
                 lat=st.lat,
@@ -106,38 +129,52 @@ def run_grond(rundir, datafolder, eventname, store_id, domain="time_domain"):
                 interpolation=gf_interpolation,
                 store_id=store_id,
                 normalisation_family="td",
-        	    path="S",
+                path="T",
                 quantity=quantity,
-                misfit_config=imc_S)
+                misfit_config=imc_T)
+            _, bazi = event_origin.azibazi_to(target)
+            if cha == 'T':
+                target.azimuth = bazi - 90.
+                target.dip = 0.
+            target.set_dataset(ds)
+            targets.append(target)
+    for st in ds.get_stations():
+        for cha in cha_R:
+            target = grond.WaveformMisfitTarget(
+                codes=st.nsl() + (cha,),
+                lat=st.lat,
+                lon=st.lon,
+                interpolation=gf_interpolation,
+                store_id=store_id,
+                normalisation_family="td",
+                path="R",
+                quantity=quantity,
+                misfit_config=imc_R)
             _, bazi = event_origin.azibazi_to(target)
             if cha == 'R':
                 target.azimuth = bazi - 180.
                 target.dip = 0.
-            elif cha == 'T':
-                target.azimuth = bazi - 90.
-                target.dip = 0.
-            elif cha == 'Z':
-                target.azimuth = 0.
-                target.dip = -90.
             target.set_dataset(ds)
             targets.append(target)
-
     base_source = gf.MTSource.from_pyrocko_event(event)
+    stf_type = 'HalfSinusoidSTF'
     base_source.set_origin(event_origin.lat, event_origin.lon)
-
-    ranges=dict(
-        time=gf.Range(0, 2.0, relative='add'),
+    stf = STFType.base_stf(stf_type)
+    stf.duration = event.duration or 0.0
+    base_source.stf = stf
+    ranges = dict(
+        time=gf.Range(-0.1, 0.1, relative='add'),
         north_shift=gf.Range(-1*km, 1*km),
         east_shift=gf.Range(-1*km, 1*km),
-        depth=gf.Range(400, 3000),
-        magnitude=gf.Range(1.1, 1.8),
-        duration=gf.Range(0., 0.5),
-        rmnn=gf.Range(-1., 1.),
-        rmee=gf.Range(-1., 1.),
-        rmdd=gf.Range(-1., 1.),
-        rmne=gf.Range(-1., 1.0),
-        rmnd=gf.Range(-1., 1),
-        rmed=gf.Range(-1., 1.))
+        depth=gf.Range(400, 12000),
+        magnitude=gf.Range(-1.0, 3.1),
+        duration=gf.Range(0., 0.2),
+        rmnn=gf.Range(-1.4, 1.4),
+        rmee=gf.Range(-1.4, 1.4),
+        rmdd=gf.Range(-1.4, 1.4),
+        rmne=gf.Range(-1.4, 1.4),
+        rmnd=gf.Range(-1.4, 1.4),
+        rmed=gf.Range(-1.4, 1.4))
 
     problem = grond.problems.CMTProblem(
         name=event.name,
@@ -147,13 +184,15 @@ def run_grond(rundir, datafolder, eventname, store_id, domain="time_domain"):
         ranges=ranges,
         targets=targets,
         norm_exponent=1,
+        stf_type=stf_type,
         )
 
     problem.set_engine(engine)
     monitor = GrondMonitor.watch(rundir)
     print("analysing")
+    analyser_iter = 100
     analyser = grond.analysers.target_balancing.TargetBalancingAnalyser(
-                niter=100,
+                niter=analyser_iter,
                 use_reference_magnitude=False,
                 cutoff=None)
     analyser.analyse(
@@ -162,12 +201,48 @@ def run_grond(rundir, datafolder, eventname, store_id, domain="time_domain"):
 
     problem.dump_problem_info(rundir)
 
-    print("solving")
-    sampler_phases =[UniformSamplerPhase(niterations=1000),
-                 DirectedSamplerPhase(niterations=5000)]
+    from grond import config
+    from grond import Environment
+    config_path = '%s/scenario.gronf' % datafolder
+    quick_config_path = '%sconfig/config.yaml' % datafolder
+    util.ensuredir("%sconfig" % datafolder)
+
+    from grond.config import read_config
+    conf = read_config(config_path)
+    uniform_iter = 10000
+    directed_iter = 50000
+    mod_conf = conf.clone()
+    mod_conf.set_elements(
+        'path_prefix', ".")
+    mod_conf.set_elements(
+        'analyser_configs[:].niterations', analyser_iter)
+    mod_conf.set_elements(
+        'optimiser_config.sampler_phases[0].niterations', uniform_iter)
+    mod_conf.set_elements(
+        'optimiser_config.sampler_phases[0].niterations', directed_iter)
+    mod_conf.set_elements(
+        'optimiser_config.nbootstrap', 100)
+    mod_conf.set_elements(
+        'target_groups[:].misfit_config.tmin', "%s" % tmin)
+    mod_conf.set_elements(
+        'target_groups[:].misfit_config.tmax', "%s" % tmax)
+    mod_conf.set_elements(
+        'target_groups[:].misfit_config.fmin', "%s" % fmin)
+    mod_conf.set_elements(
+        'target_groups[:].misfit_config.fmax', "%s" % fmax)
+    mod_conf.set_elements(
+        'target_groups[:].misfit_config.domain', "%s" % domain)
+    mod_conf.set_elements(
+        'target_groups[:].misfit_config.ffactor', "%s" % ffactor)
+    mod_conf.set_basepath(conf.get_basepath())
+    config.write_config(mod_conf, quick_config_path)
+    config.write_config(mod_conf, rundir+"/config.yaml")
+
+    sampler_phases = [UniformSamplerPhase(niterations=uniform_iter),
+                      DirectedSamplerPhase(niterations=directed_iter)]
     optimiser = grond.optimisers.highscore.HighScoreOptimiser(sampler_phases=list(sampler_phases),
-                chain_length_factor=8,
-                nbootstrap=100)
+                                                              chain_length_factor=8,
+                                                              nbootstrap=100)
     optimiser.set_nthreads(1)
 
     optimiser.init_bootstraps(problem)
@@ -176,5 +251,12 @@ def run_grond(rundir, datafolder, eventname, store_id, domain="time_domain"):
     grond.harvest(rundir, problem, force=True)
     #solverscipy.solve(problem, quiet=False, niter_explorative=2000, niter=10000)
     tstop = time.time()
+    #os.system("grond report %s" % rundir)
+    os.system("grond plot fits_waveform %s" % rundir)
+    os.system("grond plot hudson %s" % rundir)
+    os.system("grond plot fits_waveform_ensemble %s" % rundir)
+    os.system("grond plot location_mt %s" % rundir)
+    os.system("grond plot seismic_stations %s" % rundir)
+    os.system("grond plot sequence %s" % rundir)
 
     print("done with grond")

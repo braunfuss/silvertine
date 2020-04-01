@@ -6,3 +6,15 @@ group_refs:
   - default
 - - waveforms
   - default
+- - fits_waveform
+  - default
+- - hudson
+  - default
+- - fits_waveform_ensemble
+  - default
+- - location_mt
+  - default
+- - seismic_stations
+  - default
+- - sequence
+  - default

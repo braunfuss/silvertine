@@ -447,12 +447,15 @@ def command_optimize(args):
     parser, options, args = cl_parse('locate', args, setup)
 
     project_dir = args[0]
-    rundir = "gruns"
+    rundir = project_dir+"grun"
     from silvertine import mechanism
+    from pyrocko import model
+    event = model.load_events(project_dir+"event.txt")[0]
     mechanism.run_grond(rundir,
-                       project_dir,
-                       "scenario",
-                      "landau6")
+                        project_dir,
+                        event.name,
+                        "landau_100hz")
+
 
 def command_monitor(args):
 

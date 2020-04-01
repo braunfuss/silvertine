@@ -119,7 +119,7 @@ def get_scenario(engine, source, store_id, extent=30, ngrid=50,
 
 
 def post_process(response, norths, easts, stf_spec, stations=False,
-                 show=True, savedir=None, save=False):
+                 show=True, savedir=None, save=True):
     nnorth = norths.size
     neast = easts.size
 

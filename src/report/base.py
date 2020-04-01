@@ -34,6 +34,7 @@ class ReportIndexEntry(Object):
     silvertine_version = String.T(optional=True)
     run_info = RunInfo.T(optional=True)
 
+
 class ReportConfig(HasPaths):
     report_base_path = Path.T(default='report')
     entries_sub_path = String.T(
@@ -149,7 +150,12 @@ def report(env, report_config=None, update_without_plotting=True,
     util.ensuredir(plots_dir_out)
     configs_dir = op.join(op.split(__file__)[0], 'app/configs/')
     rundir_path = env.get_rundir_path()
+    try:
+        os.system("cp -r %s/grun/plots/* %s" % (rundir_path, plots_dir_out))
+    except:
+        pass
     os.system("cp %s/plot_collection.yaml %s" % (configs_dir, plots_dir_out))
+
 
     util.ensuredir("%s/shakemap/default/" % (plots_dir_out))
     os.system("cp %s/*shakemap.png %s/shakemap/default/shakemap.default.gf_shakemap.d100.png" % (rundir_path, plots_dir_out))

@@ -222,13 +222,13 @@ def gen_real_stations(tmin=util.stt('2014-01-01 16:10:00.000'),
 
 
 def gen_random_tectonic_event(scenario_id, magmin=1., magmax=3.,
-              depmin=5, depmax=10,
-              latmin=48.9586, latmax=49.3,
-              lonmin=8.1578, lonmax=8.4578,
-              timemin=util.str_to_time('2007-01-01 16:10:00.000'),
-              timemax=util.str_to_time('2020-01-01 16:10:00.000')):
+                              depmin=5, depmax=10,
+                              latmin=48.9586, latmax=49.3,
+                              lonmin=8.1578, lonmax=8.4578,
+                              timemin=util.str_to_time('2007-01-01 16:10:00.000'),
+                              timemax=util.str_to_time('2020-01-01 16:10:00.000')):
 
-    name = "scenario"+scenario_id
+    name = "scenario"+str(scenario_id)
     depth = rand(depmin, depmax)*km
     magnitude = rand(magmin, magmax)
     lat = randlat(latmin, latmax)
@@ -245,13 +245,13 @@ def gen_induced_event(scenario_id, magmin=1., magmax=3.,
                       depmin=5, depmax=10,
                       latmin=48.9586, latmax=49.3,
                       lonmin=8.1578, lonmax=8.4578,
-                      radius_min=0.001, radius_max=0.2,
+                      radius_min=0.01, radius_max=0.2,
                       stress_drop_min=4.e06, stress_drop_max=7e6,
                       velocity=3000.,
                       timemin=util.str_to_time('2007-01-01 16:10:00.000'),
                       timemax=util.str_to_time('2020-01-01 16:10:00.000')):
 
-    name = "scenario"+scenario_id
+    name = "scenario"+str(scenario_id)
     depth = rand(depmin, depmax)*km
     # source time function (STF) based on Brune source model, to get
     # spectra roughly realistic
@@ -276,7 +276,7 @@ def gen_noise_events(targets, synthetics, engine, noise_sources=1, delay=40):
 
     noise_events = []
     for i in range(noise_sources):
-        event = gen_random_tectonic_event(i, magmin=-1.,magmax=0.)
+        event = gen_random_tectonic_event(i, magmin=-1., magmax=0.)
         time = rand(event.time-delay, event.time+delay)
         mt = MomentTensor.random_dc(magnitude=event.magnitude)
         source = DCSource(
@@ -366,6 +366,8 @@ def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,
                             interpolation='multilinear',
                             quantity='displacement',
                             codes=st.nsl() + (cha.name,))
+                    targets.append(target)
+
         else:
             targets = []
             for st in stations:
@@ -383,7 +385,6 @@ def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,
             shakemap_fwd.make_shakemap(engine, source, store_id,
                                        savedir, stations=stations)
         gen_loop = True
-
         response = engine.process(source, targets)
         synthetic_traces = response.pyrocko_traces()
         gen_white_noise(synthetic_traces)

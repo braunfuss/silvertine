@@ -129,6 +129,11 @@ var yaml_type_map = [
     ['!silvertine.PDF', Dummy],
     ['!silvertine.VersionInfo', Dummy],
     ['!silvertine.RunInfo', Dummy],
+    ['!grond.PlotCollection', Dummy],
+    ['!grond.PlotGroup', Dummy],
+    ['!grond.PlotItem', Dummy],
+    ['!grond.PNG', Dummy],
+    ['!grond.PDF', Dummy],
 ];
 
 function make_constructor(type) {
@@ -924,7 +929,7 @@ angular.module('reportApp', ['ngRoute', 'ngSanitize'])
                 return info;
             } else {
                 return {
-                    'title': 'silvertine Reports',
+                    'title': 'seiger Reports',
                     'description': ''
                 };
             }
