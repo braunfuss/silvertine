@@ -169,7 +169,7 @@ def load_shakemap(path):
     f = open(path, 'rb')
     values, easts, norths = pickle.load(f)
     f.close()
-    return values easts, norths
+    return values, easts, norths
 
 
 def plot_shakemap(source, norths, easts, values, filename, folder, stations,
