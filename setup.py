@@ -100,6 +100,7 @@ setup(
         'silvertine',
         'silvertine.apps',
         'silvertine.clustering',
+        'silvertine.detector',
         'silvertine.scenario',
         'silvertine.locate',
         'silvertine.minimum_1d',
@@ -107,12 +108,14 @@ setup(
         'silvertine.plot',
         'silvertine.report',
         'silvertine.shakemap',
+        'silvertine.mechanism',
         'silvertine.monitoring',
         'silvertine.beam_depth',
     ],
     entry_points={
         'console_scripts': [
             'silvertine = silvertine.apps.silvertine:main',
+            'seigerdown = silvertine.apps.seigerdown:main',
         ]
     },
     package_dir={'silvertine': 'src'},
