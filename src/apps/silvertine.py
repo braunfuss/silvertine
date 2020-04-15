@@ -50,6 +50,7 @@ subcommand_descriptions = {
     'beam_process': 'beam_process for a single or a set of earthquakes',
     'events': 'print available event names for given configuration',
     'check': 'check data and configuration',
+    'detect': 'detect',
     'go': 'run silvertine optimisation',
     'forward': 'run forward modelling',
     'harvest': 'manually run harvesting',
@@ -72,6 +73,7 @@ subcommand_usages = {
         'init <example> <projectdir> [options]'),
     'scenario': 'scenario [options] <projectdir>',
     'locate': 'locate [options] <projectdir>',
+    'detect': 'detect [options] <projectdir>',
     'optimize': 'optimize [options] <projectdir>',
     'monitor': 'monitor [options] <projectdir>',
     'events': 'events <configfile>',
@@ -128,6 +130,7 @@ Subcommands:
 
     scenario        %(scenario)s
     locate        %(locate)s
+    detect        %(detect)s
     optimize      %(optimize)s
     monitor        %(monitor)s
     beam        %(beam)s
@@ -436,6 +439,19 @@ def command_locate(args):
                                                           nboot=options.nboot,
                                                           minimum_vel=options.minimum_vel,
                                                           reference=options.reference)
+
+
+
+def command_detect(args):
+
+    def setup(parser):
+        parser.add_option(
+            '--show', dest='show', type=str, default=False,
+            help='Display progress of localisation for each event in browser')
+
+    parser, options, args = cl_parse('locate', args, setup)
+    from silvertine import detector
+    detector.bnn.bnn_detector()
 
 
 def command_optimize(args):

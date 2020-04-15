@@ -123,6 +123,34 @@ def plot_dtrace(axes, tr, space, mi, ma, **kwargs):
         **kwargs)
 
 
+def plot_waveforms_raw(traces, savedir):
+    fig = plt.figure()
+
+    tap_color_annot = (0.35, 0.35, 0.25)
+    tap_color_edge = (0.85, 0.85, 0.80)
+    waveform_color = scolor('aluminium5')
+    misfit_color = scolor('scarletred1')
+    for i, tr in enumerate(traces):
+        comp = tr.channel
+        dtrace = tr
+
+        axes2 = fig.add_subplot(len(traces)/6, len(traces)/6, i+1)
+
+        space = 0.5
+        space_factor = 1.0 + space
+        axes2.set_axis_off()
+        axes2.set_ylim(-1.05 * space_factor, 1.05)
+
+        axes = axes2.twinx()
+        axes.set_axis_off()
+        plot_trace(
+            axes, dtrace,
+            color=waveform_color, lw=0.5, zorder=5)
+    fig.savefig(savedir+"waveforms.png")
+#    plt.show()
+    plt.close()
+    return fig
+
 def plot_waveforms(traces, event, stations, savedir, show=True):
     fig = plt.figure(figsize=plot.mpl_papersize('a4', 'landscape'))
 

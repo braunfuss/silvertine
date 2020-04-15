@@ -123,11 +123,7 @@ def report(env, report_config=None, update_without_plotting=True,
         report_config.set_basepath('.')
 
     event_name = env.get_current_event_name()
-    #problem = env.get_problem()
     logger.info('Creating report entry for run "%s"...' % event_name)
-
-#    optimiser = env.get_optimiser()
-#    optimiser.set_nthreads(nthreads)
 
     fp = report_config.expand_path
     entry_path = expand_template(
@@ -141,9 +137,6 @@ def report(env, report_config=None, update_without_plotting=True,
     if op.exists(entry_path) and not update_without_plotting:
         shutil.rmtree(entry_path)
 
-#    guts.dump(env.get_config(),
-#              filename=op.join(entry_path, 'config.yaml'),
-#              header=True)
 
     util.ensuredir(entry_path)
     plots_dir_out = op.join(entry_path, 'plots')
@@ -200,10 +193,6 @@ def report(env, report_config=None, update_without_plotting=True,
 
     fn = op.join(entry_path, 'index.yaml')
     guts.dump(rie, filename=fn)
-
-
-#        if op.exists(entry_path):
-#            shutil.rmtree(entry_path)
 
     logger.info('Done creating report entry for run "%s".' % "test")
     report_index(report_config)
