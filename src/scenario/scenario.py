@@ -327,7 +327,7 @@ def gen_white_noise(synthetic_traces, scale=2e-8, scale_spectral='False'):
 def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,
                 magmax, depmin, depmax, latmin, latmax, lonmin, lonmax,
                 stations_file, shakemap=True):
-    engine = gf.LocalEngine(store_superdirs=['/home/asteinbe/gf_stores'])
+    engine = gf.LocalEngine(store_superdirs=[gf_store_superdirs])
     for scenario in range(scenarios):
         # TODO couple to ETAS
         choice = num.random.choice(2,1)
@@ -401,8 +401,9 @@ def silvertineScenario(projdir, scenarios=10, modelled_channel_codes='ENZ',
                        latmin=48.9586, latmax=49.3,
                        lonmin=8.1578, lonmax=8.25,
                        stations_file=None, ratio_events=1,
-                       shakemap=True):
+                       shakemap=True, gf_store_superdirs=None):
 
     gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,
                 magmax, depmin, depmax, latmin, latmax, lonmin, lonmax,
-                stations_file, shakemap=True)
+                stations_file, gf_store_superdirs=gf_store_superdirs,
+                shakemap=True)

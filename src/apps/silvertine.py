@@ -675,6 +675,8 @@ def command_scenario(args):
     gf_store_superdirs = None
     if options.gf_store_superdirs:
         gf_store_superdirs = options.gf_store_superdirs.split(',')
+    else:
+        gf_store_superdirs = None
     if options.shakemap is not False:
         options.shakemap = True
     from silvertine import scenario as silvertine_scenario
@@ -684,7 +686,8 @@ def command_scenario(args):
         magmax=options.magmax, latmin=options.latmin, latmax=options.latmax,
         lonmin=options.lonmin, lonmax=options.lonmax, depmin=options.depmin,
         depmax=options.depmax, stations_file=options.stations_file,
-        shakemap=options.shakemap)
+        shakemap=options.shakemap,
+        gf_store_superdirs=options.gf_store_superdirs)
 
 
 def command_init(args):
