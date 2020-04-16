@@ -326,7 +326,7 @@ def gen_white_noise(synthetic_traces, scale=2e-8, scale_spectral='False'):
 
 def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,
                 magmax, depmin, depmax, latmin, latmax, lonmin, lonmax,
-                stations_file, shakemap=True):
+                stations_file, gf_store_superdirs, shakemap=True):
     engine = gf.LocalEngine(store_superdirs=[gf_store_superdirs])
     for scenario in range(scenarios):
         # TODO couple to ETAS
