@@ -330,7 +330,7 @@ def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,
     engine = gf.LocalEngine(store_superdirs=[gf_store_superdirs])
     for scenario in range(scenarios):
         # TODO couple to ETAS
-        choice = num.random.choice(2,1)
+        choice = num.random.choice(2, 1)
         if choice == 0:
             event = gen_random_tectonic_event(scenario, magmin=magmin,
                                               magmax=magmax, depmin=depmin,

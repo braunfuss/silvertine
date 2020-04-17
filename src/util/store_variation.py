@@ -203,3 +203,6 @@ def vary_landau_ensemble():
     landau_mod = landau_layered_model()
     mods_varied = ensemble_earthmodel(landau_mod)
     return mods_varied
+
+def create_gf_store(model, path):
+    pass

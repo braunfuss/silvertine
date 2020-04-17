@@ -151,6 +151,7 @@ def plot_waveforms_raw(traces, savedir):
     plt.close()
     return fig
 
+
 def plot_waveforms(traces, event, stations, savedir, show=True):
     fig = plt.figure(figsize=plot.mpl_papersize('a4', 'landscape'))
 

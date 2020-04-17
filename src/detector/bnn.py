@@ -1,31 +1,33 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-import tensorflow.compat.v1 as tf
-import tensorflow_probability as tfp
-
-from sklearn import datasets
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import confusion_matrix, accuracy_score
-
-from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input, MaxPooling2D, Flatten, Dropout
-tf.disable_eager_execution()
+import os
+from pyrocko.gf import LocalEngine, Target, DCSource, ws
+from pyrocko import trace
+from pyrocko.marker import PhaseMarker
+from silvertine.util.waveform import plot_waveforms_raw
+from pyrocko.gf import LocalEngine, Target, DCSource, ws
+from pyrocko import trace
+from pyrocko.marker import PhaseMarker
+from silvertine import scenario
+from pyrocko import model, cake, orthodrome
+from silvertine.util.ref_mods import landau_layered_model
+from silvertine.locate.locate1D import get_phases_list
+from keras.layers import Input, Embedding, LSTM, Dense
+from keras.models import Model
+import keras
+import numpy as np
+#tf.disable_eager_execution()
+from keras.layers import Conv2D, MaxPooling2D, Input
 from PIL import Image
-
-from keras.datasets import mnist
 import os
 
 from pyrocko.gf import LocalEngine, Target, DCSource, ws
 from pyrocko import trace
 from pyrocko.marker import PhaseMarker
-from silvertine.util.waveform import plot_waveforms_raw
-tfk = tf.keras
-#tf.keras.backend.set_floatx("float64")
-import tensorflow_probability as tfp
-tfd = tfp.distributions
-from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import IsolationForest# Define helper functions.
+def rgb2gray(rgb):
+    return np.dot(rgb[...,:3], [0.2989, 0.5870, 0.1140])
+
 from keras.layers import Input, Embedding, LSTM, Dense
 from keras.models import Model
 import keras
@@ -40,52 +42,42 @@ from pyrocko import trace
 from pyrocko.marker import PhaseMarker
 
 
-def rgb2gray(rgb):
-    return np.dot(rgb[...,:3], [0.2989, 0.5870, 0.1140])
-
-
 def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False):
     data_traces = []
     for traces in waveforms:
-        data_event = []
+        traces_coll = None
         for tr in traces:
             tr.lowpass(4, 13.)
             tr.highpass(4, 0.03)
-            #ff, nn = tr.spectrum()
-        #    img = Image.fromarray(np.asarray([tr.ydata, tr.ydata]), 'RGB')
-        #    img = rgb2gray(np.asarray(img))[0]
-        #    img.reshape((len(tr.ydata)))
-            #ff, nn = tr.spectrum()
-        #    data_event.append(img)
-        #    tr.ydata = tr.ydata/max_traces
-            tr.ydata = np.power(np.abs(tr.ydata), 1./2.)
+            #tr.ydata = tr.ydata/max_traces
+            #tr.ydata = np.power(np.abs(tr.ydata), 1./2.)
+            tr.ydata = tr.ydata/np.max(tr.ydata)
+            nsamples = len(tr.ydata)
+            data = tr.ydata
+            if traces_coll is None:
+                traces_coll = tr.ydata
+            else:
+                traces_coll = np.concatenate((traces_coll, data),  axis=0)
+        nsamples = len(traces_coll)
+        data_traces.append(traces_coll)
 
-            data_event.append(tr.ydata)
-
-        #fig = plot_waveforms_raw(traces, ".")
-        #data_event = fig2data ( fig )
-    #    print(data_event)
-        #print(np.shape(data_event))
-        #img = Image.fromarray(np.asarray(data_event), 'RGB')
-        #img = rgb2gray(np.asarray(data_event))
-        #print(np.shape(img))
-    #    plt.figure()
-    #    plt.imshow(data_event)
-    #    plt.show()
-        #img.reshape((len(data_event)))
-        data_traces.append(np.asarray(data_event))
-
-    data_traces = np.expand_dims(data_traces, axis=3)
-    if events is True:
+    if events is not None:
         if multilabel is True:
-            for i, tr in enumerate(traces):
-                labels.append(i+1)
+            labels = []
+            for i, ev in enumerate(events):
+                print(ev)
+                labels.append([ev.moment_tensor.strike1/360., ev.moment_tensor.dip1/90.])
+            labels = np.asarray(labels)
         else:
             labels = np.ones(len(data_traces), dtype=np.int32)*1
     else:
-        labels = np.ones(len(data_traces), dtype=np.int32)*0
+        if multilabel is True:
+            labels = np.ones((len(data_traces),2), dtype=np.int32)*0
+        else:
+            labels = np.ones(len(data_traces), dtype=np.int32)*0
+    data_traces = np.asarray(data_traces)
 
-    return data_traces, labels, np.shape(data_event)[0], np.shape(data_event)[1]
+    return data_traces, labels, len(data_traces)/nsamples, nsamples
 
 
 def generate_test_data(store_id, nevents=50, noised=False):
@@ -93,6 +85,7 @@ def generate_test_data(store_id, nevents=50, noised=False):
     from pyrocko import model, cake, orthodrome
     from silvertine.util.ref_mods import landau_layered_model
     from silvertine.locate.locate1D import get_phases_list
+    from pyrocko import moment_tensor
     mod = landau_layered_model()
     engine = LocalEngine(store_superdirs=['/home/asteinbe/gf_stores'])
     scale = 2e-14
@@ -102,6 +95,7 @@ def generate_test_data(store_id, nevents=50, noised=False):
     waveforms_noise = []
     stations = model.load_stations("scenarios/stations.raw.txt")
     targets = []
+    events = []
     for st in stations:
         for cha in st.channels:
             target = Target(
@@ -114,6 +108,7 @@ def generate_test_data(store_id, nevents=50, noised=False):
             targets.append(target)
     for i in range(0, nevents):
         try:
+            event = scenario.gen_random_tectonic_event(i, magmin=-1., magmax=3.)
             source_dc = DCSource(
                 lat=scenario.randlat(49., 49.2),
                 lon=scenario.rand(8.1, 8.2),
@@ -121,9 +116,18 @@ def generate_test_data(store_id, nevents=50, noised=False):
                 strike=scenario.rand(0., 360.),
                 dip=scenario.rand(0., 90.),
                 rake=scenario.rand(-180., 180.),
-                magnitude=scenario.rand(0.2, 3))
+                magnitude=scenario.rand(-1., 3.))
             response = engine.process(source_dc, targets)
             traces = response.pyrocko_traces()
+            event.lat = source_dc.lat
+            event.lon = source_dc.lon
+            event.depth = source_dc.depth
+            mt = moment_tensor.MomentTensor(strike=source_dc.strike, dip=source_dc.dip, rake=source_dc.rake,
+                                            magnitude=source_dc.magnitude)
+
+            event.moment_tensor = mt
+
+            events.append(event)
             for tr in traces:
                 for st in stations:
                     if st.station == tr.station:
@@ -149,12 +153,10 @@ def generate_test_data(store_id, nevents=50, noised=False):
                 if noised is True:
                     tr.add(white_noise)
 
-            #    tr.lowpass(4, 0.02)
-        #        tr.highpass(4, 3.)
             waveforms_events.append(traces)
         except:
             pass
-
+    # same number of non-events
     for i in range(0, nevents):
         try:
             source_dc = DCSource(
@@ -185,8 +187,7 @@ def generate_test_data(store_id, nevents=50, noised=False):
                             else:
                                 pass
                 tr.ydata = tr.ydata*0.
-            #    tr.lowpass(4, 0.02)
-        #        tr.highpass(4, 3.)
+
                 nsamples = len(tr.ydata)
                 randdata = np.random.normal(size=nsamples)*scale
                 white_noise = trace.Trace(deltat=tr.deltat, tmin=tr.tmin,
@@ -197,7 +198,7 @@ def generate_test_data(store_id, nevents=50, noised=False):
         except:
             pass
 
-    return waveforms_events, waveforms_noise, nsamples, len(stations)
+    return waveforms_events, waveforms_noise, nsamples, len(stations), events
 
 
 def rgb2gray(rgb):
@@ -209,82 +210,103 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None):
     import _pickle as pickle
 
     try:
-        f = open("data_waveforms_bnn", 'rb')
-        waveforms_events, waveforms_noise, nsamples, nstations = pickle.load(f)
+        f = open("data_waveforms_bnn_gt", 'rb')
+        waveforms_events, waveforms_noise, nsamples, nstations, events = pickle.load(f)
         f.close()
     except:
 
-        waveforms_events, waveforms_noise, nsamples, nstations = generate_test_data("landau6", nevents=2000)
-        f = open("data_waveforms_bnn", 'wb')
-        pickle.dump([waveforms_events, waveforms_noise, nsamples, nstations], f)
+        waveforms_events, waveforms_noise, nsamples, nstations, events = generate_test_data("landau6", nevents=20)
+        f = open("data_waveforms_bnn_gt", 'wb')
+        pickle.dump([waveforms_events, waveforms_noise, nsamples, nstations, events], f)
         f.close()
-
-    nstations = nstations*3
+    ncomponents = 3
+    nstations = nstations*ncomponents
     max_traces = 0.
     for traces in waveforms_events:
         for tr in traces:
             if np.max(tr.ydata) > max_traces:
                 max_traces = np.max(tr.ydata)
-    data_events, labels_events, nstations, nsamples = bnn_detector_data(waveforms_events, max_traces,  events=True)
-    data_noise, labels_noise, nstations, nsamples = bnn_detector_data(waveforms_noise, max_traces, events=False)
-    x_data = np.concatenate((data_events, data_noise), axis=0)
-    y_data = np.concatenate((labels_events, labels_noise), axis= 0)
+    data_events, labels_events, nstations, nsamples = bnn_detector_data(waveforms_events, max_traces, events=events, multilabel=True)
+    data_noise, labels_noise, nstations, nsamples = bnn_detector_data(waveforms_noise, max_traces, events=None, multilabel=True)
 
+    x_data = np.concatenate((data_events, data_noise), axis=0)
+    nlabels = 1
+    dat = x_data
+    y_data = np.concatenate((labels_events, labels_noise), axis= 0)
+    labels = y_data
 
 
 
     print('shape of x_data: ', x_data.shape)
     print('shape of y_data: ', y_data.shape)
 
-    x_train, x_val, y_train, y_val = train_test_split(x_data, y_data,
-                                                      test_size=0.2,
-                                                      stratify=y_data,
-                                                      random_state=10)
+    np.random.seed(42)  # Set a random seed for reproducibility
 
-    np.random.seed(0)  # Set a random seed for reproducibility
-
-    # Headline input: meant to receive sequences of 100 integers, between 1 and 10000.
-    # Note that we can name any layer by passing it a "name" argument.
-    main_input = Input(shape=(300,), dtype='float64', name='main_input')
-
-    # This embedding layer will encode the input sequence
-    # into a sequence of dense 512-dimensional vectors.
-    x = Embedding(output_dim=1, input_dim=720, input_length=300)(main_input)
-
-    # A LSTM will transform the vector sequence into a single vector,
-    # containing information about the entire sequence
-    lstm_out = LSTM(32)(x)
-    auxiliary_output = Dense(1, activation='sigmoid', name='aux_output')(lstm_out)
-
-    auxiliary_input = Input(shape=(1,), name='aux_input')
-    x = keras.layers.concatenate([lstm_out, auxiliary_input])
-
-    # We stack a deep densely-connected network on top
-    x = Dense(64, activation='relu')(x)
-    x = Dense(64, activation='relu')(x)
-    x = Dense(64, activation='relu')(x)
-    #x = Conv2D(64, (5, 5), padding='same', activation='relu')(x)
-
-    #x = MaxPooling2D((3, 3), strides=(1, 1), padding='same')(x)
-
-    # And finally we add the main logistic regression layer
-    main_output = Dense(1, activation='sigmoid', name='main_output')(x)
-
-    model = Model(inputs=[main_input, auxiliary_input], outputs=[main_output, auxiliary_output])
-
-    model.compile(optimizer='rmsprop', loss='binary_crossentropy',
-                  loss_weights=[1., 0.2])
 
     headline_data = dat
-    print(np.shape(headline_data))
-    print(np.shape(labels))
     headline_labels = labels
-    additional_labels = np.ones(len(labels))
+    additional_labels = labels
     additional_data = labels
+    from sklearn.model_selection import train_test_split
 
-    model.fit([headline_data, additional_data], [headline_labels, additional_labels],
-              epochs=5, batch_size=32)
 
-    print(headline_data, additional_data, headline_labels, additional_labels)
 
-    pred = model.predict({'main_input': headline_data, 'aux_input': additional_data})
+    from keras.models import Sequential
+    from keras.layers import Dense, Activation
+
+# For a single-input model with 2 classes (binary classi    fication):
+    model = Sequential()
+    model.add(Dense(32, activation='relu', input_dim=nsamples))
+    model.add(Dense(2, activation='sigmoid'))
+    model.compile(optimizer='rmsprop',
+                  loss='binary_crossentropy',
+                  metrics=['accuracy'])
+
+    # Generate dummy data
+    data = dat
+
+
+    # Train the model, iterating on the data in batches of 32 samples
+    model.fit(data, labels, epochs=10, batch_size=32)
+    pred = model.predict(data)
+
+    bayesian = False
+    if bayesian is True:
+        train, x_val, y_train, y_val = train_test_split(headline_data, headline_labels,
+                                                          test_size=0.2,
+                                                          stratify=y_data,
+                                                          random_state=10)
+
+        num_epochs = 5
+        batchsize = 32
+        num_monte_carlo = 5
+        for epoch in range(num_epochs):
+            epoch_accuracy, epoch_loss = [], []
+            for i in range(len(y_train) // batchsize):
+                batch_x = train[i * batchsize: (i + 1) * batchsize]
+                batch_y = y_train[i * batchsize: (i + 1) * batchsize]
+
+                c = model.fit([batch_x, batch_y], [batch_y, batch_y])
+                print(c1)
+
+                probs = tf.stack([model.predict({'main_input': x_val, 'aux_input': y_val})
+                                  for _ in range(num_monte_carlo)], axis=0)
+                mean_probs = tf.reduce_mean(probs, axis=0)
+                heldout_log_prob = tf.reduce_mean(tf.math.log(mean_probs))
+
+    print(labels, pred)
+
+
+def generate_arrays_from_file(path):
+    while 1:
+        f = open(path)
+        for line in f:
+            # create numpy arrays of input data
+            # and labels, from each line in the file
+            x, y = process_line(line)
+            img = load_images(x)
+            yield (img, y)
+        f.close()
+
+#model.fit_generator(generate_arrays_from_file('/my_file.txt'),
+#        samples_per_epoch=10000, nb_epoch=10)

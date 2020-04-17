@@ -7,8 +7,6 @@ from pyrocko import spit, cake
 from pyrocko.gf import meta
 import sys
 
-
-
 xrange = range
 km = 1000.
 class GridElem(object):
