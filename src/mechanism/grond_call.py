@@ -44,7 +44,7 @@ def run_grond(rundir, datafolder, eventname, store_id, domain="time_domain"):
     ds.add_responses(stationxml_filenames=['%s/stations.xml' % datafolder])
 
     ds._event_name = eventname
-
+    print(eventname)
     ds.add_blacklist([])
     ds.empty_cache()
 
@@ -203,14 +203,16 @@ def run_grond(rundir, datafolder, eventname, store_id, domain="time_domain"):
 
     from grond import config
     from grond import Environment
+
     config_path = '%s/scenario.gronf' % datafolder
     quick_config_path = '%sconfig/config.yaml' % datafolder
     util.ensuredir("%sconfig" % datafolder)
-
+    configs_dir = os.path.dirname(os.path.abspath(__file__))+"/configs"
+    os.system("cp -r %s/config.yaml* %s" % (configs_dir, quick_config_path))
     from grond.config import read_config
-    conf = read_config(config_path)
-    uniform_iter = 10000
-    directed_iter = 50000
+    conf = read_config(quick_config_path)
+    uniform_iter = 1000
+    directed_iter = 500
     mod_conf = conf.clone()
     mod_conf.set_elements(
         'path_prefix', ".")
@@ -258,5 +260,5 @@ def run_grond(rundir, datafolder, eventname, store_id, domain="time_domain"):
     os.system("grond plot location_mt %s" % rundir)
     os.system("grond plot seismic_stations %s" % rundir)
     os.system("grond plot sequence %s" % rundir)
-
+    ds.empty_cache()
     print("done with grond")

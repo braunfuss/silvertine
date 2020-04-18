@@ -132,7 +132,7 @@ def report(env, report_config=None, update_without_plotting=True,
             report_config.entries_sub_path),
         dict(
             event_name=event_name,
-            problem_name="test"))
+            problem_name=event_name))
 
     if op.exists(entry_path) and not update_without_plotting:
         shutil.rmtree(entry_path)
@@ -179,7 +179,7 @@ def report(env, report_config=None, update_without_plotting=True,
 
     rie = ReportIndexEntry(
         path='.',
-        problem_name="test",
+        problem_name=event_name,
         silvertine_version="0.01",
         run_info=run_info)
 

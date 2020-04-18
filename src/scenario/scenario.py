@@ -267,7 +267,7 @@ def gen_induced_event(scenario_id, magmin=1., magmax=3.,
     event = model.Event(name=name, lat=lat, lon=lon,
                         magnitude=magnitude, depth=depth,
                         time=time, duration=duration,
-                        tags=[str(stress_drop)])
+                        tags=["stress"+str(stress_drop)])
 
     return event
 
@@ -327,7 +327,10 @@ def gen_white_noise(synthetic_traces, scale=2e-8, scale_spectral='False'):
 def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,
                 magmax, depmin, depmax, latmin, latmax, lonmin, lonmax,
                 stations_file, gf_store_superdirs, shakemap=True):
-    engine = gf.LocalEngine(store_superdirs=[gf_store_superdirs])
+    if gf_store_superdirs is None:
+        engine = gf.LocalEngine(use_config=True)
+    else:
+        engine = gf.LocalEngine(store_superdirs=[gf_store_superdirs])
     for scenario in range(scenarios):
         # TODO couple to ETAS
         choice = num.random.choice(2, 1)

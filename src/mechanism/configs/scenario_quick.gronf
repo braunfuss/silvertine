@@ -1,0 +1,133 @@
+%YAML 1.1
+# Grond configuration file, version 1.3.1
+--- !grond.Config
+path_prefix: ../..
+rundir_template: runs/${problem_name}.grun
+dataset_config: !grond.DatasetConfig
+  stations_stationxml_paths:
+  - stations.xml
+  events_path: event.txt
+  waveform_paths:
+  - .
+  responses_stationxml_paths:
+  - stations.xml
+  extend_incomplete: false
+  picks_paths: []
+  blacklist_paths: []
+  blacklist: []
+  whitelist_paths: []
+target_groups:
+- !grond.WaveformTargetGroup
+  normalisation_family: td
+  path: td.2
+  weight: 1.0
+  interpolation: nearest_neighbor
+  store_id: landau6
+  distance_min: 600.0
+  distance_max: 1000000.0
+  exclude: []
+  channels:
+  - Z
+  misfit_config: !grond.WaveformMisfitConfig
+    quantity: displacement
+    fmin: 1.0
+    fmax: 20.0
+    ffactor: 1.0
+    tmin: '{stored:begin}'
+    tmax: '{stored:begin}+3'
+    domain: time_domain
+    norm_exponent: 1
+    tautoshift_max: 0.5
+    autoshift_penalty_max: 0.05
+- !grond.WaveformTargetGroup
+  normalisation_family: td
+  path: td.1
+  weight: 1.0
+  interpolation: nearest_neighbor
+  store_id: landau6
+  distance_min: 600.0
+  distance_max: 1000000.0
+  exclude: []
+  channels:
+  - R
+  misfit_config: !grond.WaveformMisfitConfig
+    quantity: displacement
+    fmin: 1.0
+    fmax: 20.0
+    ffactor: 1.0
+    tmin: '{stored:begin}'
+    tmax: '{stored:begin}+3'
+    domain: time_domain
+    norm_exponent: 1
+    tautoshift_max: 0.5
+    autoshift_penalty_max: 0.05
+- !grond.WaveformTargetGroup
+  normalisation_family: td
+  path: td.3
+  weight: 1.0
+  interpolation: nearest_neighbor
+  store_id: landau6
+  distance_min: 600.0
+  distance_max: 1000000.0
+  exclude: []
+  channels:
+  - T
+  misfit_config: !grond.WaveformMisfitConfig
+    quantity: displacement
+    fmin: 1.0
+    fmax: 20.0
+    ffactor: 1.0
+    tmin: '{stored:begin}'
+    tmax: '{stored:begin}+3'
+    domain: time_domain
+    norm_exponent: 1
+    tautoshift_max: 0.5
+    autoshift_penalty_max: 0.05
+problem_config: !grond.CMTProblemConfig
+  name_template: ${event_name}_insh_small_1
+  norm_exponent: 1
+  ranges:
+    depth: 400 .. 3000
+    duration: 0 .. 0.5
+    east_shift: -1500 .. 1500
+    magnitude: 1.1 .. 1.8
+    north_shift: -1500 .. 1500
+    rmdd: -1.41421 .. 1.41421
+    rmed: -1 .. 1
+    rmee: -1.41421 .. 1.41421
+    rmnd: -1 .. 1
+    rmne: -1 .. 1
+    rmnn: -1.41421 .. 1.41421
+    time: 0 .. 2 | add
+  distance_min: 600.0
+  mt_type: deviatoric
+  stf_type: HalfSinusoidSTF
+  nthreads: 1
+analyser_configs:
+- !grond.TargetBalancingAnalyserConfig
+  niterations: 100
+  use_reference_magnitude: false
+optimiser_config: !grond.HighScoreOptimiserConfig
+  sampler_phases:
+  - !grond.UniformSamplerPhase
+    niterations: 100
+    ntries_preconstrain_limit: 1000
+  - !grond.DirectedSamplerPhase
+    niterations: 100
+    ntries_preconstrain_limit: 1000
+    scatter_scale_begin: 2.0
+    scatter_scale_end: 0.2
+    starting_point: excentricity_compensated
+    sampler_distribution: normal
+    standard_deviation_estimator: median_density_single_chain
+    ntries_sample_limit: 1000
+  chain_length_factor: 8.0
+  nbootstrap: 5
+engine_config: !grond.EngineConfig
+  gf_stores_from_pyrocko_config: true
+  gf_store_superdirs:
+  - gf_stores
+  gf_store_dirs: []
+event_names:
+- scenario0
+event_names_exclude: []

@@ -256,7 +256,9 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None):
 
 # For a single-input model with 2 classes (binary classi    fication):
     model = Sequential()
-    model.add(Dense(32, activation='relu', input_dim=nsamples))
+    model.add(Dense(64, activation='relu', input_dim=nsamples))
+    model.add(Dense(64, activation='relu', input_dim=nsamples))
+    model.add(Dense(64, activation='relu', input_dim=nsamples))
     model.add(Dense(2, activation='sigmoid'))
     model.compile(optimizer='rmsprop',
                   loss='binary_crossentropy',

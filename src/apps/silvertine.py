@@ -460,17 +460,40 @@ def command_optimize(args):
         parser.add_option(
             '--show', dest='show', type=str, default=False,
             help='Display progress of localisation for each event in browser')
-    parser, options, args = cl_parse('locate', args, setup)
-
-    project_dir = args[0]
-    rundir = project_dir+"grun"
+        parser.add_option(
+            '--all', dest='all', type=str, default=False,
+            help='Optimize all in folder')
     from silvertine import mechanism
     from pyrocko import model
-    event = model.load_events(project_dir+"event.txt")[0]
-    mechanism.run_grond(rundir,
-                        project_dir,
-                        event.name,
-                        "landau_100hz")
+    parser, options, args = cl_parse('locate', args, setup)
+    if options.all is False:
+        project_dir = args[0]
+        rundir = project_dir+"grun"
+
+        event = model.load_events(project_dir+"event.txt")[0]
+        mechanism.run_grond(rundir,
+                            project_dir,
+                            event.name,
+                            "landau_100hz")
+    else:
+        from pathlib import Path
+        pathlist = Path(args[0]).glob('scenario*/')
+        for path in sorted(pathlist):
+            project_dir = str(path)+"/"
+            rundir = project_dir+"grun"
+    #        try:
+                # event.txt for real data?
+        #    try:
+            event = model.load_events(project_dir+"event.txt")[0]
+            eventname = event.name
+        #    except:
+        #        eventname = project_dir
+            mechanism.run_grond(rundir,
+                                project_dir,
+                                eventname,
+                                "landau_100hz")
+    #        except:
+    #            pass
 
 
 def command_monitor(args):
@@ -479,7 +502,7 @@ def command_monitor(args):
         parser.add_option(
             '--show', dest='show', type=str, default=False,
             help='Display progress of localisation for each event in browser')
-    parser, options, args = cl_parse('locate', args, setup)
+    parser, options, args = cl_parse('monitor', args, setup)
 
     from silvertine.monitoring import stream
     stream.live_steam()
@@ -1442,26 +1465,28 @@ def command_report(args):
         args = []
 
     entries_generated = False
-
     payload = []
-    if args and all(op.isdir(rundir) for rundir in args):
-        rundirs = args
-        all_failed = True
-        for rundir in rundirs:
-            payload.append((
-                [rundir], None, conf, options.update_without_plotting,
-                options.nthreads))
+    all = True
+    try:
+        if all is True:
+            from pathlib import Path
+            pathlist = Path(args[0]).glob('scenario*/')
+            for path in sorted(pathlist):
+                    rundir = str(path)+"/"
+                    payload.append((
+                        [rundir], None, conf, options.update_without_plotting,
+                        options.nthreads))
+        if all is False and open is False:
+            if args and all(op.isdir(rundir) for rundir in args):
+                rundirs = args
+                all_failed = True
+                for rundir in rundirs:
+                    payload.append((
+                        [rundir], None, conf, options.update_without_plotting,
+                        options.nthreads))
+    except:
+        pass
 
-    elif args:
-        try:
-            env = Environment(args)
-            for event_name in env.get_selected_event_names():
-                payload.append((
-                    args, event_name, conf, options.update_without_plotting,
-                    options.nthreads))
-
-        except silvertine.silvertineError as e:
-            die(str(e))
 
     if payload:
         entries_generated = []

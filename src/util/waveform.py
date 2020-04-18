@@ -152,7 +152,7 @@ def plot_waveforms_raw(traces, savedir):
     return fig
 
 
-def plot_waveforms(traces, event, stations, savedir, show=True):
+def plot_waveforms(traces, event, stations, savedir, show=False):
     fig = plt.figure(figsize=plot.mpl_papersize('a4', 'landscape'))
 
     tap_color_annot = (0.35, 0.35, 0.25)
