@@ -441,17 +441,20 @@ def command_locate(args):
                                                           reference=options.reference)
 
 
-
 def command_detect(args):
 
     def setup(parser):
         parser.add_option(
             '--show', dest='show', type=str, default=False,
             help='Display progress of localisation for each event in browser')
+        parser.add_option(
+            '--bnn', dest='bnn', type=str, default=True,
+            help='Use BNN')
 
-    parser, options, args = cl_parse('locate', args, setup)
+    parser, options, args = cl_parse('detector', args, setup)
     from silvertine import detector
-    detector.bnn.bnn_detector()
+    if options.bnn is True:
+        detector.bnn.bnn_detector()
 
 
 def command_optimize(args):
@@ -481,19 +484,20 @@ def command_optimize(args):
         for path in sorted(pathlist):
             project_dir = str(path)+"/"
             rundir = project_dir+"grun"
-    #        try:
+            try:
                 # event.txt for real data?
-        #    try:
-            event = model.load_events(project_dir+"event.txt")[0]
-            eventname = event.name
-        #    except:
-        #        eventname = project_dir
-            mechanism.run_grond(rundir,
-                                project_dir,
-                                eventname,
-                                "landau_100hz")
-    #        except:
-    #            pass
+                try:
+                    event = model.load_events(project_dir+"event.txt")[0]
+                    eventname = event.name
+                except:
+                    eventname = project_dir
+
+                mechanism.run_grond(rundir,
+                                    project_dir,
+                                    eventname,
+                                    "landau_100hz")
+            except:
+                pass
 
 
 def command_monitor(args):

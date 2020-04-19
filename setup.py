@@ -128,6 +128,7 @@ setup(
             'report/app/css/*.css',
             'report/app/js/*.js',
             'report/app/configs/*.yaml',
+            'mechanism/configs/*.yaml',
 
             'data/snippets/*.gronf',
             'data/snippets/*.md',

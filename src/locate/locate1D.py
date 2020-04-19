@@ -857,6 +857,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
     else:
         pertubed_mods = [mod]
 
+    meta_results = []
     for kmod, mod in enumerate(pertubed_mods):
 
         result_sources = []
@@ -1126,17 +1127,25 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
 
         if parallel is not True:
             model.dump_events(result_events, scenario_folder+"/result_events_%s.pf" % str(kmod))
-    for i, event in enumerate(result_events):
-        savedir = scenario_folder + '/scenario_' + str(i) + '/'
+        meta_results.append(result_events)
+        nevents = len(result_events)
+    nevent = 0
+    for k in range(0, nevents):
+        if scenario is True:
+            savedir = scenario_folder + '/scenario_' + str(i) + '/'
+        if scenario is False and singular is True:
+            savedir = data_folder + "/event_%s_%s" %(kmod, i) + "/"
         plot.mpl_init()
         fig = plt.figure(figsize=plot.mpl_papersize('a5', 'landscape'))
         axes = fig.add_subplot(1, 1, 1, aspect=1.0)
         axes.set_xlabel('Lat')
         axes.set_ylabel('Lon')
-        axes.scatter(source.lat, source.lon)
+        for i, result_events in enumerate(meta_results):
+            source = result_events[k]
+            axes.scatter(source.lat, source.lon)
         stations = pyrocko_stations[0]
         for st in stations:
-            axes.scatter(st.lat, st.lon,)
+            axes.scatter(st.lat, st.lon, "k")
             axes.text(st.lat, st.lon, str(st.station))
         fig.savefig(savedir+'location.png')
         plt.close()

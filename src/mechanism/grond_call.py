@@ -211,8 +211,8 @@ def run_grond(rundir, datafolder, eventname, store_id, domain="time_domain"):
     os.system("cp -r %s/config.yaml* %s" % (configs_dir, quick_config_path))
     from grond.config import read_config
     conf = read_config(quick_config_path)
-    uniform_iter = 1000
-    directed_iter = 500
+    uniform_iter = 10000
+    directed_iter = 50000
     mod_conf = conf.clone()
     mod_conf.set_elements(
         'path_prefix', ".")
