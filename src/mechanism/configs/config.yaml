@@ -1,7 +1,7 @@
 %YAML 1.1
 # Grond configuration file, version 1.3.1
 --- !grond.Config
-path_prefix: .
+path_prefix: ../.
 rundir_template: runs/${problem_name}.grun
 dataset_config: !grond.DatasetConfig
   stations_stationxml_paths:
@@ -87,10 +87,10 @@ problem_config: !grond.CMTProblemConfig
   name_template: ${event_name}_insh_small_1
   norm_exponent: 1
   ranges:
-    depth: 400 .. 3000
+    depth: 400 .. 15000
     duration: 0 .. 0.5
     east_shift: -1500 .. 1500
-    magnitude: 1.1 .. 1.8
+    magnitude: 1. .. 3
     north_shift: -1500 .. 1500
     rmdd: -1.41421 .. 1.41421
     rmed: -1 .. 1
@@ -98,7 +98,7 @@ problem_config: !grond.CMTProblemConfig
     rmnd: -1 .. 1
     rmne: -1 .. 1
     rmnn: -1.41421 .. 1.41421
-    time: 0 .. 2 | add
+    time: 0.1 .. 0.1 | add
   distance_min: 600.0
   mt_type: deviatoric
   stf_type: HalfSinusoidSTF

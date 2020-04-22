@@ -851,8 +851,8 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
     if nboot > 1:
         pertubed_mods = store_variation.ensemble_earthmodel(mod,
                                                             num_vary=nboot,
-                                                            error_depth=0.1,
-                                                            error_velocities=0.1,
+                                                            error_depth=0.2,
+                                                            error_velocities=0.2,
                                                             depth_limit_variation=600)
     else:
         pertubed_mods = [mod]
@@ -1126,16 +1126,27 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                             result_events.append(event)
 
         if parallel is not True:
-            model.dump_events(result_events, scenario_folder+"/result_events_%s.pf" % str(kmod))
+            if scenario is True:
+                model.dump_events(result_events, scenario_folder+"/result_events_%s.pf" % str(kmod))
+            else:
+                savedir = data_folder + "/event_%s" %(i) + "/"
+                util.ensuredir(savedir)
+                model.dump_events(result_events, scenario_folder+"/result_events_%s.pf" % str(kmod))
+
         meta_results.append(result_events)
         nevents = len(result_events)
     nevent = 0
+
+
     for k in range(0, nevents):
+
         if scenario is True:
-            savedir = scenario_folder + '/scenario_' + str(i) + '/'
+            savedir = scenario_folder + '/scenario_' + str(k) + '/'
         if scenario is False and singular is True:
-            savedir = data_folder + "/event_%s_%s" %(kmod, i) + "/"
-        plot.mpl_init()
+            savedir = data_folder + "/event_%s" %(k) + "/"
+            util.ensuredir(savedir)
+
+        #plot.mpl_init()
         fig = plt.figure(figsize=plot.mpl_papersize('a5', 'landscape'))
         axes = fig.add_subplot(1, 1, 1, aspect=1.0)
         axes.set_xlabel('Lat')
@@ -1145,7 +1156,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
             axes.scatter(source.lat, source.lon)
         stations = pyrocko_stations[0]
         for st in stations:
-            axes.scatter(st.lat, st.lon, "k")
+            axes.scatter(st.lat, st.lon, c="k")
             axes.text(st.lat, st.lon, str(st.station))
         fig.savefig(savedir+'location.png')
         plt.close()

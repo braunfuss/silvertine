@@ -451,7 +451,7 @@ def command_detect(args):
             '--bnn', dest='bnn', type=str, default=True,
             help='Use BNN')
 
-    parser, options, args = cl_parse('detector', args, setup)
+    parser, options, args = cl_parse('detect', args, setup)
     from silvertine import detector
     if options.bnn is True:
         detector.bnn.bnn_detector()
@@ -493,9 +493,9 @@ def command_optimize(args):
                     eventname = project_dir
 
                 mechanism.run_grond(rundir,
-                                    project_dir,
-                                    eventname,
-                                    "landau_100hz")
+                                        project_dir,
+                                        eventname,
+                                         "landau_100hz")
             except:
                 pass
 
@@ -660,25 +660,25 @@ def command_scenario(args):
             '--nevents', dest='scenarios', type=int, default=10,
             help='number of events to create (default: %default)')
         parser.add_option(
-            '--latmin', dest='latmin', type=float, default=48.9586,
+            '--latmin', dest='latmin', type=float, default=49.09586,
             help='min latitude of the scenario (default: %default)')
         parser.add_option(
-            '--latmax', dest='latmax', type=float, default=49.3,
+            '--latmax', dest='latmax', type=float, default=49.25,
             help='max latitude of the scenario (default: %default)')
         parser.add_option(
-            '--lonmin', dest='lonmin', type=float, default=8.1578,
+            '--lonmin', dest='lonmin', type=float, default=8.0578,
             help='min longititude of the scenario (default: %default)')
         parser.add_option(
-            '--lonmax', dest='lonmax', type=float, default=8.4578,
+            '--lonmax', dest='lonmax', type=float, default=8.2078,
             help='max longititude of the scenario (default: %default)')
         parser.add_option(
-            '--depth_min', dest='depmin', type=int, default=5,
+            '--depth_min', dest='depmin', type=int, default=3,
             help='minimum depth (default: %default)')
         parser.add_option(
             '--depth_max', dest='depmax', type=int, default=10,
             help='maximum depth (default: %default)')
         parser.add_option(
-            '--mag_min', dest='magmin', type=int, default=1,
+            '--mag_min', dest='magmin', type=int, default=0.1,
             help='minimum depth (default: %default)')
         parser.add_option(
             '--mag_max', dest='magmax', type=int, default=3,

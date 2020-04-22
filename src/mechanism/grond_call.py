@@ -51,10 +51,10 @@ def run_grond(rundir, datafolder, eventname, store_id, domain="time_domain"):
     quantity = 'displacement'
     group = 'all'
     tmin = '{stored:begin}'
-    tmax = '{stored:begin}+3'
-    fmin = 1.
-    fmax = 20.
-    ffactor = 1
+    tmax = '{stored:begin}+0.5'
+    fmin = 1
+    fmax = 13.
+    ffactor = 1.
     engine = gf.LocalEngine(store_superdirs=['/home/asteinbe/gf_stores'])
     gf_interpolation = 'nearest_neighbor'
     imc_Z = grond.WaveformMisfitConfig(
@@ -159,15 +159,17 @@ def run_grond(rundir, datafolder, eventname, store_id, domain="time_domain"):
     base_source = gf.MTSource.from_pyrocko_event(event)
     stf_type = 'HalfSinusoidSTF'
     base_source.set_origin(event_origin.lat, event_origin.lon)
+    base_source.set_depth = event_origin.depth
     stf = STFType.base_stf(stf_type)
     stf.duration = event.duration or 0.0
     base_source.stf = stf
+    print(base_source)
     ranges = dict(
         time=gf.Range(-0.1, 0.1, relative='add'),
         north_shift=gf.Range(-1*km, 1*km),
         east_shift=gf.Range(-1*km, 1*km),
-        depth=gf.Range(400, 12000),
-        magnitude=gf.Range(-1.0, 3.1),
+        depth=gf.Range(3400, 12000),
+        magnitude=gf.Range(1.7, 3.1),
         duration=gf.Range(0., 0.2),
         rmnn=gf.Range(-1.4, 1.4),
         rmee=gf.Range(-1.4, 1.4),
@@ -186,7 +188,6 @@ def run_grond(rundir, datafolder, eventname, store_id, domain="time_domain"):
         norm_exponent=1,
         stf_type=stf_type,
         )
-
     problem.set_engine(engine)
     monitor = GrondMonitor.watch(rundir)
     print("analysing")
@@ -211,11 +212,12 @@ def run_grond(rundir, datafolder, eventname, store_id, domain="time_domain"):
     os.system("cp -r %s/config.yaml* %s" % (configs_dir, quick_config_path))
     from grond.config import read_config
     conf = read_config(quick_config_path)
-    uniform_iter = 10000
-    directed_iter = 50000
+    uniform_iter = 2000
+    directed_iter = 50
     mod_conf = conf.clone()
-    mod_conf.set_elements(
-        'path_prefix', ".")
+#    mod_conf.set_elements(
+#        'path_prefix', ".")
+
     mod_conf.set_elements(
         'analyser_configs[:].niterations', analyser_iter)
     mod_conf.set_elements(
@@ -237,6 +239,7 @@ def run_grond(rundir, datafolder, eventname, store_id, domain="time_domain"):
     mod_conf.set_elements(
         'target_groups[:].misfit_config.ffactor', "%s" % ffactor)
     mod_conf.set_basepath(conf.get_basepath())
+
     config.write_config(mod_conf, quick_config_path)
     config.write_config(mod_conf, rundir+"/config.yaml")
 

@@ -89,7 +89,7 @@ def get_scenario(engine, source, store_id, extent=30, ngrid=50,
         norths = []
         easts = []
         # here maybe use common ne frame?
-        for i, st in enumerate(stations):#
+        for i, st in enumerate(stations):
             north, east = orthodrome.latlon_to_ne_numpy(
                 lat,
                 lon,
