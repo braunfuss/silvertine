@@ -34,7 +34,7 @@ target_groups:
     fmax: 13.0
     ffactor: 1.0
     tmin: '{stored:begin}+0.1'
-    tmax: '{stored:begin}+2.5'
+    tmax: '{stored:begin}+1.'
     domain: time_domain
     norm_exponent: 1
     tautoshift_max: 0.5
@@ -56,7 +56,7 @@ target_groups:
     fmax: 13.0
     ffactor: 1.0
     tmin: '{stored:begin}+0.1'
-    tmax: '{stored:begin}+2.5'
+    tmax: '{stored:begin}+1.'
     domain: time_domain
     norm_exponent: 1
     tautoshift_max: 0.5
@@ -78,12 +78,12 @@ target_groups:
     fmax: 13.0
     ffactor: 1.0
     tmin: '{stored:begin}+0.1'
-    tmax: '{stored:begin}+2.5'
+    tmax: '{stored:begin}+1.'
     domain: time_domain
     norm_exponent: 1
     tautoshift_max: 0.5
     autoshift_penalty_max: 0.05
-problem_config: !grond.CMTProblemConfig
+problem_config: !grond.VLVDProblemConfig
   name_template: ${event_name}_insh_small_1
   norm_exponent: 1
   ranges:
@@ -92,16 +92,13 @@ problem_config: !grond.CMTProblemConfig
     east_shift: -1500 .. 1500
     magnitude: -1 .. 3
     north_shift: -1500 .. 1500
-    rmdd: -1.41421 .. 1.41421
-    rmed: -1 .. 1
-    rmee: -1.41421 .. 1.41421
-    rmnd: -1 .. 1
-    rmne: -1 .. 1
-    rmnn: -1.41421 .. 1.41421
-    time: 0.1 .. 0.1 | add
+    volume_change: '0.1 .. 100000.'
+    dip: '0. .. 90.'
+    azimuth: '0. .. 360.'
+    clvd_moment: '1. .. 1e13'
+    duration: '0.01 .. 0.3'
+    time: -0.1 .. 0.1 | add
   distance_min: 600.0
-  mt_type: deviatoric
-  stf_type: HalfSinusoidSTF
   nthreads: 1
 analyser_configs:
 - !grond.TargetBalancingAnalyserConfig

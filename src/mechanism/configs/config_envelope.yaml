@@ -34,8 +34,8 @@ target_groups:
     fmax: 13.0
     ffactor: 1.0
     tmin: '{stored:begin}+0.1'
-    tmax: '{stored:begin}+2.5'
-    domain: time_domain
+    tmax: '{stored:begin}+1.5'
+    domain: envelope
     norm_exponent: 1
     tautoshift_max: 0.5
     autoshift_penalty_max: 0.05
@@ -56,8 +56,8 @@ target_groups:
     fmax: 13.0
     ffactor: 1.0
     tmin: '{stored:begin}+0.1'
-    tmax: '{stored:begin}+2.5'
-    domain: time_domain
+    tmax: '{stored:begin}+1.5'
+    domain: envelope
     norm_exponent: 1
     tautoshift_max: 0.5
     autoshift_penalty_max: 0.05
@@ -78,8 +78,8 @@ target_groups:
     fmax: 13.0
     ffactor: 1.0
     tmin: '{stored:begin}+0.1'
-    tmax: '{stored:begin}+2.5'
-    domain: time_domain
+    tmax: '{stored:begin}+1.5'
+    domain: envelope
     norm_exponent: 1
     tautoshift_max: 0.5
     autoshift_penalty_max: 0.05

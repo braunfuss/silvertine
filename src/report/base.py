@@ -162,44 +162,47 @@ def report(env, report_config=None, update_without_plotting=True,
     os.system("cp %s/waveforms.png %s/waveforms/default/waveforms.default.waveforms.d100.png" % (rundir_path, plots_dir_out))
     os.system("cp %s/waveforms.default.plot_group.yaml %s/waveforms/default/" % (configs_dir, plots_dir_out))
 
-    event = model.load_events(rundir_path+"event.txt")[0]
-    guts.dump(event, filename=op.join(entry_path, 'event.reference.yaml'))
-
-    from silvertine import plot
-    pcc = report_config.plot_config_collection.get_weeded(env)
-    plot.make_plots(
-        env,
-        plots_path=op.join(entry_path, 'plots'),
-        plot_config_collection=pcc)
-
     try:
-        run_info = env.get_run_info()
-    except environment.NoRundirAvailable:
-        run_info = None
 
-    rie = ReportIndexEntry(
-        path='.',
-        problem_name=event_name,
-        silvertine_version="0.01",
-        run_info=run_info)
+        event = model.load_events(rundir_path+"event.txt")[0]
+        guts.dump(event, filename=op.join(entry_path, 'event.reference.yaml'))
 
-    fn = op.join(entry_path, 'event.reference.yaml')
-    if op.exists(fn):
-        rie.event_best = guts.load(filename=fn)
+        from silvertine import plot
+        pcc = report_config.plot_config_collection.get_weeded(env)
+        plot.make_plots(
+            env,
+            plots_path=op.join(entry_path, 'plots'),
+            plot_config_collection=pcc)
 
-    fn = op.join(entry_path, 'event.reference.yaml')
-    if op.exists(fn):
-        rie.event_reference = guts.load(filename=fn)
+        try:
+            run_info = env.get_run_info()
+        except environment.NoRundirAvailable:
+            run_info = None
 
-    fn = op.join(entry_path, 'index.yaml')
-    guts.dump(rie, filename=fn)
+        rie = ReportIndexEntry(
+            path='.',
+            problem_name=event_name,
+            silvertine_version="0.01",
+            run_info=run_info)
 
-    logger.info('Done creating report entry for run "%s".' % "test")
-    report_index(report_config)
+        fn = op.join(entry_path, 'event.reference.yaml')
+        if op.exists(fn):
+            rie.event_best = guts.load(filename=fn)
 
-    if make_archive:
-        report_archive(report_config)
+        fn = op.join(entry_path, 'event.reference.yaml')
+        if op.exists(fn):
+            rie.event_reference = guts.load(filename=fn)
 
+        fn = op.join(entry_path, 'index.yaml')
+        guts.dump(rie, filename=fn)
+
+        logger.info('Done creating report entry for run "%s".' % "test")
+    #    report_index(report_config)
+
+    #    if make_archive:
+    #        report_archive(report_config)
+    except FileNotFoundError:
+        pass
 
 def report_index(report_config=None):
     if report_config is None:

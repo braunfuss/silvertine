@@ -2,10 +2,10 @@ import copy
 import numpy as num
 from .ref_mods import *
 km = 1000.
+from pyrocko.plot import cake_plot as plot
 
-
-def ensemble_earthmodel(ref_earthmod, num_vary=10, error_depth=0.1,
-                        error_velocities=0.1, depth_limit_variation=600):
+def ensemble_earthmodel(ref_earthmod, num_vary=10, error_depth=0.4,
+                        error_velocities=0.2, depth_limit_variation=600):
     """
     Create ensemble of earthmodels that vary around a given input earth model
     by a Gaussian of 2 sigma (in Percent 0.1 = 10%) for the depth layers
@@ -37,7 +37,7 @@ def ensemble_earthmodel(ref_earthmod, num_vary=10, error_depth=0.1,
             depth_limit_variation)
 
         if cost > 20:
-            logger.debug('Skipped unlikely model %f' % cost)
+            print('Skipped unlikely model %f' % cost)
         else:
             i += 1
             earthmods.append(new_model)
@@ -46,7 +46,7 @@ def ensemble_earthmodel(ref_earthmod, num_vary=10, error_depth=0.1,
 
 
 def vary_model(
-        earthmod, error_depth=0.1, error_velocities=0.1,
+        earthmod, error_depth=0.4, error_velocities=0.4,
         depth_limit_variation=600):
     """
     Vary depths and velocities in the given source model by Gaussians with
@@ -117,7 +117,7 @@ def vary_model(
             for l_depth, vel_unc in mantle_vel_unc.items():
                 if float(l_depth) * km < layer.ztop:
                     error_velocities = vel_unc
-                    logger.debug('Velocity error: %f ', error_velocities)
+                    print('Velocity error: %f ', error_velocities)
 
             deltavp = float(
                 num.random.normal(
@@ -145,7 +145,7 @@ def vary_model(
                     layer.mtop.vp += deltavp
                     layer.mtop.vs += (deltavp / layer.mtop.vp_vs_ratio())
 
-                    if isinstance(layer, GradientLayer):
+                    if isinstance(layer, cake.GradientLayer):
                         layer.mbot.vp += deltavp
                         layer.mbot.vs += (deltavp / layer.mbot.vp_vs_ratio())
                     repeat = 0
@@ -204,5 +204,19 @@ def vary_landau_ensemble():
     mods_varied = ensemble_earthmodel(landau_mod)
     return mods_varied
 
+
+def vary_vsp_ensemble():
+    vsp_mod = vsp_layered_model()
+    mods_varied = ensemble_earthmodel(vsp_mod)
+    return mods_varied
+
+
 def create_gf_store(model, path):
     pass
+
+
+def save_varied_models():
+    mods = vary_vsp_ensemble()
+    for i, mod in enumerate(mods):
+        #plot.my_model_plot(mod)
+        cake.write_nd_model(mod, "scenarios/minimum_1d_models/model_%s" % i)

@@ -6,7 +6,7 @@ import os.path as op
 from pyrocko.moment_tensor import MomentTensor
 
 from pyrocko import util, model, io, trace, config
-from pyrocko.gf import Target, DCSource, RectangularSource, PorePressureLineSource, PorePressurePointSource, VLVDSource, MTSource
+from pyrocko.gf import Target, DCSource, RectangularSource, PorePressureLineSource, PorePressurePointSource, VLVDSource, MTSource, ExplosionSource
 from pyrocko import gf
 from pyrocko.fdsn import ws
 from pyrocko.fdsn import station as fs
@@ -15,7 +15,9 @@ from silvertine.shakemap import shakemap_fwd
 from pyrocko import moment_tensor as pmt
 from numpy import random, where, cos, sin, arctan2, abs
 from pyrocko.io import stationxml
+from silvertine.util.prod_data import get_kuperkoch_data
 import copy
+import pyrocko
 import os
 km = 1000.
 
@@ -132,11 +134,15 @@ class HasPaths(Object):
                 for p in path]
 
 
-def rand_source(event, SourceType="MT"):
+def rand_source(event, SourceType="MT", pressure=None, volume=None):
 
-    if SourceType == "MT":
+    if event.moment_tensor is None:
         mt = MomentTensor.random_dc(magnitude=event.magnitude)
         event.moment_tensor = mt
+    else:
+        mt = event.moment_tensor
+
+    if SourceType == "MT":
         source = MTSource(
             lat=event.lat,
             lon=event.lon,
@@ -146,24 +152,35 @@ def rand_source(event, SourceType="MT"):
             m6=mt.m6(),
             time=event.time)
 
+    if SourceType == "explosion":
+        source = ExplosionSource(
+            lat=event.lat,
+            lon=event.lon,
+            north_shift=event.north_shift,
+            east_shift=event.east_shift,
+            depth=event.depth,
+            time=event.time)
+
     if SourceType == "VLVD":
-        mt = MomentTensor.random_dc(magnitude=event.magnitude)
-        event.moment_tensor = mt
+        if volume is None:
+            volume = num.random.uniform(0.001, 10000)
+            pressure = pressure
+        else:
+            volume = num.random.uniform(volume*0.0001, volume*1000.)
+            volume = num.random.uniform(0.01, 1000)
+
         source = VLVDSource(
             lat=event.lat,
             lon=event.lon,
             north_shift=event.north_shift,
             east_shift=event.east_shift,
             depth=event.depth,
-            azimuth=event.strike,
+            azimuth=mt.strike1,
             dip=mt.dip1,
-            volume_change=num.random.uniform(0.1,10), # here synthetic volume change
-            time=event.time,
-            clvd_moment=mt.moment()) # ?
+            volume_change=volume, # here synthetic volume change
+            clvd_moment=mt.moment) # ?
 
     if SourceType == "PorePressurePointSource":
-        mt = MomentTensor.random_dc(magnitude=event.magnitude)
-        event.moment_tensor = mt
         source = PorePressurePointSource(
             lat=event.lat,
             lon=event.lon,
@@ -174,8 +191,6 @@ def rand_source(event, SourceType="MT"):
             time=event.time) # ?
 
     if SourceType == "PorePressureLineSource":
-        mt = MomentTensor.random_dc(magnitude=event.magnitude)
-        event.moment_tensor = mt
         source = PorePressureLineSource(
             lat=event.lat,
             lon=event.lon,
@@ -184,15 +199,16 @@ def rand_source(event, SourceType="MT"):
             depth=event.depth,
             azimuth=event.strike,
             dip=mt.dip1,
-            pp=num.random.uniform(1,1), # here change in pa
+            pp=num.random.uniform(1, 1), # here change in pa
             time=event.time,
             length=num.random.uniform(1,20)*km) # scaling!)
 
     if SourceType == "Rectangular":
-        length = num.random.uniform(1,20)*km
-        width = num.random.uniform(1,20)*km
-        strike, dip, rake = MomentTensor.random_strike_dip_rake()
-        event.moment_tensor = MomentTensor(strike1=strike, dip1=dip, rake1=rake)
+        length = num.random.uniform(0.0001, 0.2)*km
+        width = num.random.uniform(0.0001, 0.2)*km
+        strike, dip, rake = pmt.random_strike_dip_rake()
+        event.moment_tensor = MomentTensor(strike=strike, dip=dip,
+                                           rake=rake)
         source = RectangularSource(
             lat=event.lat,
             lon=event.lon,
@@ -218,8 +234,8 @@ def gen_stations(nstations=5,
     for i in range(nstations):
         sta = 'S%02i' % i
         s = model.Station('', sta, '',
-            lat=randlat(latmin, latmax),
-            lon=rand(lonmin, lonmax))
+                          lat=randlat(latmin, latmax),
+                          lon=rand(lonmin, lonmax))
 
         stations.append(s)
 
@@ -274,7 +290,7 @@ def gen_induced_event(scenario_id, magmin=1., magmax=3.,
                       velocity=3000.,
                       timemin=util.str_to_time('2007-01-01 16:10:00.000'),
                       timemax=util.str_to_time('2020-01-01 16:10:00.000'),
-                      well="insheim"):
+                      well="insheim", simple_induced=True):
 
     name = "scenario"+str(scenario_id)
     depth = rand(depmin, depmax)*km
@@ -286,40 +302,61 @@ def gen_induced_event(scenario_id, magmin=1., magmax=3.,
         16./7. * stress_drop * radius**3))
     rupture_velocity = 0.9 * velocity
     duration = 1.5 * radius / rupture_velocity
-
+    choice_in_ex = num.random.choice(3, 1)
     if well is "insheim":
-        # injection
-        latmin = 49.149488448967226
-        latmax = 49.15474362306716
-        lonmin = 8.154522608466785
-        lonmax = 8.160353517676578
-        # extraction
-        latmin = 49.15452255594506
-        latmax = 49.16078760284185
-        lonmin = 8.154355077151537
-        lonmax = 8.160920669126998
+        if choice_in_ex == 1:
+            # injection
+            latmin = 49.149488448967226-0.01
+            latmax = 49.15474362306716+0.01
+            lonmin = 8.154522608466785-0.01
+            lonmax = 8.160353517676578+0.01
+        elif choice_in_ex == 0:
+            # extraction
+            latmin = 49.15452255594506-0.01
+            latmax = 49.16078760284185+0.01
+            lonmin = 8.154355077151537-0.01
+            lonmax = 8.160920669126998+0.01
+        else:
+            latmin = 49.12452255594506
+            latmax = 49.17078760284185
+            lonmin = 8.110355077151537
+            lonmax = 8.190920669126998
+        depth_min = 1500.
+        depth_max = 7000.
     else:
-        # injection
-        latmin = 49.187282830892414
-        latmax = 49.1876069158743
-        lonmin = 8.110819065944598
-        lonmax = 8.12401755104507
-        # extraction
-        latmin = 49.18755938553847
-        latmax = 49.187687407341066
-        lonmin = 8.123798045195171
-        lonmax = 8.130836557156785
-
-    depth_min = depmin
-    depth_max = depmax
+        if choice_in_ex == 1:
+            # injection
+            latmin = 49.187282830892414-0.01
+            latmax = 49.1876069158743+0.01
+            lonmin = 8.110819065944598-0.01
+            lonmax = 8.12401755104507+0.01
+        elif choice_in_ex == 0:
+            # extraction
+            latmin = 49.18755938553847-0.01
+            latmax = 49.187687407341066+0.01
+            lonmin = 8.123798045195171-0.01
+            lonmax = 8.130836557156785+0.01
+        else:
+            latmin = 49.17752255594506
+            latmax = 49.21278760284185
+            lonmin = 8.060355077151537
+            lonmax = 8.150920669126998
+        depth_min = 1500.
+        depth_max = 7000.
     lat, lon, depth_ell = get_random_point_in_ellipse(latmin, latmax,  lonmin,
                                                       lonmax, depth_min,
                                                       depth_max)
     time = rand(timemin, timemax)
-    event = model.Event(name=name, lat=lat, lon=lon,
-                        magnitude=magnitude, depth=depth,
-                        time=time, duration=duration,
-                        tags=["stress"+str(stress_drop)])
+    depth = rand(depth_min, depth_max)
+    if choice_in_ex > 1:
+        lat = rand(latmin, latmax)
+        lon = rand(lonmin, lonmax)
+
+    if simple_induced is True:
+        event = model.Event(name=name, lat=lat, lon=lon,
+                            magnitude=magnitude, depth=depth,
+                            time=time, duration=duration,
+                            tags=["stress:"+str(stress_drop)])
 
     return event
 
@@ -327,8 +364,9 @@ def gen_induced_event(scenario_id, magmin=1., magmax=3.,
 def gen_noise_events(targets, synthetics, engine, noise_sources=1, delay=40):
 
     noise_events = []
-    for i in range(noise_sources):
-        event = gen_random_tectonic_event(i, magmin=-1., magmax=0.)
+    noise_sources = num.random.choice(10, 1)
+    for i in range(0, noise_sources[0]):
+        event = gen_random_tectonic_event(i, magmin=-1., magmax=0.1)
         time = rand(event.time-delay, event.time+delay)
         mt = MomentTensor.random_dc(magnitude=event.magnitude)
         source = DCSource(
@@ -360,7 +398,7 @@ def save(synthetic_traces, event, stations, savedir, noise_events=False):
     model.dump_events(event, savedir+'event.txt')
     model.dump_stations(stations, savedir+'stations.pf')
     st_xml = stationxml.FDSNStationXML.from_pyrocko_stations(stations,
-                                                            add_flat_responses_from='M')
+                                                             add_flat_responses_from='M')
     st_xml.dump_xml(filename=savedir+'stations.xml')
     if noise_events is not False:
         model.dump_events(noise_events, savedir+'events_noise.txt')
@@ -374,7 +412,7 @@ def add_white_noise(synthetic_traces, scale=2e-8, scale_spectral='False'):
     for tr in synthetic_traces:
 
         nsamples = len(tr.ydata)
-        randdata = num.random.normal(size=nsamples)*scale
+        randdata = num.random.normal(size=nsamples)*num.min(abs(tr.ydata))
         white_noise = trace.Trace(deltat=tr.deltat, tmin=tr.tmin,
                                   ydata=randdata)
         tr.add(white_noise)
@@ -398,103 +436,207 @@ def gen_white_noise(synthetic_traces, scale=2e-8, scale_spectral='False'):
     return synthetic_traces_empty
 
 
-def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,
-                magmax, depmin, depmax, latmin, latmax, lonmin, lonmax,
-                stations_file, gf_store_superdirs, shakemap=True,
-                add_noise=True):
+def fwd_shakemap_post(projdir, wanted_start=0, wanted_end=None,
+                      store_id="insheim_100hz", gf_store_superdirs=None):
     if gf_store_superdirs is None:
         engine = gf.LocalEngine(use_config=True)
     else:
         engine = gf.LocalEngine(store_superdirs=[gf_store_superdirs])
-    for scenario in range(scenarios):
-        try:
-            choice = num.random.choice(4, 1)
-            choice = 1
-            if choice == 0 or choice == 2:
-                event = gen_random_tectonic_event(scenario, magmin=magmin,
-                                                  magmax=magmax, depmin=depmin,
-                                                  depmax=depmax, latmin=latmin,
-                                                  latmax=latmax, lonmin=lonmin,
-                                                  lonmax=lonmax)
 
-                source, events = rand_source(event, SourceType='MT')
-
-            if choice == 1:
-                well_choice = num.random.choice(2, 1)
-                if well_choice == 0:
-                    well = "landau"
-                else:
-                    well = "insheim"
-                event = gen_induced_event(scenario, magmin=magmin,
-                                          magmax=magmax, depmin=depmin,
-                                          depmax=depmax, latmin=latmin,
-                                          latmax=latmax, lonmin=lonmin,
-                                          lonmax=lonmax, well=well)
-
-                source, events = rand_source(event, SourceType='MT')
-
-            if choice == 3:
-                event = gen_random_tectonic_event(scenario, magmin=0,
-                                                  magmax=2.5, depmin=0.1,
-                                                  depmax=0.2, latmin=49.16,
-                                                  latmax=49.24, lonmin=7.98,
-                                                  lonmax=8.1)
-
-                source, events = rand_source(event, SourceType='MT')
-
+    for scenario in range(wanted_start, wanted_end):
+#        try:
             savedir = projdir + '/scenario_' + str(scenario) + '/'
-            if not os.path.exists(savedir):
-                os.makedirs(savedir)
+            event = model.load_events(savedir+"event.txt")[0]
+            source, event = rand_source(event, SourceType="MT")
+            stations = model.load_stations(savedir+"stations.pf")
+            shakemap_fwd.make_shakemap(engine, source, store_id,
+                                       savedir, stations=stations)
+#        except:
+#            pass
 
-            if stations_file is not None:
-                stations = model.load_stations(projdir + "/" + stations_file)
-                targets = []
-                for st in stations:
-                    for cha in st.channels:
-                        target = Target(
-                                lat=st.lat,
-                                lon=st.lon,
-                                store_id=store_id,
-                                interpolation='multilinear',
-                                quantity='displacement',
-                                codes=st.nsl() + (cha.name,))
+
+def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,
+                magmax, depmin, depmax, latmin, latmax, lonmin, lonmax,
+                stations_file, gf_store_superdirs, shakemap=True,
+                add_noise=True, t_station_dropout=False,
+                simple_induced=True, seiger=True):
+
+    # random station dropout
+    if seiger is True:
+        times_kuper, pressure_kuper, temp_kuper, rate_kuper = get_kuperkoch_data()
+        mean_pressure = num.mean(pressure_kuper)
+        mean_temp = num.mean(temp_kuper)
+        mean_rate = num.mean(rate_kuper)
+    if gf_store_superdirs is None:
+        engine = gf.LocalEngine(use_config=True)
+    else:
+        engine = gf.LocalEngine(store_superdirs=[gf_store_superdirs])
+    if t_station_dropout is True:
+        from pyrocko.io import stationxml
+        station_xml = stationxml.load_xml(filename='responses_bgr.xml')
+    for scenario in range(scenarios):
+        generated_scenario = False
+        while generated_scenario is False:
+            try:
+                choice = num.random.choice(10, 1)
+                if choice == 0 or choice == 2:
+                    event = gen_random_tectonic_event(scenario, magmin=magmin,
+                                                      magmax=magmax, depmin=depmin,
+                                                      depmax=depmax, latmin=latmin,
+                                                      latmax=latmax, lonmin=lonmin,
+                                                      lonmax=lonmax)
+                    store_id = "insheim_100hz"
+
+                    source, event = rand_source(event, SourceType='MT')
+
+                if choice == 1 or choice >3:
+                    well_choice = num.random.choice(2, 1)
+                    if well_choice == 0:
+                        well = "landau"
+                        store_id = "landau_100hz"
+                    else:
+                        well = "insheim"
+                        store_id = "insheim_100hz"
+                    event = gen_induced_event(scenario, magmin=magmin,
+                                              magmax=magmax, depmin=depmin,
+                                              depmax=depmax, latmin=latmin,
+                                              latmax=latmax, lonmin=lonmin,
+                                              lonmax=lonmax, well=well,
+                                              simple_induced=simple_induced)
+                    if seiger is True:
+                        pressure = 0.
+                        vol = 0.
+                        for itimes, time in enumerate(times_kuper):
+                            if event.time > time-3600. and event.time <= time:
+                                pressure = pressure + pressure_kuper[itimes]
+                                vol = vol + rate_kuper[itimes]
+                    else:
+                        pressure = None
+                        vol = None
+                    source, event = rand_source(event, SourceType='VLVD', pressure=pressure, volume=vol)
+                    event.tags.append("clvd_moment:"+str(source.clvd_moment))
+                    event.tags.append("azimuth:"+str(source.azimuth))
+                    event.tags.append("dip:"+str(source.azimuth))
+                    event.tags.append("volume_change:"+str(source.volume_change))
+
+                if choice == 3:
+                    # kirchlinteln event type
+                    quarry_choice = num.random.choice(3, 1)
+                    if quarry_choice == 0:
+                        event = gen_random_tectonic_event(scenario, magmin=0,
+                                                          magmax=2.5, depmin=0.01,
+                                                          depmax=0.2, latmin=49.2,
+                                                          latmax=49.24, lonmin=8.0,
+                                                          lonmax=8.08)
+
+                    if quarry_choice == 1:
+                        event = gen_random_tectonic_event(scenario, magmin=0,
+                                                          magmax=2.5, depmin=0.01,
+                                                          depmax=0.2, latmin=49.155,
+                                                          latmax=49.175, lonmin=7.97,
+                                                          lonmax=8.036)
+
+                    if quarry_choice == 2:
+                        event = gen_random_tectonic_event(scenario, magmin=0,
+                                                          magmax=2.5, depmin=0.01,
+                                                          depmax=0.2, latmin=49.178,
+                                                          latmax=49.185, lonmin=8.01,
+                                                          lonmax=8.035)
+                    event.tags = ["quarry"]
+                    store_id = "urg_100hz"
+                    store_id = "insheim_100hz"
+
+                    source, event = rand_source(event, SourceType='explosion')
+
+                savedir = projdir + '/scenario_' + str(scenario) + '/'
+                if not os.path.exists(savedir):
+                    os.makedirs(savedir)
+
+                if stations_file is not None:
+                    stations = model.load_stations(projdir + "/" + stations_file)
+                    targets = []
+                    for st in stations:
+                        for cha in st.channels:
+                            target = Target(
+                                    lat=st.lat,
+                                    lon=st.lon,
+                                    store_id=store_id,
+                                    interpolation='multilinear',
+                                    quantity='displacement',
+                                    codes=st.nsl() + (cha.name,))
+                            targets.append(target)
+
+                else:
+                    targets = []
+                    for st in stations:
+                        channels = modelled_channel_codes
+                        for cha in channels:
+                            target = Target(
+                                    lat=st.lat,
+                                    lon=st.lon,
+                                    store_id=store_id,
+                                    interpolation='multilinear',
+                                    quantity='displacement',
+                                    codes=st.nsl() + (cha,))
                         targets.append(target)
+                if shakemap is True:
+                    shakemap_fwd.make_shakemap(engine, source, store_id,
+                                               savedir, stations=stations)
+                gen_loop = True
+                response = engine.process(source, targets)
+                synthetic_traces = response.pyrocko_traces()
+                if t_station_dropout is True:
+                    station_time_dict = load_time_dependent_stations(event,
+                                                                     stations,
+                                                                     station_xml)
+                    for tr in synthetic_traces:
+                        for st in station_time_dict:
+                            if tr.station == st.station:
+                                tr.ydata = tr.ydata*0.
+                if choice == 2:
+                    synthetic_traces = gen_white_noise(synthetic_traces)
+                    event.tags = ["no_event"]
+                if add_noise is True and choice != 2:
+                    add_white_noise(synthetic_traces)
+                noise_events = gen_noise_events(targets, synthetic_traces, engine)
+                if choice == 1 or choice >3:
+                    for tr in synthetic_traces:
+                        tr.shift(tr.tmin+event.time)
 
+                events = [event]
+                save(synthetic_traces, events, stations, savedir,
+                     noise_events=noise_events)
+                generated_scenario = True
+            except pyrocko.gf.seismosizer.SeismosizerError:
+                pass
+
+
+def load_time_dependent_stations(event, stations, station_xml):
+    stations_at_time = []
+    for network in station_xml.network_list:
+        for station in network.station_list:
+            start = station.start_date
+            end = station.end_date
+            if end is None:
+                if event.time >= start:
+                    stations_at_time.append(station.code)
             else:
-                targets = []
-                for st in stations:
-                    channels = modelled_channel_codes
-                    for cha in channels:
-                        target = Target(
-                                lat=st.lat,
-                                lon=st.lon,
-                                store_id=store_id,
-                                interpolation='multilinear',
-                                quantity='displacement',
-                                codes=st.nsl() + (cha,))
-                    targets.append(target)
-            if shakemap is True:
-                shakemap_fwd.make_shakemap(engine, source, store_id,
-                                           savedir, stations=stations)
-            gen_loop = True
-            response = engine.process(source, targets)
-            synthetic_traces = response.pyrocko_traces()
-            if choice == 2:
-                synthetic_traces = gen_white_noise(synthetic_traces)
-                event.tags=["no_event"]
-            if add_noise is True and choice != 2:
-                add_white_noise(synthetic_traces)
-            noise_events = gen_noise_events(targets, synthetic_traces, engine)
+                if event.time >= start and event.time <= end:
+                    stations_at_time.append(station.code)
+    stations_non_overlap = []
+    for st in stations:
+        found = False
+        for stt in stations_at_time:
+            if st.station == stt:
+                found = True
+        if found is False:
+            stations_non_overlap.append(st)
+    return stations_non_overlap
 
-            events = [event]
-            save(synthetic_traces, events, stations, savedir,
-                 noise_events=noise_events)
-        except:
-            pass
 
 def silvertineScenario(projdir, scenarios=10, modelled_channel_codes='ENZ',
                        store_id='landau_100hz', magmin=-1., magmax=3.,
-                       depmin=5, depmax=10,
+                       depmin=0.1, depmax=14,
                        latmin=49.0586, latmax=49.25,
                        lonmin=8.0578, lonmax=8.2,
                        stations_file=None, ratio_events=1,
@@ -503,4 +645,4 @@ def silvertineScenario(projdir, scenarios=10, modelled_channel_codes='ENZ',
     gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,
                 magmax, depmin, depmax, latmin, latmax, lonmin, lonmax,
                 stations_file, gf_store_superdirs=gf_store_superdirs,
-                shakemap=True)
+                shakemap=shakemap)

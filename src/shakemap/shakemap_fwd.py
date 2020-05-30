@@ -14,7 +14,7 @@ km = 1000.
 util.setup_logging('gf_shakemap')
 
 
-def make_shakemap(engine, source, store_id, folder, stations=None, save=False):
+def make_shakemap(engine, source, store_id, folder, stations=None, save=True):
     targets, norths, easts, stf_spec = get_scenario(engine,
                                                     source,
                                                     store_id)

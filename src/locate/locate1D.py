@@ -279,10 +279,20 @@ def load_synthetic_test(n_tests, scenario_folder, nstart=0, nend=None):
     events = []
     stations = []
     for i in range(nstart, n_tests):
-        print("%s/scenario_%s/event.txt" % (scenario_folder, i))
-
-        events.append(model.load_events("%s/scenario_%s/event.txt" % (scenario_folder, i))[0])
-        stations.append(model.load_stations("%s/scenario_%s/stations.pf" % (scenario_folder, i)))
+        try:
+            print("%s/scenario_%s/event.txt" % (scenario_folder, i))
+            event = model.load_events("%s/scenario_%s/event.txt" % (scenario_folder, i))[0]
+            if len(event.tags) > 0:
+                if event.tags[0] == "no_event":
+                    pass
+                else:
+                    events.append(event)
+                    stations.append(model.load_stations("%s/scenario_%s/stations.pf" % (scenario_folder, i)))
+            else:
+                events.append(event)
+                stations.append(model.load_stations("%s/scenario_%s/stations.pf" % (scenario_folder, i)))
+        except FileNotFoundError:
+            pass
     return events, stations
 
 
@@ -574,7 +584,7 @@ def get_bounds(test_events, parallel, singular, bounds, sources, bounds_list,
             magnitude=ev.magnitude)
         sources.append(source)
     if minimum_vel is True:
-        pertub = 0.01
+        pertub = 0.1
         layers = minimum_vel_mod.layers()
         for i in range(0, minimum_vel_mod.nlayers):
             layer = next(layers)
@@ -663,13 +673,10 @@ def update_layered_model(mod, params, nevents):
     srows = []
     k = 1000.
     scanned_mod = mod.to_scanlines()
-    print(params, len(params), mod.nlayers, nevents)
     s = 0
-    print(scanned_mod)
     rows = scanned_mod
     rows_cut = scanned_mod[1::2]
     for i in range(0, mod.nlayers):
-        print(i)
         depth, vp, vs, rho, qp, qs = rows_cut[i]
         if i == 0:
             depth, vp, vs, rho, qp, qs = rows[0]
@@ -677,7 +684,6 @@ def update_layered_model(mod, params, nevents):
             vs_mod = params[1+4*nevents]
             s = s+1
         elif (i % 2) != 0:
-            print(s, s*2+0+4*nevents)
             try:
                 vp_mod = params[s*2+0+4*nevents]
                 vs_mod = params[s*2+1+4*nevents]
@@ -688,15 +694,15 @@ def update_layered_model(mod, params, nevents):
             vp_mod = params[s*2+0+4*nevents]
             vs_mod = params[s*2+1+4*nevents]
             s = s+1
-        print(vp_mod, vs_mod)
         row = [depth / k, vp_mod, vs_mod, rho]
         srows.append('%15s' % (str_float_vals(row)))
         if i != 0:
             srows.append('%15s' % (str_float_vals(row)))
+        if i == mod.nlayers-2:
+            srows.append("moho")
 
     d = '\n'.join(srows)
     mod_modified = cake.LayeredModel.from_scanlines(cake.read_nd_model_str(d))
-    print(mod_modified)
     return mod_modified
 
 
@@ -745,8 +751,9 @@ mantle
 
 def minimum_1d_fit(params, mod, line=None):
     global iiter
+#    mod = update_layered_model(mod, params, len(ev_dict_list))
+    mod = update_layered_model_insheim(params, len(ev_dict_list))
 
-    mod = update_layered_model(mod, params, len(ev_dict_list))
     dists = []
     iter_event = 0
     iter_new = iiter + 1
@@ -768,10 +775,7 @@ def minimum_1d_fit(params, mod, line=None):
                                                        stp.lon)*cake.m2d
 
                     try:
-                        for phase_p in phase_list:
-                            for i, arrival in enumerate(mod.arrivals([dists],
-                                                        phases=[phase_p],
-                                                        zstart=source.depth)):
+#                        for phase_p in phase_list:
 
                                 tdiff = st["pick"]
                                 if phase == "Pg":
@@ -802,11 +806,16 @@ def minimum_1d_fit(params, mod, line=None):
                                     phase = 'Pv_(moho)p'
                                 if phase == "Sn":
                                     phase = 'Sv_(moho)s'
-                                used_phase = arrival.used_phase()
+                                cake_phase = cake.PhaseDef(phase)
 
-                                if phase == used_phase.given_name():
-                                    misfits += num.sqrt(num.sum((tdiff - arrival.t)**2))
-                                    norms += num.sqrt(num.sum(arrival.t**2))
+                                for i, arrival in enumerate(mod.arrivals([dists],
+                                                            phases=[cake_phase],
+                                                            zstart=source.depth)):
+                                    used_phase = arrival.used_phase()
+
+                                    if phase == used_phase.given_name():
+                                        misfits += num.sqrt(num.sum((tdiff - arrival.t)**2))
+                                        norms += num.sqrt(num.sum(arrival.t**2))
                     except:
                         pass
 
@@ -1092,17 +1101,19 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                                                       tags=[str(result.fun), str(ev_dict_list[i]["id"])])
                             result_events.append(event)
                     else:
-                        from ..minimum_1d.minimum_1d import update_layered_model_insheim
+                        print("here")
                         result = differential_evolution(
                             minimum_1d_fit,
                             args=[mod],
                             bounds=tuple(bounds.values()),
-                            maxiter=maxiter,
+                            maxiter=1,
                             seed=123,
-                            tol=0.000001)
+                            tol=100)
 
                         sources = update_sources(ev_dict_list, result.x)
-
+                        mod = update_layered_model_insheim(result.x, len(ev_dict_list))
+                        print(mod)
+                        print(kill)
                         if optimize_depth is True:
                             bounds = OrderedDict()
                             for source in sources:

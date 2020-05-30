@@ -35,7 +35,11 @@ class MTType(StringChoice):
     choices = ['full', 'deviatoric', 'dc']
 
 
-def run_grond(rundir, datafolder, eventname, store_id, domain="time_domain"):
+def run_grond(rundir, datafolder, eventname, store_id, domain="time_domain",
+              problem_type="CMTProblem"):
+
+    if domain == "envelope":
+        problem_type = "magnitude"
     km = 1000.
     ds = grond.Dataset(event_name=eventname)
     ds.add_waveforms(paths=['%s' % datafolder])
@@ -50,8 +54,8 @@ def run_grond(rundir, datafolder, eventname, store_id, domain="time_domain"):
 
     quantity = 'displacement'
     group = 'all'
-    tmin = '{stored:begin}'
-    tmax = '{stored:begin}+0.5'
+    tmin = '{stored:begin}+0.1'
+    tmax = '{stored:begin}+2.5'
     fmin = 1
     fmax = 13.
     ffactor = 1.
@@ -98,7 +102,11 @@ def run_grond(rundir, datafolder, eventname, store_id, domain="time_domain"):
 
     if event.depth is None:
         event.depth = 7*km
-
+    if len(event.tags) > 0:
+        for tag in event.tags:
+            if tag[0:6] == "stress":
+                problem_type = "VLVDProblem"
+                problem_type = "volume_point"
     distance_min = None
     distance_max = 30000.
     targets = []
@@ -156,42 +164,131 @@ def run_grond(rundir, datafolder, eventname, store_id, domain="time_domain"):
                 target.dip = 0.
             target.set_dataset(ds)
             targets.append(target)
-    base_source = gf.MTSource.from_pyrocko_event(event)
-    stf_type = 'HalfSinusoidSTF'
-    base_source.set_origin(event_origin.lat, event_origin.lon)
-    base_source.set_depth = event_origin.depth
-    stf = STFType.base_stf(stf_type)
-    stf.duration = event.duration or 0.0
-    base_source.stf = stf
-    print(base_source)
-    ranges = dict(
-        time=gf.Range(-0.1, 0.1, relative='add'),
-        north_shift=gf.Range(-1*km, 1*km),
-        east_shift=gf.Range(-1*km, 1*km),
-        depth=gf.Range(3400, 12000),
-        magnitude=gf.Range(1.7, 3.1),
-        duration=gf.Range(0., 0.2),
-        rmnn=gf.Range(-1.4, 1.4),
-        rmee=gf.Range(-1.4, 1.4),
-        rmdd=gf.Range(-1.4, 1.4),
-        rmne=gf.Range(-1.4, 1.4),
-        rmnd=gf.Range(-1.4, 1.4),
-        rmed=gf.Range(-1.4, 1.4))
 
-    problem = grond.problems.CMTProblem(
-        name=event.name,
-        base_source=base_source,
-        distance_min=600.,
-        mt_type='deviatoric',
-        ranges=ranges,
-        targets=targets,
-        norm_exponent=1,
-        stf_type=stf_type,
-        )
+    if problem_type == "CMTProblem":
+        base_source = gf.MTSource.from_pyrocko_event(event)
+        stf_type = 'HalfSinusoidSTF'
+        base_source.set_origin(event_origin.lat, event_origin.lon)
+        base_source.set_depth = event_origin.depth
+        stf = STFType.base_stf(stf_type)
+        stf.duration = event.duration or 0.0
+        base_source.stf = stf
+        ranges = dict(
+            time=gf.Range(-0.1, 0.1, relative='add'),
+            north_shift=gf.Range(-1*km, 1*km),
+            east_shift=gf.Range(-1*km, 1*km),
+            depth=gf.Range(3400, 14000),
+            magnitude=gf.Range(-0.7, 3.1),
+            duration=gf.Range(0., 0.2),
+            rmnn=gf.Range(-1.4, 1.4),
+            rmee=gf.Range(-1.4, 1.4),
+            rmdd=gf.Range(-1.4, 1.4),
+            rmne=gf.Range(-1.4, 1.4),
+            rmnd=gf.Range(-1.4, 1.4),
+            rmed=gf.Range(-1.4, 1.4))
+
+        problem = grond.problems.CMTProblem(
+            name=event.name,
+            base_source=base_source,
+            distance_min=600.,
+            mt_type='deviatoric',
+            ranges=ranges,
+            targets=targets,
+            norm_exponent=1,
+            stf_type=stf_type,
+            )
+
+    elif problem_type == "magnitude":
+        base_source = gf.MTSource.from_pyrocko_event(event)
+        stf_type = 'HalfSinusoidSTF'
+        base_source.set_origin(event_origin.lat, event_origin.lon)
+        base_source.set_depth = event_origin.depth
+        stf = STFType.base_stf(stf_type)
+        stf.duration = event.duration or 0.0
+        base_source.stf = stf
+        ranges = dict(
+            time=gf.Range(-0.1, 0.1, relative='add'),
+            north_shift=gf.Range(-0.5*km, 0.5*km),
+            east_shift=gf.Range(-0.5*km, 0.5*km),
+            depth=gf.Range(3400, 14000),
+            magnitude=gf.Range(-0.7, 3.1),
+            duration=gf.Range(0., 0.2),
+            rmnn=gf.Range(0, 0),
+            rmee=gf.Range(0, 0),
+            rmdd=gf.Range(0, 0),
+            rmne=gf.Range(0, 0),
+            rmnd=gf.Range(0, 0),
+            rmed=gf.Range(0, 0))
+
+        problem = grond.problems.CMTProblem(
+            name=event.name,
+            base_source=base_source,
+            distance_min=600.,
+            mt_type='deviatoric',
+            ranges=ranges,
+            targets=targets,
+            norm_exponent=1,
+            stf_type=stf_type,
+            )
+
+    elif problem_type == "volume_point":
+        base_source = gf.ExplosionSource.from_pyrocko_event(event)
+        stf_type = 'HalfSinusoidSTF'
+        base_source.set_origin(event_origin.lat, event_origin.lon)
+        base_source.set_depth = event_origin.depth
+        stf = STFType.base_stf(stf_type)
+        stf.duration = event.duration or 0.0
+        base_source.stf = stf
+        ranges = dict(
+            time=gf.Range(-0.1, 0.1, relative='add'),
+            north_shift=gf.Range(-0.5*km, 0.5*km),
+            east_shift=gf.Range(-0.5*km, 0.5*km),
+            depth=gf.Range(3400, 14000),
+            magnitude=gf.Range(-0.7, 3.1),
+            duration=gf.Range(0., 0.2),
+            volume_change=gf.Range(0.001, 10000.1))
+
+        problem = grond.problems.VolumePointProblem(
+            name=event.name,
+            base_source=base_source,
+            distance_min=600.,
+            ranges=ranges,
+            targets=targets,
+            norm_exponent=1,
+            )
+
+    elif problem_type == "VLVDProblem":
+        base_source = gf.VLVDSource.from_pyrocko_event(event)
+        stf_type = 'HalfSinusoidSTF'
+        base_source.set_origin(event_origin.lat, event_origin.lon)
+        base_source.set_depth = event_origin.depth
+        stf = STFType.base_stf(stf_type)
+        stf.duration = event.duration or 0.0
+        base_source.stf = stf
+        ranges = dict(
+            time=gf.Range(-0.1, 0.1, relative='add'),
+            north_shift=gf.Range(-1*km, 1*km),
+            east_shift=gf.Range(-1*km, 1*km),
+            depth=gf.Range(6000, 14000),
+            volume_change=gf.Range(0.001, 10000.1),
+            duration=gf.Range(0.01, 0.2),
+            dip=gf.Range(0., 90.),
+            azimuth=gf.Range(0., 360.),
+            clvd_moment=gf.Range(0.1, 1e13))
+
+        problem = grond.problems.VLVDProblem(
+            name=event.name,
+            base_source=base_source,
+            distance_min=3000.,
+            ranges=ranges,
+            targets=targets,
+            norm_exponent=1,
+            )
+    print(problem_type)
     problem.set_engine(engine)
     monitor = GrondMonitor.watch(rundir)
     print("analysing")
-    analyser_iter = 100
+    analyser_iter = 1000
     analyser = grond.analysers.target_balancing.TargetBalancingAnalyser(
                 niter=analyser_iter,
                 use_reference_magnitude=False,
@@ -212,8 +309,8 @@ def run_grond(rundir, datafolder, eventname, store_id, domain="time_domain"):
     os.system("cp -r %s/config.yaml* %s" % (configs_dir, quick_config_path))
     from grond.config import read_config
     conf = read_config(quick_config_path)
-    uniform_iter = 2000
-    directed_iter = 50
+    uniform_iter = 1200
+    directed_iter = 20000
     mod_conf = conf.clone()
 #    mod_conf.set_elements(
 #        'path_prefix', ".")

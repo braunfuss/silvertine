@@ -2,7 +2,7 @@ import subprocess
 import os
 
 
-def live_steam(adress="eida.gfz-potsdam.de", path="GR.BFO.*.BHZ", delay=200, seiger=True, save=False):
+def live_steam(adress="eida.gfz-potsdam.de", path="GR.BFO.*.BHZ", delay=200, seiger=False, save=False):
     if seiger is True:
         if save is False:
             os.system("snuffler seedlink://"+"eida.bgr.de"+"/"+"GR.INS*.*.*"+" --follow="+str(delay))

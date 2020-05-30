@@ -44,6 +44,8 @@ subcommand_descriptions = {
     'init': 'initialise new project structure or print configuration',
     'scenario': 'create a forward-modelled scenario project',
     'locate': 'locate a single or a set of earthquakes',
+    'post_shakemap': 'post_shakemap a single or a set of earthquakes',
+    'plot_prod': 'plot_prod a single or a set of earthquakes',
     'optimize': 'optimize',
     'monitor': 'Monitor stations',
     'beam': 'beamform for a single or a set of earthquakes',
@@ -73,6 +75,8 @@ subcommand_usages = {
         'init <example> <projectdir> [options]'),
     'scenario': 'scenario [options] <projectdir>',
     'locate': 'locate [options] <projectdir>',
+    'post_shakemap': 'post_shakemap [options] <projectdir>',
+    'plot_prod': 'plot_prod [options] <projectdir>',
     'detect': 'detect [options] <projectdir>',
     'optimize': 'optimize [options] <projectdir>',
     'monitor': 'monitor [options] <projectdir>',
@@ -129,7 +133,9 @@ This is silvertine version %(version_number)s.
 Subcommands:
 
     scenario        %(scenario)s
+    plot_prod     %(plot_prod)s
     locate        %(locate)s
+    post_shakemap %(post_shakemap)s
     detect        %(detect)s
     optimize      %(optimize)s
     monitor        %(monitor)s
@@ -409,6 +415,9 @@ def command_locate(args):
             '--minimum_vel', dest='minimum_vel', type=str, default=False,
             help='minimum 1d model')
         parser.add_option(
+            '--station_dropout', dest='t_station_dropout', type=str, default=False,
+            help='t_station_dropout')
+        parser.add_option(
             '--reference', dest='reference', type=str, default="catalog",
             help='Use reference events, either catalog or hyposat')
     parser, options, args = cl_parse('locate', args, setup)
@@ -427,6 +436,8 @@ def command_locate(args):
         options.scenario = False
     if options.minimum_vel is not False:
         options.minimum_vel = True
+    if options.t_station_dropout is not False:
+        options.t_station_dropout = True
     result, best_model = silvertine.locate.locate1D.solve(scenario_folder=project_dir,
                                                           show=options.show,
                                                           n_tests=options.nevents,
@@ -450,11 +461,32 @@ def command_detect(args):
         parser.add_option(
             '--bnn', dest='bnn', type=str, default=True,
             help='Use BNN')
+        parser.add_option(
+            '--load', dest='load', type=str, default=False,
+            help='Load data')
+        parser.add_option(
+            '--train_model', dest='train_model', type=str, default=True,
+            help='train_model')
+        parser.add_option(
+            '--detector_only', dest='detector_only', type=str, default=False,
+            help='detector_only')
+        parser.add_option(
+            '--data_dir', dest='data_dir', type=str, default=None,
+            help='data_dir')
+
 
     parser, options, args = cl_parse('detect', args, setup)
+    if options.load is not False:
+        options.load = True
+    if options.train_model is not True:
+        options.train_model = False
+    if options.detector_only is not False:
+        options.detector_only = True
     from silvertine import detector
     if options.bnn is True:
-        detector.bnn.bnn_detector()
+        detector.bnn.bnn_detector(load=options.load, train_model=options.train_model,
+                                  detector_only=options.detector_only,
+                                  data_dir=options.data_dir)
 
 
 def command_optimize(args):
@@ -465,6 +497,12 @@ def command_optimize(args):
             help='Display progress of localisation for each event in browser')
         parser.add_option(
             '--all', dest='all', type=str, default=False,
+            help='Optimize all in folder')
+        parser.add_option(
+            '--domain', dest='domain', type=str, default="time_domain",
+            help='Optimize all in folder')
+        parser.add_option(
+            '--problem', dest='problem', type=str, default="CMTProblem",
             help='Optimize all in folder')
     from silvertine import mechanism
     from pyrocko import model
@@ -477,7 +515,9 @@ def command_optimize(args):
         mechanism.run_grond(rundir,
                             project_dir,
                             event.name,
-                            "landau_100hz")
+                            "landau_100hz",
+                            problem_type=options.problem,
+                            domain=options.domain)
     else:
         from pathlib import Path
         pathlist = Path(args[0]).glob('scenario*/')
@@ -530,6 +570,21 @@ def command_beam(args):
         options.show = True
     silvertine.beam_depth.abedeto.beam(project_dir, show=options.show,
                                        n_tests=options.nevents)
+
+
+def command_plot_prod(args):
+
+    def setup(parser):
+        parser.add_option(
+            '--show', dest='show', type=str, default=False,
+            help='overwrite existing project folder.')
+
+    parser, options, args = cl_parse('plot_prod', args, setup)
+
+    from silvertine.util import prod_data
+    if options.show is not False:
+        options.show = True
+    prod_data.plot_insheim_prod_data()
 
 
 def command_beam_process(args):
@@ -697,6 +752,9 @@ def command_scenario(args):
         parser.add_option(
             '--shakemap', dest='shakemap', type=str, default=False,
             help='Generate synthetic shakemaps for the scenario')
+        parser.add_option(
+            '--station_dropout', dest='station_dropout', type=str, default=False,
+            help='t_station_dropout')
     parser, options, args = cl_parse('scenario', args, setup)
 
     gf_store_superdirs = None
@@ -706,6 +764,8 @@ def command_scenario(args):
         gf_store_superdirs = None
     if options.shakemap is not False:
         options.shakemap = True
+    if options.station_dropout is not False:
+        options.station_dropout = True
     from silvertine import scenario as silvertine_scenario
     project_dir = args[0]
     scenario = silvertine.scenario.silvertineScenario(
@@ -714,6 +774,45 @@ def command_scenario(args):
         lonmin=options.lonmin, lonmax=options.lonmax, depmin=options.depmin,
         depmax=options.depmax, stations_file=options.stations_file,
         shakemap=options.shakemap,
+        gf_store_superdirs=options.gf_store_superdirs)
+
+
+def command_post_shakemap(args):
+
+    def setup(parser):
+
+        parser.add_option(
+            '--wanted_start', dest='wanted_start', type=int, default=0,
+            help='number of events to create (default: %default)')
+        parser.add_option(
+            '--wanted_end', dest='wanted_end', type=int, default=1,
+            help='number of events to create (default: %default)')
+        parser.add_option(
+            '--stations_file', dest='stations_file', type=str,
+            default="stations.raw.txt",
+            help='maximum depth (default: %default)')
+        parser.add_option(
+            '--store_id', dest='store_id', type=str,
+            default="insheim_100hz",
+            help='maximum depth (default: %default)')
+        parser.add_option(
+            '--force', dest='force', action='store_true',
+            help='overwrite existing project folder.')
+        parser.add_option(
+            '--gf-store-superdirs',
+            dest='gf_store_superdirs',
+            help='Comma-separated list of directories containing GF stores')
+    parser, options, args = cl_parse('post_shakemap', args, setup)
+
+    gf_store_superdirs = None
+    if options.gf_store_superdirs:
+        gf_store_superdirs = options.gf_store_superdirs.split(',')
+    else:
+        gf_store_superdirs = None
+    from silvertine import scenario as silvertine_scenario
+    project_dir = args[0]
+    scenario = silvertine.scenario.fwd_shakemap_post(
+        project_dir, wanted_start=options.wanted_start, wanted_end=options.wanted_end, store_id=options.store_id,
         gf_store_superdirs=options.gf_store_superdirs)
 
 
