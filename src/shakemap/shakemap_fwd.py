@@ -32,7 +32,14 @@ def make_shakemap(engine, source, store_id, folder, stations=None, save=True):
                                        stf_spec, stations=True,
                                        savedir=folder, save=save)
         values_stations = values_stations[0][0:len(stations)]
-
+        if stations_corrections_file is not None:
+            stations_corrections_file = num.loadtxt(stations_corrections_file)
+            stations_corrections_value = []
+            for st in stations:
+                for stc in stations_corrections_file:
+                    if st.station == stc[0]:
+                        stations_corrections_value.append(stc[1])
+            values_stations = values_stations * num.asarray(stations_corrections_value)
         plot_shakemap(source, norths, easts, values, 'gf_shakemap.png', folder,
                       stations,
                       values_stations=values_stations,
