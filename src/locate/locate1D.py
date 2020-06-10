@@ -1089,8 +1089,8 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                                 args=[],
                                 bounds=tuple(bounds.values()),
                                 seed=123,
-                                maxiter=maxiter,
-                                tol=0.001)
+                                maxiter=1.,
+                                tol=1.)
                             for source in sources:
                                 sources = update_depth(result.x)
                         for i, source in enumerate(sources):
@@ -1101,7 +1101,6 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                                                       tags=[str(result.fun), str(ev_dict_list[i]["id"])])
                             result_events.append(event)
                     else:
-                        print("here")
                         result = differential_evolution(
                             minimum_1d_fit,
                             args=[mod],
@@ -1112,8 +1111,11 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
 
                         sources = update_sources(ev_dict_list, result.x)
                         mod = update_layered_model_insheim(result.x, len(ev_dict_list))
-                        print(mod)
-                        print(kill)
+                        if scenario is True:
+                            mod_save = scenario_folder + '/min_1d_model'
+                        if scenario is False and singular is True:
+                            mod_save = data_folder + '/min_1d_model'
+                        cake.write_nd_model(mod, mod_save)
                         if optimize_depth is True:
                             bounds = OrderedDict()
                             for source in sources:
