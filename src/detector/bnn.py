@@ -15,10 +15,12 @@ from matplotlib.backends import backend_agg
 from silvertine import scenario
 from pyrocko import model, cake, orthodrome
 from silvertine.util.ref_mods import landau_layered_model
-from pyrocko import moment_tensor
+from pyrocko import moment_tensor, util
 from keras.layers import Conv1D, MaxPooling1D, Input
 from keras import models
 from PIL import Image
+from pathlib import Path
+
 import os
 try:
   import seaborn as sns  # pylint: disable=g-import-not-at-top
@@ -204,17 +206,13 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False):
             tr.lowpass(4, 13.)
             tr.highpass(4, 0.03)
             tr.ydata = tr.ydata/np.max(tr.ydata)
-           # tr.ydata = tr.ydata/max_traces
-          # tr.ydata = np.power(np.abs(tr.ydata), 1./2.)
-            #tr.ydata = tr.ydata - np.nanmean(tr.ydata)
-            #tr.ydata = np.abs(tr.ydata/np.max(tr.ydata))
             nsamples = len(tr.ydata)
             data = tr.ydata
 
             if nsamples != maxsamples:
-            #    tr.chop(tr.tmin, tr.tmin+1.)
                 data = np.pad(data, (0, maxsamples-nsamples), 'constant')
                 nsamples = len(data)
+                tr.ydata = data
 
             if traces_coll is None:
                 traces_coll = tr.ydata
@@ -265,7 +263,6 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False):
                         if tag == "no_event":
                             labels.append(0)
                             found_tag = True
-                            print(no)
                     if found_tag is False:
                         labels.append(1)
                 else:
@@ -282,7 +279,7 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False):
 
 def generate_test_data(store_id, nevents=50, noised=True):
     mod = landau_layered_model()
-    engine = LocalEngine(store_superdirs=['/home/asteinbe/gf_stores'])
+    engine = LocalEngine(store_superdirs=['gf_stores'])
     scale = 2e-14
     cake_phase = cake.PhaseDef("P")
     phase_list = [cake_phase]
@@ -433,7 +430,7 @@ def load_data(data_dir, store_id):
                     for tr in traces:
                         nsamples = len(tr.ydata)
 
-                        tr.chop(tr.tmin, tr.tmin+1)
+                        tr.chop(tr.tmin, tr.tmin+4)
                         nsamples = len(tr.ydata)
                     traces_event.append(traces)
                 else:
@@ -452,7 +449,7 @@ def load_data(data_dir, store_id):
                                                         phases=get_phases_list(),
                                                         zstart=event.depth)):
                                 if processed is False:
-                                    tr.chop(tr.tmin+arrival.t-0.5, tr.tmin+arrival.t+0.5)
+                                    tr.chop(tr.tmin+arrival.t-2, tr.tmin+arrival.t+2)
                                     processed = True
                                 else:
                                     pass
@@ -467,6 +464,68 @@ def load_data(data_dir, store_id):
     return waveforms, nsamples, len(stations), events
 
 
+def load_data_archieve(validation_data, gf_freq, duration=4,
+                       wanted_start=None, wanted_end=None):
+    folder = validation_data
+    folder = "/md3/projects3/seiger/acquisition"
+    pathlist = Path(folder).glob('day*')
+    waveforms = []
+    stations = []
+    print(wanted_end, wanted_start)
+    if wanted_start is not None:
+        wanted_start = util.stt(wanted_start)
+        wanted_end = util.stt(wanted_end)
+    print(wanted_end, wanted_start)
+
+    from pyrocko import pile
+    paths = []
+    safecon = 0
+    for path in sorted(pathlist):
+        path = str(path)
+        d2 = float(str(path)[-12:])
+        d1 = float(str(path)[-25:-13])
+        if wanted_start is not None:
+            if (d1 >= wanted_start and d2 <= wanted_end) or (d2-wanted_end<86400. and d2-wanted_end>0. and safecon == 0):
+                #traces = io.load(path+"/waveforms/rest/traces.mseed")
+                st = model.load_stations(path+"/waveforms/stations.raw.txt")
+
+                d_diff = d2 - d1
+                tr_packages = int(d_diff/duration)
+                #for tr in traces:
+                #    tr.downsample_to(gf_freq)
+        #        if safecon == 0:
+                print(path)
+
+                pathlist_waveform_files = Path(path+"/waveforms/rest/").glob('*.mseed')
+                for path_wave in sorted(pathlist_waveform_files):
+        #                if
+
+        #        if safecon != 0:
+                    paths.append(str(path_wave))
+                safecon += 1
+
+    p = pile.make_pile(paths)
+    for traces in p.chopper(tmin=wanted_start, tinc=duration):
+        if traces:
+            if traces[0].tmax < wanted_end:
+            #    for i in range(0, tr_packages):
+            #        traces = traces
+                for tr in traces:
+            #    tr.chop(tr.tmin+i*duration,
+            #            tr.tmin+i*duration+duration)
+                    tr.downsample_to(gf_freq)
+                waveforms.append(traces)
+                stations.append(st)
+    #    else:
+    #        traces = io.load(path+"/waveforms/rest/traces.mseed")
+    #        st = model.load_stations(path+"/waveforms/stations.raw.txt")
+    #        for tr in traces:
+    #            tr.downsample_to(gf_freq)
+    #        waveforms.append(traces)
+    #        stations.append(st)
+    return waveforms, stations
+
+
 def plot_prescission(input, output):
     mislocation_rel = []
     for inp, outp in zip(input, output):
@@ -477,12 +536,15 @@ def plot_prescission(input, output):
     plt.show()
 
 
+
 def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                  multilabel=True, data_dir=None, train_model=True,
-                 detector_only=False):
+                 detector_only=False, validation_data=None, wanted_start=None,
+                 wanted_end=None):
     import _pickle as pickle
     if detector_only is True:
         multilabel = False
+
     if data_dir is not None:
         try:
             f = open("data_unseen_waveforms_bnn_gt_loaded", 'rb')
@@ -518,40 +580,68 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
             pickle.dump([waveforms_events, waveforms_noise, nsamples, nstations,
                          events], f)
             f.close()
+
+    if validation_data is None:
+        max_traces = 0.
+        for traces in waveforms_events:
+            for tr in traces:
+                if np.max(tr.ydata) > max_traces:
+                    max_traces = np.max(tr.ydata)
+
+        data_events, labels_events, nstations, nsamples = bnn_detector_data(waveforms_events, max_traces, events=events, multilabel=multilabel)
+        if data_dir is not None:
+            data_events_unseen, labels_events_unseen, nstations_unseen, nsamples_unseen = bnn_detector_data(waveforms_unseen, max_traces, events=events_unseen, multilabel=multilabel)
+        if detector_only is True:
+            data_noise, labels_noise, nstations, nsamples = bnn_detector_data(waveforms_noise, max_traces, events=None, multilabel=multilabel)
+            x_data = np.concatenate((data_events, data_noise), axis=0)
+            y_data = np.concatenate((labels_events, labels_noise), axis= 0)
+            #x_data = data_events
+            #y_data = labels_events
+            from keras.utils import to_categorical
+            y_array = None
+        #    nlabels = 3
+            #for k in range(0, nlabels):
+            #    print(np.shape(y_data))
+            #    lst2 = [[item[k]] for item in y_data]
+            #    print(np.shape(lst2))
+            #    X_train_enc, X_test_enc_1 = prepare_inputs(lst2, lst2)
+            #    y_data_vec = to_categorical(X_train_enc)
+            #    y_data_vec = np.asarray(y_data_vec)
+            #    if y_array is None:
+        #            y_array = y_data_vec
+            #    else:
+            #        y_array = np.concatenate((y_array, y_data_vec), axis=0)
+        #    y_data = y_array
+        else:
+            x_data = data_events
+            y_data = labels_events
+
+    else:
+        # hardcoded for bgr envs
+        trace_comp_event = waveforms_events[0][0]
+        gf_freq = trace_comp_event.deltat
+        waveforms_unseen, stations_unseen = load_data_archieve(validation_data,
+                                                               gf_freq=gf_freq,
+                                                               wanted_start=wanted_start,
+                                                               wanted_end=wanted_end)
+        max_traces = 0.
+        calculate_max = False
+        nstations = 0
+        for st in stations_unseen:
+            st_len = len(st)
+            if st_len > nstations:
+                nstations = st_len
+        if calculate_max is True:
+            for traces in waveforms_unseen:
+                for tr in traces:
+                    if np.max(tr.ydata) > max_traces:
+                        max_traces = np.max(tr.ydata)
+        data_events_unseen, labels_events_unseen, nstations_unseen, nsamples_unseen = bnn_detector_data(waveforms_unseen, max_traces, events=None, multilabel=multilabel)
+        x_data = data_events_unseen
+        y_data = labels_events_unseen
     ncomponents = 3
     nstations = nstations*ncomponents
-    max_traces = 0.
-    for traces in waveforms_events:
-        for tr in traces:
-            if np.max(tr.ydata) > max_traces:
-                max_traces = np.max(tr.ydata)
-    data_events, labels_events, nstations, nsamples = bnn_detector_data(waveforms_events, max_traces, events=events, multilabel=multilabel)
-    if data_dir is not None:
-        data_events_unseen, labels_events_unseen, nstations_unseen, nsamples_unseen = bnn_detector_data(waveforms_unseen, max_traces, events=events_unseen, multilabel=multilabel)
-    if detector_only is True:
-        data_noise, labels_noise, nstations, nsamples = bnn_detector_data(waveforms_noise, max_traces, events=None, multilabel=multilabel)
-        x_data = np.concatenate((data_events, data_noise), axis=0)
-        y_data = np.concatenate((labels_events, labels_noise), axis= 0)
-        #x_data = data_events
-        #y_data = labels_events
-        from keras.utils import to_categorical
-        y_array = None
-    #    nlabels = 3
-        #for k in range(0, nlabels):
-        #    print(np.shape(y_data))
-        #    lst2 = [[item[k]] for item in y_data]
-        #    print(np.shape(lst2))
-        #    X_train_enc, X_test_enc_1 = prepare_inputs(lst2, lst2)
-        #    y_data_vec = to_categorical(X_train_enc)
-        #    y_data_vec = np.asarray(y_data_vec)
-        #    if y_array is None:
-    #            y_array = y_data_vec
-        #    else:
-        #        y_array = np.concatenate((y_array, y_data_vec), axis=0)
-    #    y_data = y_array
-    else:
-        x_data = data_events
-        y_data = labels_events
+
 
     if multilabel is False:
         nlabels = 1
@@ -574,40 +664,42 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
     from keras.layers import Dense, Activation
     from keras.layers import Dense, Dropout, Activation
 # For a single-input model with 2 classes (binary classi    fication):
-    model = Sequential()
-    model.add(Activation('relu'))
-#    model.add(Dense(6056, activation='relu', input_dim=nsamples))
+    if train_model is True:
 
-#    model.add(Dense(2056, activation='relu', input_dim=nsamples))
+        model = Sequential()
+        model.add(Activation('relu'))
+    #    model.add(Dense(6056, activation='relu', input_dim=nsamples))
 
-    model.add(Dense(1060, activation='relu', input_dim=nsamples))
-#    model.add(Dense(256, activation='relu', input_dim=nsamples))
-    model.add(Dense(64, activation='relu', input_dim=nsamples))
-    model.add(Dense(32, activation='relu', input_dim=nsamples))
-#    model.add(Dense(16, activation='relu', input_dim=nsamples))
-#    model.add(Dense(8, activation='relu', input_dim=nsamples))
-#    model.add(Dense(6, activation='relu', input_dim=nsamples))
-#    model.add(Dense(4, activation='relu', input_dim=nsamples))
-#    model.add(Dense(64, activation='relu', input_dim=nsamples))
+    #    model.add(Dense(2056, activation='relu', input_dim=nsamples))
 
-#    model.add(Dropout(0.5))
-    model.add(Dense(nlabels, activation='sigmoid'))
-    # adadelta
-    model.compile(optimizer='rmsprop',
-                  loss='binary_crossentropy',
-                  metrics=['accuracy'])
-#    model.compile(optimizer='rmsprop',
-#                  loss='categorical_crossentropy',
-#                  metrics=['accuracy'])
-    from keras.optimizers import SGD
-#    sgd = SGD(lr=0.001, decay=1e-6, momentum=0.9, nesterov=True)
-#    model.compile(optimizer=sgd,
-#                  loss='binary_crossentropy',
-#                  metrics=['accuracy'])
-    #model.compile(loss='categorical_crossentropy',
-    #              optimizer=sgd,
-    #              metrics=['accuracy'])
-    # Generate dummy data
+        model.add(Dense(1060, activation='relu', input_dim=nsamples))
+    #    model.add(Dense(256, activation='relu', input_dim=nsamples))
+        model.add(Dense(64, activation='relu', input_dim=nsamples))
+        model.add(Dense(32, activation='relu', input_dim=nsamples))
+    #    model.add(Dense(16, activation='relu', input_dim=nsamples))
+    #    model.add(Dense(8, activation='relu', input_dim=nsamples))
+    #    model.add(Dense(6, activation='relu', input_dim=nsamples))
+    #    model.add(Dense(4, activation='relu', input_dim=nsamples))
+    #    model.add(Dense(64, activation='relu', input_dim=nsamples))
+
+    #    model.add(Dropout(0.5))
+        model.add(Dense(nlabels, activation='sigmoid'))
+        # adadelta
+        model.compile(optimizer='rmsprop',
+                      loss='binary_crossentropy',
+                      metrics=['accuracy'])
+    #    model.compile(optimizer='rmsprop',
+    #                  loss='categorical_crossentropy',
+    #                  metrics=['accuracy'])
+        from keras.optimizers import SGD
+    #    sgd = SGD(lr=0.001, decay=1e-6, momentum=0.9, nesterov=True)
+    #    model.compile(optimizer=sgd,
+    #                  loss='binary_crossentropy',
+    #                  metrics=['accuracy'])
+        #model.compile(loss='categorical_crossentropy',
+        #              optimizer=sgd,
+        #              metrics=['accuracy'])
+        # Generate dummy data
     data = dat
 
     viz_steps = 2
@@ -643,10 +735,12 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                 model = keras.models.load_model('model_detector')
             else:
                 model = keras.models.load_model('model_locator')
-        if data_dir is not None:
+        if data_dir is not None or validation_data is not None:
             pred = model.predict(data_events_unseen)
         else:
             pred = model.predict(x_val)
+        print(np.shape(pred))
+        print("here", pred)
 
     else:
         train, x_val, y_train, y_val = train_test_split(dat,
@@ -699,26 +793,6 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
     print(y_val, pred)
     print(abs(y_val)-abs(pred))
     print(np.sum(abs(y_val)-abs(pred)))
-
-#    for k, val in enumerate(y_val):
-#        print(np.where(val==1))
-#    print("here")
-#    print(np.shape(pred))
-#    for k, val in enumerate(pred):
-#        sub1 = val[0:1060]
-#        print(np.where(sub1==np.max(sub1)))
-#        print(np.max(sub1))
-#        sub2 = val[1060:2120]
-#        print(np.where(sub2==np.max(sub2)))
-#        print(np.max(sub2))
-#        sub3 = val[2120:]
-#        print(np.where(sub3==np.max(sub3)))
-#        print(np.max(sub3))
-#    idxs = np.unravel_index(np.argmax(y_val, axis=None), y_val.shape)
-#    for k, idx in enumerate(idxs):
-#        print(idx, y_val[k][idx])
-#    print(np.argmax(y_val, axis=None))
-#    print(np.unravel_index(np.argmax(pred, axis=None), pred.shape))
     recover_real_value = False
     if multilabel is True:
         lons = []

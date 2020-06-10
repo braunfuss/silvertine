@@ -834,7 +834,7 @@ def minimum_1d_fit(params, mod, line=None):
 def solve(show=False, n_tests=1, scenario_folder="scenarios",
           optimize_depth=False, scenario=True, data_folder="data",
           parallel=True, adress=None, interpolate=True, mod_name="insheim",
-          singular=False, nboot=1, hybrid=True,
+          singular=False, nboot=1, hybrid=False,
           minimum_vel=False, reference="catalog",):
     global ev_dict_list, times, phase_list, km, mod, pyrocko_stations, bounds, sources, source_dc, iiter, interpolated_tts, result_sources, result_events
 

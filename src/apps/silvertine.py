@@ -473,7 +473,15 @@ def command_detect(args):
         parser.add_option(
             '--data_dir', dest='data_dir', type=str, default=None,
             help='data_dir')
-
+        parser.add_option(
+            '--validation_data', dest='validation_data', type=str, default=None,
+            help='validation_data')
+        parser.add_option(
+            '--start', dest='wanted_start', type=str, default=None,
+            help='start')
+        parser.add_option(
+            '--end', dest='wanted_end', type=str, default=None,
+            help='end')
 
     parser, options, args = cl_parse('detect', args, setup)
     if options.load is not False:
@@ -482,11 +490,15 @@ def command_detect(args):
         options.train_model = False
     if options.detector_only is not False:
         options.detector_only = True
+
     from silvertine import detector
     if options.bnn is True:
         detector.bnn.bnn_detector(load=options.load, train_model=options.train_model,
                                   detector_only=options.detector_only,
-                                  data_dir=options.data_dir)
+                                  data_dir=options.data_dir,
+                                  validation_data=options.validation_data,
+                                  wanted_start=options.wanted_start,
+                                  wanted_end=options.wanted_end)
 
 
 def command_optimize(args):

@@ -478,7 +478,7 @@ def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,
         generated_scenario = False
         while generated_scenario is False:
             try:
-                choice = num.random.choice(10, 1)
+                choice = num.random.choice(20, 1)
                 if choice == 0 or choice == 2:
                     event = gen_random_tectonic_event(scenario, magmin=magmin,
                                                       magmax=magmax, depmin=depmin,
