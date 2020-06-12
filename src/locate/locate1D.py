@@ -596,6 +596,13 @@ def get_bounds(test_events, parallel, singular, bounds, sources, bounds_list,
             else:
                 bounds.update({'p_vel_up%s' %i:(p_vel*(1-pertub), p_vel*(1+pertub))})
                 bounds.update({'s_vel_up%s'%i:(s_vel*(1-pertub), s_vel*(1+pertub))})
+        if peturb_depth is True:
+            pertub_depth = 0.1
+            layers = minimum_vel_mod.layers()
+            for i in range(0, minimum_vel_mod.nlayers):
+                layer = next(layers)
+                bounds.update({'layer_z_%s' %i:(layer.bot*(1-pertub_depth),
+                                                layer.bot*(1+pertub_depth))})
 
     return bounds, bounds_list, sources, source_dc
 
@@ -747,6 +754,59 @@ mantle
                                                                                                params[19+4*nevents], params[20+4*nevents], params[19+4*nevents], params[20+4*nevents])))
 
     return mod
+
+
+def update_layered_model_insheim_depth(params, nevents):
+    mod = cake.LayeredModel.from_scanlines(cake.read_nd_model_str('''
+  0.           %s            %s           2.7         1264.           600.
+  %s           %s           %s           2.7         1264.           600.
+  %s           %s           %s            2.7         1264.           600.
+  %s           %s           %s            2.7         1264.           600.
+  %s           %s           %s            2.7         1264.           600.
+  %s           %s           %s            2.7         1264.           600.
+  %s           %s            %s            2.7         1264.           600.
+  %s           %s            %s            2.7         1264.           600.
+  %s           %s            %s            2.7         1264.           600.
+  %s           %s            %s            2.7         1264.           600.
+  %s           %s            %s            2.7         1264.           600.
+  %s           %s            %s            2.7         1264.           600.
+  %s           %s            %s            2.7         1264.           600.
+  %s          %s            %s            2.7         1264.           600.
+  %s           %s            %s            2.7         1264.           600.
+  %s          %s           %s            2.7         1264.           600.
+  %s          %s           %s            2.7         1264.           600.
+  %s          %s           %s            2.7         1264.           600.
+  %s          %s           %s            2.7         1264.           600.
+  15.00          6.18          3.57           2.7         1264.           600.
+  15.00          6.18          3.57           2.7         1264.           600.
+  20.00          6.25          3.61           2.7         1264.           600.
+  20.00          6.25          3.61           2.7         1264.           600.
+  21.00          6.88          3.97           2.7         1264.           600.
+  21.00          6.88          3.97           2.7         1264.           600.
+ 24.             8.1            4.69           2.7         1264.           600.
+mantle
+ 24.             8.1            4.69           2.7         1264.           600.'''.lstrip() % (params[1+4*nevents], params[2+4*nevents], params[21+4*nevents],
+                                                                                               params[3+4*nevents], params[4+4*nevents], params[21+4*nevents],
+                                                                                               params[3+4*nevents], params[4+4*nevents], params[22+4*nevents],
+                                                                                               params[5+4*nevents], params[6+4*nevents], params[22+4*nevents],
+                                                                                               params[5+4*nevents], params[6+4*nevents], params[23+4*nevents],
+                                                                                               params[7+4*nevents], params[8+4*nevents], params[23+4*nevents],
+                                                                                                params[7+4*nevents], params[8+4*nevents], params[24+4*nevents],
+                                                                                               params[9+4*nevents], params[10+4*nevents], params[24+4*nevents],
+                                                                                               params[9+4*nevents], params[10+4*nevents], params[25+4*nevents]
+                                                                                               params[11+4*nevents], params[12+4*nevents], params[25+4*nevents]
+                                                                                                params[11+4*nevents], params[12+4*nevents], params[26+4*nevents]
+                                                                                               params[13+4*nevents], params[14+4*nevents], params[26+4*nevents]
+                                                                                               params[13+4*nevents], params[14+4*nevents], params[27+4*nevents]
+                                                                                               params[15+4*nevents], params[16+4*nevents], params[27+4*nevents]
+                                                                                                params[15+4*nevents], params[16+4*nevents], params[28+4*nevents]
+                                                                                               params[17+4*nevents], params[18+4*nevents], params[28+4*nevents]
+                                                                                                params[17+4*nevents], params[18+4*nevents], params[29+4*nevents]
+                                                                                               params[19+4*nevents], params[20+4*nevents], params[29+4*nevents]
+                                                                                               params[19+4*nevents], params[20+4*nevents])))
+
+    return mod
+
 
 
 def minimum_1d_fit(params, mod, line=None):
@@ -1113,7 +1173,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                         mod = update_layered_model_insheim(result.x, len(ev_dict_list))
                         if scenario is True:
                             mod_save = scenario_folder + '/min_1d_model'
-                        if scenario is False and singular is True:
+                        if scenario is False:
                             mod_save = data_folder + '/min_1d_model'
                         cake.write_nd_model(mod, mod_save)
                         if optimize_depth is True:

@@ -452,6 +452,20 @@ def command_locate(args):
                                                           reference=options.reference)
 
 
+def process_event_data(args):
+    try:
+        event = model.load_events(args[0])[0]
+        tmin = event.time-30
+        tmax = event.time+30
+        time = event.time
+    except:
+        time = args[0]
+        tmin = time-30
+        tmax = time+30
+
+    subprocess.run(['python3', 'seiger_down.py', "--window='%s,%s'" % (tmin, tmax), '49.1', '8.1', '50.' ,'0.001' ,'50.', 'event_%s' % (time), '--force'])
+
+
 def command_detect(args):
 
     def setup(parser):
