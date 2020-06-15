@@ -877,7 +877,10 @@ def minimum_1d_fit(params, mod, line=None):
                     except:
                         pass
 
-    misfit = num.sqrt(misfits**2 / norms**2)
+    try:
+        misfit = num.sqrt(misfits**2 / norms**2)
+    except:
+        misfit = 100.
     iter_event = iter_event + 1
     if line:
         data = {
