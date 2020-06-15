@@ -21,7 +21,7 @@ from ..util import store_variation
 import ray
 import psutil
 from pathlib import Path
-from silvertine.util import ttt
+from silvertine.util import ttt,  silvertine_meta
 from matplotlib import pyplot as plt
 from pyrocko.guts import Float
 from pyrocko import plot
@@ -350,17 +350,6 @@ def synthetic_ray_tracing_setup(events, stations, mod):
     return ev_list, ev_dict_list
 
 
-def load_data(data_folder=None, nevent=0):
-    from silvertine.util import silvertine_meta
-    ev_dict_list, picks = silvertine_meta.load_ev_dict_list(path=data_folder,
-                                                            nevent=nevent)
-    ev_list_picks, stations, ev_list, ev_dict_list = silvertine_meta.convert_phase_picks_to_pyrocko(ev_dict_list, picks, nevent=nevent)
-    if nevent is None:
-        return ev_list, stations, ev_dict_list, ev_list_picks
-    else:
-        return ev_list, stations, ev_dict_list, ev_list_picks
-
-
 @ray.remote
 def optim_parallel(event, sources, bounds, stations, interpolated_tts,
                    result_sources, result_events, name):
@@ -515,7 +504,8 @@ def associate_waveforms(test_events, stations_list, reference_events=None,
 
 
 def get_bounds(test_events, parallel, singular, bounds, sources, bounds_list,
-               minimum_vel=False, reference_events=None, minimum_vel_mod=None):
+               minimum_vel=False, reference_events=None, minimum_vel_mod=None,
+               peturb_depth=True, layer_affected_max=None):
     ev_iter = 0
     for ev in test_events:
         no_reference = True
@@ -585,24 +575,31 @@ def get_bounds(test_events, parallel, singular, bounds, sources, bounds_list,
         sources.append(source)
     if minimum_vel is True:
         pertub = 0.1
+        layer_affected_max = 10
+        if layer_affected_max is None:
+            layer_affected_max = minimum_vel_mod.nlayers
         layers = minimum_vel_mod.layers()
-        for i in range(0, minimum_vel_mod.nlayers):
+        for i in range(0, layer_affected_max):
             layer = next(layers)
-            p_vel = ((layer.mbot.vp + layer.mtop.vp)/2.)/1000.
-            s_vel = ((layer.mbot.vs + layer.mtop.vs)/2.)/1000.
+            p_vel_mean = ((layer.mbot.vp + layer.mtop.vp)/2.)/1000.
+            s_vel_mean = ((layer.mbot.vs + layer.mtop.vs)/2.)/1000.
+            p_vel_min = (layer.mtop.vp)/1000.
+            s_vel_min = (layer.mtop.vs)/1000.
+            p_vel_max = (layer.mbot.vp)/1000.
+            s_vel_max = (layer.mbot.vs)/1000.
             if i == 0:
-                bounds.update({'p_vel%s' %i:(p_vel*(1-pertub), p_vel*(1+pertub))})
-                bounds.update({'s_vel%s'%i:(s_vel*(1-pertub), s_vel*(1+pertub))})
+                bounds.update({'p_vel%s' %i:(p_vel_min*(1-pertub), p_vel_max*(1+pertub))})
+                bounds.update({'s_vel%s'%i:(s_vel_min*(1-pertub), s_vel_max*(1+pertub))})
             else:
-                bounds.update({'p_vel_up%s' %i:(p_vel*(1-pertub), p_vel*(1+pertub))})
-                bounds.update({'s_vel_up%s'%i:(s_vel*(1-pertub), s_vel*(1+pertub))})
+                bounds.update({'p_vel_up%s' %i:(p_vel_min*(1-pertub), p_vel_max*(1+pertub))})
+                bounds.update({'s_vel_up%s'%i:(s_vel_min*(1-pertub), s_vel_max*(1+pertub))})
         if peturb_depth is True:
             pertub_depth = 0.1
             layers = minimum_vel_mod.layers()
-            for i in range(0, minimum_vel_mod.nlayers):
+            for i in range(0, layer_affected_max):
                 layer = next(layers)
-                bounds.update({'layer_z_%s' %i:(layer.bot*(1-pertub_depth),
-                                                layer.bot*(1+pertub_depth))})
+                bounds.update({'layer_z_%s' %i:((layer.zbot/1000.)*(1-pertub_depth),
+                                                (layer.zbot/1000.)*(1+pertub_depth))})
 
     return bounds, bounds_list, sources, source_dc
 
@@ -785,25 +782,25 @@ def update_layered_model_insheim_depth(params, nevents):
   21.00          6.88          3.97           2.7         1264.           600.
  24.             8.1            4.69           2.7         1264.           600.
 mantle
- 24.             8.1            4.69           2.7         1264.           600.'''.lstrip() % (params[1+4*nevents], params[2+4*nevents], params[21+4*nevents],
-                                                                                               params[3+4*nevents], params[4+4*nevents], params[21+4*nevents],
-                                                                                               params[3+4*nevents], params[4+4*nevents], params[22+4*nevents],
-                                                                                               params[5+4*nevents], params[6+4*nevents], params[22+4*nevents],
-                                                                                               params[5+4*nevents], params[6+4*nevents], params[23+4*nevents],
-                                                                                               params[7+4*nevents], params[8+4*nevents], params[23+4*nevents],
-                                                                                                params[7+4*nevents], params[8+4*nevents], params[24+4*nevents],
-                                                                                               params[9+4*nevents], params[10+4*nevents], params[24+4*nevents],
-                                                                                               params[9+4*nevents], params[10+4*nevents], params[25+4*nevents]
-                                                                                               params[11+4*nevents], params[12+4*nevents], params[25+4*nevents]
-                                                                                                params[11+4*nevents], params[12+4*nevents], params[26+4*nevents]
-                                                                                               params[13+4*nevents], params[14+4*nevents], params[26+4*nevents]
-                                                                                               params[13+4*nevents], params[14+4*nevents], params[27+4*nevents]
-                                                                                               params[15+4*nevents], params[16+4*nevents], params[27+4*nevents]
-                                                                                                params[15+4*nevents], params[16+4*nevents], params[28+4*nevents]
-                                                                                               params[17+4*nevents], params[18+4*nevents], params[28+4*nevents]
-                                                                                                params[17+4*nevents], params[18+4*nevents], params[29+4*nevents]
-                                                                                               params[19+4*nevents], params[20+4*nevents], params[29+4*nevents]
-                                                                                               params[19+4*nevents], params[20+4*nevents])))
+ 24.             8.1            4.69           2.7         1264.           600.'''.lstrip() % (params[0+4*nevents], params[1+4*nevents], params[20+4*nevents],
+                                                                                               params[2+4*nevents], params[3+4*nevents], params[20+4*nevents],
+                                                                                               params[2+4*nevents], params[3+4*nevents], params[21+4*nevents],
+                                                                                               params[4+4*nevents], params[5+4*nevents], params[21+4*nevents],
+                                                                                               params[4+4*nevents], params[5+4*nevents], params[22+4*nevents],
+                                                                                               params[6+4*nevents], params[7+4*nevents], params[22+4*nevents],
+                                                                                                params[6+4*nevents], params[7+4*nevents], params[23+4*nevents],
+                                                                                               params[8+4*nevents], params[9+4*nevents], params[23+4*nevents],
+                                                                                               params[8+4*nevents], params[9+4*nevents], params[24+4*nevents],
+                                                                                               params[10+4*nevents], params[11+4*nevents], params[24+4*nevents],
+                                                                                                params[10+4*nevents], params[11+4*nevents], params[25+4*nevents],
+                                                                                               params[12+4*nevents], params[13+4*nevents], params[25+4*nevents],
+                                                                                               params[12+4*nevents], params[13+4*nevents], params[26+4*nevents],
+                                                                                               params[14+4*nevents], params[15+4*nevents], params[26+4*nevents],
+                                                                                                params[14+4*nevents], params[15+4*nevents], params[27+4*nevents],
+                                                                                               params[16+4*nevents], params[17+4*nevents], params[27+4*nevents],
+                                                                                                params[16+4*nevents], params[17+4*nevents], params[28+4*nevents],
+                                                                                               params[18+4*nevents], params[19+4*nevents], params[28+4*nevents],
+                                                                                               params[18+4*nevents], params[19+4*nevents])))
 
     return mod
 
@@ -812,8 +809,8 @@ mantle
 def minimum_1d_fit(params, mod, line=None):
     global iiter
 #    mod = update_layered_model(mod, params, len(ev_dict_list))
-    mod = update_layered_model_insheim(params, len(ev_dict_list))
-
+#    mod = update_layered_model_insheim(params, len(ev_dict_list))
+    mod = update_layered_model_insheim_depth(params, len(ev_dict_list))
     dists = []
     iter_event = 0
     iter_new = iiter + 1
@@ -870,7 +867,8 @@ def minimum_1d_fit(params, mod, line=None):
 
                                 for i, arrival in enumerate(mod.arrivals([dists],
                                                             phases=[cake_phase],
-                                                            zstart=source.depth)):
+                                                            zstart=source.depth,
+                                                            refine=False)):
                                     used_phase = arrival.used_phase()
 
                                     if phase == used_phase.given_name():
@@ -907,6 +905,10 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
         reference_events = None
         maxiter = 25
         folder_waveforms = scenario_folder
+
+    if minimum_vel is True:
+        if reference == "catalog":
+            reference_events = model.load_events("data/events_ler.pf")
 
     km = 1000.
     iiter = 0
@@ -953,7 +955,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                     run_hyposat(ev_dict_list[i], ev, [ev_list[i]],
                                 pyrocko_stations[i])
         else:
-            test_events, pyrocko_stations, ev_dict_list, ev_list_picks = load_data(data_folder, nevent=n_tests)
+            test_events, pyrocko_stations, ev_dict_list, ev_list_picks = silvertine_meta.load_data(data_folder, nevent=n_tests)
             if reference == "hyposat":
                 reference_events = []
                 from .hyposat_util import run_hyposat
@@ -1161,6 +1163,9 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                                                       tags=[str(result.fun), str(ev_dict_list[i]["id"])])
                             result_events.append(event)
                     else:
+                        import cProfile, pstats
+                        pr = cProfile.Profile()
+                        pr.enable()
                         result = differential_evolution(
                             minimum_1d_fit,
                             args=[mod],
@@ -1175,6 +1180,9 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                             mod_save = scenario_folder + '/min_1d_model'
                         if scenario is False:
                             mod_save = data_folder + '/min_1d_model'
+                        pr.disable()
+                        filename = 'profile.prof'
+                        pr.dump_stats(filename)
                         cake.write_nd_model(mod, mod_save)
                         if optimize_depth is True:
                             bounds = OrderedDict()

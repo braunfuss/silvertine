@@ -467,7 +467,6 @@ def load_data(data_dir, store_id):
 def load_data_archieve(validation_data, gf_freq, duration=4,
                        wanted_start=None, wanted_end=None):
     folder = validation_data
-    folder = "/md3/projects3/seiger/acquisition"
     pathlist = Path(folder).glob('day*')
     waveforms = []
     stations = []

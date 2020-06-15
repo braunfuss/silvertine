@@ -6,3 +6,4 @@ from .differential_evolution import *
 from .ttt import *
 from .waveform import *
 from .prod_data import *
+from .silvertine_plot import *

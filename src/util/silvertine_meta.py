@@ -210,10 +210,19 @@ def convert_phase_picks_to_pyrocko(ev_dict_list, picks, nevent=0):
                 if p[1] not in stations_event:
                     print(p[1], "not found in lists or online")
                 else:
-                    event = model.event.Event(lat=ev["lat"], lon=ev["lon"],
-                                              time=ev["time"],
-                                              catalog=ev["source"],
-                                              magnitude=ev["mag"])
+                    try:
+                        event = model.event.Event(lat=float(ev["lat"]),
+                                                  lon=float(ev["lon"]),
+                                                  time=float(ev["time"]),
+                                                  catalog=str(ev["source"]),
+                                                  magnitude=float(ev["mag"]))
+                    except:
+                        event = model.event.Event(lat=float(ev["lat"]),
+                                                  lon=float(ev["lon"]),
+                                                  time=float(ev["time"]),
+                                                  catalog=str(ev["source"]),
+                                                  magnitude=-9)
+
                     phase_markers.append(PhaseMarker(["0", p[1]], pick_time,
                                                      pick_time, 0,
                                                      phasename=p[2],
@@ -228,3 +237,14 @@ def convert_phase_picks_to_pyrocko(ev_dict_list, picks, nevent=0):
         ev_list.append(phase_markers)
 
     return ev_list, pyrocko_stations, pyrocko_events, ev_dict_list
+
+
+
+def load_data(data_folder=None, nevent=None):
+    ev_dict_list, picks = load_ev_dict_list(path=data_folder,
+                                            nevent=nevent)
+    ev_list_picks, stations, ev_list, ev_dict_list = convert_phase_picks_to_pyrocko(ev_dict_list, picks, nevent=nevent)
+    if nevent is None:
+        return ev_list, stations, ev_dict_list, ev_list_picks
+    else:
+        return ev_list, stations, ev_dict_list, ev_list_picks

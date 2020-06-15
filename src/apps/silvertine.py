@@ -46,6 +46,8 @@ subcommand_descriptions = {
     'locate': 'locate a single or a set of earthquakes',
     'post_shakemap': 'post_shakemap a single or a set of earthquakes',
     'plot_prod': 'plot_prod a single or a set of earthquakes',
+    'plot_mods': 'plot_mods a single or a set of earthquakes',
+    'analyse_statistics': 'command_analyse_statistics',
     'optimize': 'optimize',
     'monitor': 'Monitor stations',
     'beam': 'beamform for a single or a set of earthquakes',
@@ -77,6 +79,8 @@ subcommand_usages = {
     'locate': 'locate [options] <projectdir>',
     'post_shakemap': 'post_shakemap [options] <projectdir>',
     'plot_prod': 'plot_prod [options] <projectdir>',
+    'plot_mods': 'plot_mods [options] <projectdir>',
+    'analyse_statistics': 'command_analyse_statistics [options] <projectdir>',
     'detect': 'detect [options] <projectdir>',
     'optimize': 'optimize [options] <projectdir>',
     'monitor': 'monitor [options] <projectdir>',
@@ -134,6 +138,8 @@ Subcommands:
 
     scenario        %(scenario)s
     plot_prod     %(plot_prod)s
+    plot_mods     %(plot_mods)s
+    analyse_statistics     %(analyse_statistics)s
     locate        %(locate)s
     post_shakemap %(post_shakemap)s
     detect        %(detect)s
@@ -611,6 +617,74 @@ def command_plot_prod(args):
     if options.show is not False:
         options.show = True
     prod_data.plot_insheim_prod_data()
+
+
+def command_plot_mods(args):
+
+    def setup(parser):
+        parser.add_option(
+            '--show', dest='show', type=str, default=False,
+            help='overwrite existing project folder.')
+        parser.add_option(
+            '--ref_models', dest='ref_models', type=str, default=False,
+            help='Plot reference models only.')
+
+
+    parser, options, args = cl_parse('plot_mods', args, setup)
+
+    from silvertine.util import silvertine_plot
+    from pyrocko import cake
+    from matplotlib import pyplot as plt
+    from silvertine.util import ref_mods
+    mod_insheim = ref_mods.insheim_layered_model()
+    mod_landau = ref_mods.landau_layered_model()
+    mod_vsp = ref_mods.vsp_layered_model()
+
+    mods = [mod_insheim, mod_landau, mod_vsp]
+    if options.ref_models is not False:
+        fig, axes = silvertine_plot.bayesian_model_plot(mods, axes=None, highlightidx=[2])
+    else:
+        fig, axes = silvertine_plot.bayesian_model_plot(mods, axes=None, highlightidx=[0,1,2])
+
+
+    if options.show is not False:
+        plt.show()
+
+
+def command_analyse_statistics(args):
+    def setup(parser):
+        parser.add_option(
+            '--show', dest='show', type=str, default=False,
+            help='Show plots or only save them.')
+        parser.add_option(
+            '--catalog', dest='catalog', type=str, default="ler",
+            help='Analyse statistics of fixed catalog.')
+        parser.add_option(
+            '--data_folder', dest='data_folder', type=str, default=False,
+            help='Data folder.')
+        parser.add_option(
+            '--start', dest='start', type=int, default=0,
+            help='start.')
+        parser.add_option(
+            '--end', dest='end', type=int, default=None,
+            help='start.')
+
+    parser, options, args = cl_parse('analyse_statistics', args, setup)
+
+    from silvertine.util import prod_data, silvertine_meta, stats
+    from pyrocko import model
+    if options.show is not False:
+        options.show = True
+    if options.data_folder is False:
+        options.data_folder = "data"
+    if options.catalog is "geres":
+        events, pyrocko_stations, ev_dict_list, ev_list_picks = silvertine_meta.load_data(options.data_folder, nevent=options.end)
+    if options.catalog is "ler":
+        events = model.load_events("data/events_ler.pf")
+
+    distances, time_rel, msd = stats.calcuate_msd(events)
+    print(msd)
+    #prod_data.plot_insheim_prod_data()
 
 
 def command_beam_process(args):
