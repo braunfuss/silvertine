@@ -816,9 +816,10 @@ def minimum_1d_fit(params, mod, line=None):
     iter_new = iiter + 1
     iiter = iter_new
     misfit_stations = 0
+    misfits = 0.
+    norms = 0.
     for ev, source in zip(ev_dict_list, sources):
-        misfits = 0.
-        norms = 0.
+
         source.lat = float(params[0+4*iter_event])
         source.lon = float(params[1+4*iter_event])
         source.depth = float(params[2+4*iter_event])
@@ -870,17 +871,14 @@ def minimum_1d_fit(params, mod, line=None):
                                                             zstart=source.depth,
                                                             refine=False)):
                                     used_phase = arrival.used_phase()
-
                                     if phase == used_phase.given_name():
                                         misfits += num.sqrt(num.sum((tdiff - arrival.t)**2))
                                         norms += num.sqrt(num.sum(arrival.t**2))
                     except:
                         pass
 
-    try:
-        misfit = num.sqrt(misfits**2 / norms**2)
-    except:
-        misfit = 100.
+    misfit = num.sqrt(misfits**2 / norms**2)
+
     iter_event = iter_event + 1
     if line:
         data = {
