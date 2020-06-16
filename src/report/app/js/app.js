@@ -588,7 +588,7 @@ angular.module('reportApp', ['ngRoute', 'ngSanitize'])
                     {schema: report_schema}
                 );
 
-                $http.get(get_path(problem_name) + '/config.yaml', {'responseType': 'text'}).then(function(data) {
+                $http.get(get_path(problem_name) +'/config.yaml', {'responseType': 'text'}).then(function(data) {
                     var doc = new Dummy({
                         'title': 'Problem Test',
                         'name': 'config',
@@ -597,6 +597,21 @@ angular.module('reportApp', ['ngRoute', 'ngSanitize'])
                         'feather_icon': 'code',
                         'template': 'config-file',
                         'raw_config': data.data
+                    });
+
+                    insert_group(problem_name, doc);
+                });
+
+
+                $http.get(get_path(problem_name) +'/event_reference.yaml', {'responseType': 'text'}).then(function(data) {
+                    var doc = new Dummy({
+                        'title': 'Event',
+                        'name': 'event',
+                        'variant': 'default',
+                        'section': 'run',
+                        'feather_icon': 'code',
+                        'template': 'event-file',
+                        'raw_event': data.data
                     });
 
                     insert_group(problem_name, doc);
@@ -861,6 +876,12 @@ angular.module('reportApp', ['ngRoute', 'ngSanitize'])
     .directive('configFile', function() {
         return {
             templateUrl: 'templates/config_file.tmpl.html'
+        };
+    })
+
+    .directive('eventFile', function() {
+        return {
+            templateUrl: 'templates/event_file.tmpl.html'
         };
     })
 

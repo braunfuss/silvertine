@@ -96,7 +96,7 @@ def iter_report_entry_dirs(report_base_path):
     for path, dirnames, filenames in os.walk(report_base_path):
         for dirname in dirnames:
             dirpath = op.join(path, dirname)
-            stats_path = op.join(dirpath, 'event.reference.yaml')
+            stats_path = op.join(dirpath, 'event_reference.yaml')
             if op.exists(stats_path):
                 yield dirpath
 
@@ -158,15 +158,21 @@ def report(env, report_config=None, update_without_plotting=True,
     os.system("cp %s/*location.png %s/location/default/location.default.location.d100.png" % (rundir_path, plots_dir_out))
     os.system("cp %s/location.default.plot_group.yaml %s/location/default/" % (configs_dir, plots_dir_out))
 
+    util.ensuredir("%s/production_data/default/" % (plots_dir_out))
+    os.system("cp %s/*production_data.png %s/production_data/default/production_data.default.production_data.d100.png" % (rundir_path, plots_dir_out))
+    os.system("cp %s/production_data.default.plot_group.yaml %s/production_data/default/" % (configs_dir, plots_dir_out))
+
     util.ensuredir("%s/waveforms/default/" % (plots_dir_out))
     os.system("cp %s/waveforms.png %s/waveforms/default/waveforms.default.waveforms.d100.png" % (rundir_path, plots_dir_out))
     os.system("cp %s/waveforms.default.plot_group.yaml %s/waveforms/default/" % (configs_dir, plots_dir_out))
 
+    os.system("cp %s/grun/config.yaml %s/config.yaml" % (rundir_path, entry_path))
+
     try:
 
-        event = model.load_events(rundir_path+"event.txt")[0]
-        guts.dump(event, filename=op.join(entry_path, 'event.reference.yaml'))
-
+        event = model.load_events(rundir_path+"event.txt")
+        model.dump_events(event, filename=op.join(entry_path, 'event_reference.yaml'), format="yaml")
+        event = event[0]
         from silvertine import plot
         pcc = report_config.plot_config_collection.get_weeded(env)
         plot.make_plots(
@@ -185,11 +191,11 @@ def report(env, report_config=None, update_without_plotting=True,
             silvertine_version="0.01",
             run_info=run_info)
 
-        fn = op.join(entry_path, 'event.reference.yaml')
+        fn = op.join(entry_path, 'event_reference.yaml')
         if op.exists(fn):
             rie.event_best = guts.load(filename=fn)
 
-        fn = op.join(entry_path, 'event.reference.yaml')
+        fn = op.join(entry_path, 'event_reference.yaml')
         if op.exists(fn):
             rie.event_reference = guts.load(filename=fn)
 
@@ -197,6 +203,7 @@ def report(env, report_config=None, update_without_plotting=True,
         guts.dump(rie, filename=fn)
 
         logger.info('Done creating report entry for run "%s".' % "test")
+
     #    report_index(report_config)
 
     #    if make_archive:

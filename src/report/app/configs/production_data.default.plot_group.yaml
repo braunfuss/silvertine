@@ -1,0 +1,23 @@
+--- !silvertine.PlotGroup
+name: production_data
+section: production_data
+title: production_data
+description: '
+
+Production data around the event.
+  '
+formats:
+- !silvertine.PDF {}
+variant: default
+feather_icon: check
+size_cm:
+- 21.0
+- 14.9
+items:
+- !silvertine.PlotItem
+  name: production_data
+  attributes: {}
+  description: '
+
+
+    '

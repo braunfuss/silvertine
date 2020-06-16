@@ -275,7 +275,8 @@ def depth_fit(params, line=None):
     return misfit
 
 
-def load_synthetic_test(n_tests, scenario_folder, nstart=0, nend=None):
+def load_synthetic_test(n_tests, scenario_folder, nstart=8, nend=None,
+                        none_events=True):
     events = []
     stations = []
     for i in range(nstart, n_tests):
@@ -284,7 +285,11 @@ def load_synthetic_test(n_tests, scenario_folder, nstart=0, nend=None):
             event = model.load_events("%s/scenario_%s/event.txt" % (scenario_folder, i))[0]
             if len(event.tags) > 0:
                 if event.tags[0] == "no_event":
-                    pass
+                    if none_events is False:
+                        pass
+                    else:
+                        events.append(event)
+                        stations.append(model.load_stations("%s/scenario_%s/stations.pf" % (scenario_folder, i)))
                 else:
                     events.append(event)
                     stations.append(model.load_stations("%s/scenario_%s/stations.pf" % (scenario_folder, i)))
@@ -811,6 +816,7 @@ def minimum_1d_fit(params, mod, line=None):
 #    mod = update_layered_model(mod, params, len(ev_dict_list))
 #    mod = update_layered_model_insheim(params, len(ev_dict_list))
     mod = update_layered_model_insheim_depth(params, len(ev_dict_list))
+    print("fit")
     dists = []
     iter_event = 0
     iter_new = iiter + 1
@@ -894,7 +900,8 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
           optimize_depth=False, scenario=True, data_folder="data",
           parallel=True, adress=None, interpolate=True, mod_name="insheim",
           singular=False, nboot=1, hybrid=False,
-          minimum_vel=False, reference="catalog",):
+          minimum_vel=False, reference="catalog", plot_prod=True,
+          nstart=8):
     global ev_dict_list, times, phase_list, km, mod, pyrocko_stations, bounds, sources, source_dc, iiter, interpolated_tts, result_sources, result_events
 
     if scenario is False:
@@ -904,7 +911,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
         folder_waveforms = "/md3/projects3/seiger/acquisition"
     else:
         reference_events = None
-        maxiter = 25
+        maxiter = 1
         folder_waveforms = scenario_folder
 
     if minimum_vel is True:
@@ -945,8 +952,10 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
 
         if scenario is True:
             test_events, pyrocko_stations = load_synthetic_test(n_tests,
-                                                                scenario_folder)
+                                                                scenario_folder,
+                                                                nstart=nstart)
             ev_dict_list = []
+
             ev_list, ev_dict_list = synthetic_ray_tracing_setup(test_events,
                                                                 pyrocko_stations,
                                                                 inp_cake)
@@ -989,7 +998,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
         if minimum_vel is False:
             if len(missing) != 0:
                 print("Calculating travel time look up table,\
-                        this may take some time.")
+                        this may takeOSError: some time.")
                 ttt.calculate_ttt_parallel(pyrocko_stations, mod, missing,
                                            mod_name,
                                            adress=adress)
@@ -1220,8 +1229,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
     nevent = 0
 
 
-    for k in range(0, nevents):
-
+    for k in range(nstart, nevents+nstart):
         if scenario is True:
             savedir = scenario_folder + '/scenario_' + str(k) + '/'
         if scenario is False and singular is True:
@@ -1234,7 +1242,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
         axes.set_xlabel('Lat')
         axes.set_ylabel('Lon')
         for i, result_events in enumerate(meta_results):
-            source = result_events[k]
+            source = result_events[k-nstart]
             axes.scatter(source.lat, source.lon)
         stations = pyrocko_stations[0]
         for st in stations:
@@ -1242,4 +1250,14 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
             axes.text(st.lat, st.lon, str(st.station))
         fig.savefig(savedir+'location.png')
         plt.close()
+
+        if plot_prod is True:
+            from silvertine.util import prod_data
+            try:
+                prod_data.plot_insheim_prod_data(time=source.time,
+                                                 savedir=savedir,
+                                                 source=source)
+            except OSError:
+                pass
+
     return result, result_events
