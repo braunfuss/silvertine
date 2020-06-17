@@ -275,7 +275,7 @@ def depth_fit(params, line=None):
     return misfit
 
 
-def load_synthetic_test(n_tests, scenario_folder, nstart=8, nend=None,
+def load_synthetic_test(n_tests, scenario_folder, nstart=1, nend=None,
                         none_events=True):
     events = []
     stations = []
@@ -477,7 +477,7 @@ def bokeh_plot():
 
 def associate_waveforms(test_events, stations_list, reference_events=None,
                         folder=None, plot=True,
-                        scenario=False):
+                        scenario=False, picks=None):
     ev_iter = 0
     traces_dict = OrderedDict()
     from silvertine.util.waveform import plot_waveforms
@@ -502,9 +502,10 @@ def associate_waveforms(test_events, stations_list, reference_events=None,
             savedir = folder + '/scenario_' + str(i) + '/'
             traces = io.load(savedir+"traces.mseed")
             traces_dict.update({'%s' % i: traces})
-
+            if picks is not None:
+                pick = picks[i]
             if plot is True:
-                plot_waveforms(traces, event, stations, savedir)
+                plot_waveforms(traces, event, stations, savedir, pick)
     return traces_dict
 
 
@@ -816,7 +817,6 @@ def minimum_1d_fit(params, mod, line=None):
 #    mod = update_layered_model(mod, params, len(ev_dict_list))
 #    mod = update_layered_model_insheim(params, len(ev_dict_list))
     mod = update_layered_model_insheim_depth(params, len(ev_dict_list))
-    print("fit")
     dists = []
     iter_event = 0
     iter_new = iiter + 1
@@ -901,7 +901,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
           parallel=True, adress=None, interpolate=True, mod_name="insheim",
           singular=False, nboot=1, hybrid=False,
           minimum_vel=False, reference="catalog", plot_prod=True,
-          nstart=8):
+          nstart=0):
     global ev_dict_list, times, phase_list, km, mod, pyrocko_stations, bounds, sources, source_dc, iiter, interpolated_tts, result_sources, result_events
 
     if scenario is False:
@@ -990,7 +990,8 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
             waveforms = associate_waveforms(test_events, pyrocko_stations,
                                             reference_events=None,
                                             folder=folder_waveforms,
-                                            scenario=scenario)
+                                            scenario=scenario,
+                                            picks=ev_dict_list)
 
         # Load/Calculate Traveltime tabel for each phase (parallel)
         interpolated_tts, missing = ttt.load_sptree(phase_list, mod_name)

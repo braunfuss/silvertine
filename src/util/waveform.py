@@ -152,118 +152,176 @@ def plot_waveforms_raw(traces, savedir):
     return fig
 
 
-def plot_waveforms(traces, event, stations, savedir, show=False):
+def plot_waveforms(traces, event, stations, savedir, picks, show=True):
     fig = plt.figure(figsize=plot.mpl_papersize('a4', 'landscape'))
-
     tap_color_annot = (0.35, 0.35, 0.25)
     tap_color_edge = (0.85, 0.85, 0.80)
     waveform_color = scolor('aluminium5')
     misfit_color = scolor('scarletred1')
-    for i, st in enumerate(stations):
-        for tr in traces:
-            if tr.station == st.station:
-                comp = tr.channel
-                tr.downsample_to(0.05)
-                tr.highpass(4, 0.01)
-                tr.lowpass(4, 0.2)
-                dtrace = tr
-        target = st
+    ncomps = 3
+    k = 0
+    nstations = len(stations)
+    ntraces = nstations*ncomps
+    #for i in range(0, ncomps-1):
+    #    stations.extend(stations)
+    i = 0
+    for st in stations:
+        for comp in st.channels:
+            for tr in traces:
+                if tr.station == st.station:
+                    if comp.name == tr.channel:
+                #    tr.downsample_to(0.05)
+                #    tr.highpass(4, 0.01)
+                #    tr.lowpass(4, 0.2)
+                        dtrace = tr
+                        i = i+1
+            target = st
 
-        tmin_fit = dtrace.tmin
-        tmax_fit = dtrace.tmax
+            tmin_fit = dtrace.tmin
+            tmax_fit = dtrace.tmax
 
-        tfade_taper = 1./0.2
+            tfade_taper = 1./0.2
 
-        taper = trace.CosTaper(
-            tmin_fit - 10,
-            tmin_fit,
-            tmax_fit,
-            tmax_fit + 10)
+            taper = trace.CosTaper(
+                tmin_fit - 20,
+                tmin_fit,
+                tmax_fit,
+                tmax_fit + 30)
+            k = k + 1
+            axes2 = fig.add_subplot(nstations/3, nstations/3, k)
+            space = 0.5
+            space_factor = 1.0 + space
+            axes2.set_axis_off()
+            axes2.set_ylim(-1.05 * space_factor, 1.05)
 
-        axes2 = fig.add_subplot(len(stations)/3, len(stations)/3, i+1)
+            axes = axes2.twinx()
+            axes.set_axis_off()
 
-        space = 0.5
-        space_factor = 1.0 + space
-        axes2.set_axis_off()
-        axes2.set_ylim(-1.05 * space_factor, 1.05)
+            bw_filter = trace.ButterworthResponse(
+                                                  corner=2,
+                                                  order=4,
+                                                  type='low')
 
-        axes = axes2.twinx()
-        axes.set_axis_off()
+            setup = trace.MisfitSetup(
+                description='setup',
+                norm=2,
+                taper=taper,
+                filter=bw_filter,
+                domain='time_domain')
 
-        bw_filter = trace.ButterworthResponse(
-                                              corner=2,
-                                              order=4,
-                                              type='low')
+            abs_tr = dtrace.copy()
+            abs_tr.set_ydata(abs(dtrace.get_ydata()))
 
-        setup = trace.MisfitSetup(
-            description='setup',
-            norm=2,
-            taper=taper,
-            filter=bw_filter,
-            domain='time_domain')
+            plot_cc(
+                axes2, abs_tr, space, 0., num.max(abs_tr.get_ydata()),
+                fc=light(misfit_color, 0.3),
+                ec=misfit_color, zorder=4)
 
-        abs_tr = dtrace.copy()
-        abs_tr.set_ydata(abs(dtrace.get_ydata()))
+            plot_trace(
+                axes, dtrace,
+                color=waveform_color, lw=0.5, zorder=5)
 
-        plot_cc(
-            axes2, abs_tr, space, 0., num.max(abs_tr.get_ydata()),
-            fc=light(misfit_color, 0.3),
-            ec=misfit_color, zorder=4)
+            tmarks = [
+                dtrace.tmin,
+                dtrace.tmax]
 
-        plot_trace(
-            axes, dtrace,
-            color=waveform_color, lw=0.5, zorder=5)
+            for tmark in tmarks:
+                axes2.plot(
+                    [tmark, tmark], [-0.9, 0.1], color=tap_color_annot)
 
-        tmarks = [
-            dtrace.tmin,
-            dtrace.tmax]
+            for tmark, text, ha, va in [
+                    (tmarks[0],
+                     '$\,$ ' + str_duration(tmarks[0]),
+                     'left',
+                     'bottom'),
+                    (tmarks[1],
+                     '$\Delta$ ' + str_duration(tmarks[1] - tmarks[0]),
+                     'right',
+                     'bottom')]:
+                                axes2.annotate(
+                                    text,
+                                    xy=(tmark, -0.9),
+                                    xycoords='data',
+                                    xytext=(
+                                        fontsize * 0.4 * [-1, 1][ha == 'left'],
+                                        fontsize * 0.2),
+                                    textcoords='offset points',
+                                    ha=ha,
+                                    va=va,
+                                    color=tap_color_annot,
+                                    fontsize=fontsize, zorder=10)
 
-        for tmark in tmarks:
-            axes2.plot(
-                [tmark, tmark], [-0.9, 0.1], color=tap_color_annot)
+            if picks is not None:
+                for stp in picks["phases"]:
+                    phases_station = []
+                    picks_station = []
+                    if st.station == stp["station"]:
+                        phases_station.append(str(stp["phase"]))
+                        picks_station.append(event.time + float(stp["pick"]))
+                        picks_station.append(event.time)
 
-        for tmark, text, ha, va in [
-                (tmarks[0],
-                 '$\,$ ' + str_duration(tmarks[0]),
-                 'left',
-                 'bottom'),
-                (tmarks[1],
-                 '$\Delta$ ' + str_duration(tmarks[1] - tmarks[0]),
-                 'right',
-                 'bottom')]:
-                            axes2.annotate(
-                                text,
-                                xy=(tmark, -0.9),
-                                xycoords='data',
-                                xytext=(
-                                    fontsize * 0.4 * [-1, 1][ha == 'left'],
-                                    fontsize * 0.2),
-                                textcoords='offset points',
-                                ha=ha,
-                                va=va,
-                                color=tap_color_annot,
-                                fontsize=fontsize, zorder=10)
+                    tmarks = picks_station
 
-        infos = []
+                    for tmark in tmarks:
+                        axes2.plot(
+                            [tmark, tmark], [-1, 1.], color="blue")
 
-        infos.append(target.network+"."+target.station+"."+dtrace.channel)
-        dist = event.distance_to(target)
-        azi = event.azibazi_to(target)[0]
-        infos.append(str_dist(dist))
-        infos.append(u'%.0f\u00B0' % azi)
+            if picks is not None:
+                for stp in picks["phases"]:
+                    phases_station = []
+                    picks_station = []
+                    if st.station == stp["station"]:
+                        phases_station.append(str(stp["phase"]))
+                        picks_station.append(event.time)
 
-        axes2.annotate(
-            '\n'.join(infos),
-            xy=(0., 1.),
-            xycoords='axes fraction',
-            xytext=(2., 2.),
-            textcoords='offset points',
-            ha='left',
-            va='top',
-            fontsize=fontsize,
-            fontstyle='normal')
-    fig.savefig(savedir+"waveforms.png")
-    if show is True:
-        plt.show()
-    else:
-        plt.close()
+                    tmarks = picks_station
+
+                    for tmark in tmarks:
+                        axes2.plot(
+                            [tmark, tmark], [-1, 1.], color="red")
+
+                    # for tmark, text, ha, va in [
+                    #         (tmarks,
+                    #          phases_station,
+                    #          'left',
+                    #          'bottom')]:
+                    #                     print(tmarks)
+                    #                     axes2.annotate(
+                    #                         text,
+                    #                         xy=(tmark[0], -0.9),
+                    #                         xycoords='data',
+                    #                         xytext=(
+                    #                             fontsize * 0.4 * [-1, 1][ha == 'left'],
+                    #                             fontsize * 0.2),
+                    #                         textcoords='offset points',
+                    #                         ha=ha,
+                    #                         va=va,
+                    #                         color=tap_color_annot,
+                    #                         fontsize=fontsize, zorder=10)
+            infos = []
+
+            infos.append(target.network+"."+target.station+"."+dtrace.channel)
+            dist = event.distance_to(target)
+            azi = event.azibazi_to(target)[0]
+            infos.append(str_dist(dist))
+            infos.append(u'%.0f\u00B0' % azi)
+
+            axes2.annotate(
+                '\n'.join(infos),
+                xy=(0., 1.),
+                xycoords='axes fraction',
+                xytext=(2., 2.),
+                textcoords='offset points',
+                ha='left',
+                va='top',
+                fontsize=fontsize,
+                fontstyle='normal')
+            if i/nstations == 1 or i/nstations == 2 or i/nstations ==3:
+                fig.savefig(savedir+"waveforms_%s.png" %i, dpi=1000)
+
+                if show is True:
+                    plt.show()
+                else:
+                    plt.close()
+                fig = plt.figure(figsize=plot.mpl_papersize('a4', 'landscape'))
+                k = 0

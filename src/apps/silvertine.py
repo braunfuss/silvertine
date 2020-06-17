@@ -426,6 +426,12 @@ def command_locate(args):
         parser.add_option(
             '--reference', dest='reference', type=str, default="catalog",
             help='Use reference events, either catalog or hyposat')
+        parser.add_option(
+            '--start', dest='start', type=int, default=0,
+            help='Which event is the first?')
+        parser.add_option(
+            '--hybrid', dest='hybrid', type=str, default=False,
+            help='associate_waveforms')
     parser, options, args = cl_parse('locate', args, setup)
 
     from silvertine.locate import locate1D
@@ -444,6 +450,8 @@ def command_locate(args):
         options.minimum_vel = True
     if options.t_station_dropout is not False:
         options.t_station_dropout = True
+    if options.hybrid is not False:
+        options.hybrid = True
     result, best_model = silvertine.locate.locate1D.solve(scenario_folder=project_dir,
                                                           show=options.show,
                                                           n_tests=options.nevents,
@@ -455,7 +463,9 @@ def command_locate(args):
                                                           mod_name=options.model,
                                                           nboot=options.nboot,
                                                           minimum_vel=options.minimum_vel,
-                                                          reference=options.reference)
+                                                          reference=options.reference,
+                                                          nstart=options.start,
+                                                          hybrid=options.hybrid)
 
 
 def process_event_data(args):

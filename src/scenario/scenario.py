@@ -168,7 +168,6 @@ def rand_source(event, SourceType="MT", pressure=None, volume=None):
         else:
             volume = num.random.uniform(volume*0.0001, volume*1000.)
             volume = num.random.uniform(0.01, 1000)
-
         source = VLVDSource(
             lat=event.lat,
             lon=event.lon,
@@ -177,6 +176,7 @@ def rand_source(event, SourceType="MT", pressure=None, volume=None):
             depth=event.depth,
             azimuth=mt.strike1,
             dip=mt.dip1,
+            time=event.time,
             volume_change=volume, # here synthetic volume change
             clvd_moment=mt.moment) # ?
 
@@ -347,6 +347,7 @@ def gen_induced_event(scenario_id, magmin=1., magmax=3.,
                                                       lonmax, depth_min,
                                                       depth_max)
     time = rand(timemin, timemax)
+
     depth = rand(depth_min, depth_max)
     if choice_in_ex > 1:
         lat = rand(latmin, latmax)
@@ -599,9 +600,6 @@ def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,
                 if add_noise is True and choice != 2:
                     add_white_noise(synthetic_traces)
                 noise_events = gen_noise_events(targets, synthetic_traces, engine)
-                if choice == 1 or choice >3:
-                    for tr in synthetic_traces:
-                        tr.shift(tr.tmin+event.time)
 
                 events = [event]
                 save(synthetic_traces, events, stations, savedir,
