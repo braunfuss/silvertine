@@ -163,7 +163,9 @@ def report(env, report_config=None, update_without_plotting=True,
     os.system("cp %s/production_data.default.plot_group.yaml %s/production_data/default/" % (configs_dir, plots_dir_out))
 
     util.ensuredir("%s/waveforms/default/" % (plots_dir_out))
-    os.system("cp %s/waveforms.png %s/waveforms/default/waveforms.default.waveforms.d100.png" % (rundir_path, plots_dir_out))
+    os.system("cp %s/waveforms_1.png %s/waveforms/default/waveforms.default.waveforms_1.d100.png" % (rundir_path, plots_dir_out))
+    os.system("cp %s/waveforms_2.png %s/waveforms/default/waveforms.default.waveforms_2.d100.png" % (rundir_path, plots_dir_out))
+    os.system("cp %s/waveforms_3.png %s/waveforms/default/waveforms.default.waveforms_3.d100.png" % (rundir_path, plots_dir_out))
     os.system("cp %s/waveforms.default.plot_group.yaml %s/waveforms/default/" % (configs_dir, plots_dir_out))
 
     os.system("cp %s/grun/config.yaml %s/config.yaml" % (rundir_path, entry_path))

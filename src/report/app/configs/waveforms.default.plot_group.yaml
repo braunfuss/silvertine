@@ -15,9 +15,14 @@ size_cm:
 - 14.9
 items:
 - !silvertine.PlotItem
-  name: waveforms
+  name: waveforms_1
   attributes: {}
-  description: '
-
-
-    '
+  description: ''
+- !silvertine.PlotItem
+  name: waveforms_2
+  attributes: {}
+  description: ''
+- !silvertine.PlotItem
+  name: waveforms_3
+  attributes: {}
+  description: ''

@@ -162,8 +162,6 @@ def plot_waveforms(traces, event, stations, savedir, picks, show=True):
     k = 0
     nstations = len(stations)
     ntraces = nstations*ncomps
-    #for i in range(0, ncomps-1):
-    #    stations.extend(stations)
     i = 0
     for st in stations:
         for comp in st.channels:
@@ -266,38 +264,26 @@ def plot_waveforms(traces, event, stations, savedir, picks, show=True):
                         axes2.plot(
                             [tmark, tmark], [-1, 1.], color="blue")
 
-            if picks is not None:
-                for stp in picks["phases"]:
-                    phases_station = []
-                    picks_station = []
-                    if st.station == stp["station"]:
-                        phases_station.append(str(stp["phase"]))
-                        picks_station.append(event.time)
-
-                    tmarks = picks_station
-
-                    for tmark in tmarks:
-                        axes2.plot(
-                            [tmark, tmark], [-1, 1.], color="red")
-
-                    # for tmark, text, ha, va in [
-                    #         (tmarks,
-                    #          phases_station,
-                    #          'left',
-                    #          'bottom')]:
-                    #                     print(tmarks)
-                    #                     axes2.annotate(
-                    #                         text,
-                    #                         xy=(tmark[0], -0.9),
-                    #                         xycoords='data',
-                    #                         xytext=(
-                    #                             fontsize * 0.4 * [-1, 1][ha == 'left'],
-                    #                             fontsize * 0.2),
-                    #                         textcoords='offset points',
-                    #                         ha=ha,
-                    #                         va=va,
-                    #                         color=tap_color_annot,
-                    #                         fontsize=fontsize, zorder=10)
+                    for tmark, text, ha, va in [
+                            (tmarks,
+                             phases_station,
+                             'left',
+                             'bottom')]:
+                                    try:
+                                        axes2.annotate(
+                                            text[0],
+                                            xy=(tmark[0], -1.2),
+                                            xycoords='data',
+                                            xytext=(
+                                                8 * 0.4 * [-1, 1][ha == 'left'],
+                                                8 * 0.2),
+                                            textcoords='offset points',
+                                            ha=ha,
+                                            va=va,
+                                            color=tap_color_annot,
+                                            fontsize=8, zorder=10)
+                                    except:
+                                        pass
             infos = []
 
             infos.append(target.network+"."+target.station+"."+dtrace.channel)
@@ -317,7 +303,7 @@ def plot_waveforms(traces, event, stations, savedir, picks, show=True):
                 fontsize=fontsize,
                 fontstyle='normal')
             if i/nstations == 1 or i/nstations == 2 or i/nstations ==3:
-                fig.savefig(savedir+"waveforms_%s.png" %i, dpi=1000)
+                fig.savefig(savedir+"waveforms_%s.png" % str(int(i/nstations)), dpi=1000)
 
                 if show is True:
                     plt.show()
