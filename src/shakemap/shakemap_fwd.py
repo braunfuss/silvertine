@@ -8,6 +8,7 @@ from pyrocko.guts import Float
 from pyrocko import gf, trace, plot, beachball, util, orthodrome
 from pyrocko import moment_tensor as pmt
 import _pickle as pickle
+from mpl_toolkits.basemap import Basemap
 
 km = 1000.
 
@@ -181,7 +182,8 @@ def load_shakemap(path):
 
 def plot_shakemap(source, norths, easts, values, filename, folder, stations,
                   values_stations=None, easts_stations=None,
-                  norths_stations=None, latlon=True, show=False):
+                  norths_stations=None, latlon=True, show=False,
+                  plot_background_map=True):
     plot.mpl_init()
     fig = plt.figure(figsize=plot.mpl_papersize('a5', 'landscape'))
     axes = fig.add_subplot(1, 1, 1, aspect=1.0)
@@ -243,6 +245,22 @@ def plot_shakemap(source, norths, easts, values, filename, folder, stations,
             plt.scatter(st_lats, st_lons,
                         c=values_stations, s=36, cmap=plt.get_cmap('YlOrBr'),
                         vmin=0., vmax=vmax, edgecolor="k")
+
+    if plot_background_map is True:
+        map = Basemap(projection='merc',
+                      llcrnrlon=num.min(lons),
+                      llcrnrlat=num.min(lats),
+                      urcrnrlon=num.max(lons),
+                      urcrnrlat=num.max(lats),
+                      resolution='h', epsg=3395)
+        ratio_lat = num.max(lats)/num.min(lats)
+        ratio_lon = num.max(lons)/num.min(lons)
+
+        map.drawmapscale(num.min(eastings)+ratio_lon*0.25, num.min(northings)+ratio_lat*0.25, num.mean(eastings), num.mean(northings), 30)
+
+        xpixels = 1000
+        map.arcgisimage(service='World_Shaded_Relief', xpixels=xpixels,
+                        verbose=False)
 
     fig.savefig(folder+filename)
     if show is True:

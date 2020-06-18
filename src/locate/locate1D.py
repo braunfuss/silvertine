@@ -378,8 +378,8 @@ def optim_parallel(event, sources, bounds, stations, interpolated_tts,
         event_result = model.event.Event(lat=source.lat, lon=source.lon,
                                          time=source_dc.time+source.time,
                                          depth=source.depth,
-                                         tags=[str(result.fun),
-                                               str(event["id"])])
+                                         tags=["fun:"+str(result.fun),
+                                               "id:"+str(event["id"])])
         result_events.append(event)
         file = open(name, 'a+')
         event_result.olddumpf(file)
@@ -632,14 +632,14 @@ def get_result_events(params, sources, result, ev_dict_list):
                                       time=source.time,
                                       magnitude=source.magnitude,
                                       depth=source.depth,
-                                      tags=[str(result.fun),
-                                            str(ev_dict_list[i]["id"])])
+                                      tags=["fun:"+str(result.fun),
+                                            "id:"+str(ev_dict_list[i]["id"])])
         except:
             event = model.event.Event(lat=source.lat, lon=source.lon,
                                       time=source.time,
                                       depth=source.depth,
-                                      tags=[str(result.fun),
-                                            str(ev_dict_list[i]["id"])])
+                                      tags=["fun:"+str(result.fun),
+                                            "id:"+str(ev_dict_list[i]["id"])])
 
         result_events.append(event)
     return result_events
@@ -658,8 +658,8 @@ def get_single_result_event(ev_dict_list_copy, params_x, result, i=0):
                                          time=source.time,
                                          depth=source.depth,
                                          magnitude=source.magnitude,
-                                         tags=[str(result.fun),
-                                               str(ev_dict_list_copy[i]["id"])])
+                                         tags=["fun:"+str(result.fun),
+                                               "id:"+str(ev_dict_list_copy[i]["id"])])
     except Exception:
         source = gf.DCSource(
             lat=float(params_x[0]),
@@ -670,8 +670,8 @@ def get_single_result_event(ev_dict_list_copy, params_x, result, i=0):
         event_result = model.event.Event(lat=source.lat, lon=source.lon,
                                          time=source.time,
                                          depth=source.depth,
-                                         tags=[str(result.fun),
-                                               str(ev_dict_list_copy[i]["id"])])
+                                         tags=["fun:"+str(result.fun),
+                                               "id:"+str(ev_dict_list_copy[i]["id"])])
     return event_result, source
 
 
@@ -911,7 +911,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
         folder_waveforms = "/md3/projects3/seiger/acquisition"
     else:
         reference_events = None
-        maxiter = 1
+        maxiter = 25
         folder_waveforms = scenario_folder
 
     if minimum_vel is True:
@@ -1171,9 +1171,11 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                             event = model.event.Event(lat=source.lat, lon=source.lon,
                                                       time=source.time, magnitude=source.magnitude,
                                                       depth=source.depth,
-                                                      tags=[str(result.fun), str(ev_dict_list[i]["id"])])
+                                                      tags=["fun:"+str(result.fun),
+                                                            "id:"+str(ev_dict_list[i]["id"])])
                             result_events.append(event)
                     else:
+                        depth_update = True
                         import cProfile, pstats
                         pr = cProfile.Profile()
                         pr.enable()
@@ -1181,12 +1183,16 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                             minimum_1d_fit,
                             args=[mod],
                             bounds=tuple(bounds.values()),
-                            maxiter=1,
+                            maxiter=25,
                             seed=123,
                             tol=100)
 
                         sources = update_sources(ev_dict_list, result.x)
-                        mod = update_layered_model_insheim(result.x, len(ev_dict_list))
+
+                        if depth_update is True:
+                            mod = update_layered_model_insheim_depth(result.x, len(ev_dict_list))
+                        else:
+                            mod = update_layered_model_insheim(result.x, len(ev_dict_list))
                         if scenario is True:
                             mod_save = scenario_folder + '/min_1d_model'
                         if scenario is False:
@@ -1214,7 +1220,8 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                             event = model.event.Event(lat=source.lat, lon=source.lon,
                                                       time=source.time, magnitude=source.magnitude,
                                                       depth=source.depth,
-                                                      tags=[str(result.fun), str(ev_dict_list[i]["id"])])
+                                                      tags=["fun:"+str(result.fun),
+                                                            "id:"+str(ev_dict_list[i]["id"])])
                             result_events.append(event)
 
         if parallel is not True:
@@ -1224,7 +1231,10 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                 savedir = data_folder + "/event_%s" %(i) + "/"
                 util.ensuredir(savedir)
                 model.dump_events(result_events, scenario_folder+"/result_events_%s.pf" % str(kmod))
-
+                for i, event in enumerate(result_events):
+                    model.dump_events([event], scenario_folder+"/event_%s/event_%s.txt" % (i, str(kmod)))
+                    model.dump_events([event], scenario_folder+"/event_%s/event.txt" % (i))
+                    model.dump_stations(pyrocko_stations[i], scenario_folder+"/event_%s/stations.pf" % (i))
         meta_results.append(result_events)
         nevents = len(result_events)
     nevent = 0

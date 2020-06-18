@@ -1628,6 +1628,9 @@ def command_report(args):
             help='set number of runs to process in parallel, '
                  'If set to more than one, --status=quiet is implied.')
         parser.add_option(
+            '--scenario', dest='scenario', type=str, default="False",
+            help='Scenario.')
+        parser.add_option(
             '--threads', dest='nthreads', type=int, default=1,
             help='set number of threads per process (default: 1).'
                  'Set to 0 to use all available cores.')
@@ -1638,7 +1641,8 @@ def command_report(args):
             help='don\'t create archive file.')
 
     parser, options, args = cl_parse('report', args, setup)
-
+    if options.scenario is not "False":
+        options.scenario = True
     s_conf = ''
     if options.config:
         try:
@@ -1680,10 +1684,14 @@ def command_report(args):
     entries_generated = False
     payload = []
     all = True
+    print(options.scenario)
     try:
         if all is True:
             from pathlib import Path
-            pathlist = Path(args[0]).glob('scenario*/')
+            if options.scenario is True:
+                pathlist = Path(args[0]).glob('scenario*/')
+            else:
+                pathlist = Path(args[0]).glob('event*/')
             for path in sorted(pathlist):
                     rundir = str(path)+"/"
                     payload.append((
