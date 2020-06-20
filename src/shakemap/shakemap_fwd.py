@@ -10,6 +10,7 @@ from pyrocko import moment_tensor as pmt
 import _pickle as pickle
 from mpl_toolkits.basemap import Basemap
 import copy
+import os
 
 km = 1000.
 
@@ -18,14 +19,19 @@ util.setup_logging('gf_shakemap')
 
 def make_shakemap(engine, source, store_id, folder, stations=None, save=True,
                   stations_corrections_file=None, pertub_mechanism=True,
-                  pertub_degree=20, measured=None):
+                  pertub_degree=20, measured=None, n_pertub=2):
     targets, norths, easts, stf_spec = get_scenario(engine,
                                                     source,
                                                     store_id)
 
+    try:
+        measured = num.genfromtxt(folder+"measured_pgv", delimiter=',', dtype=None)
+    except:
+        pass
     if pertub_mechanism is True:
         sources = []
-        for i in range(0, 2):
+        sources.append(source)
+        for i in range(0, n_pertub):
             source_pert = copy.deepcopy(source)
             mts = source_pert.pyrocko_moment_tensor()
             strike, dip, rake = mts.both_strike_dip_rake()[0]
@@ -36,6 +42,7 @@ def make_shakemap(engine, source, store_id, folder, stations=None, save=True,
             rake = num.random.uniform(rake-pertub_degree,
                                       rake+pertub_degree)
             mtm = pmt.MomentTensor.from_values((strike, dip, rake))
+            mtm.moment = mts.moment
             source_pert.mnn = mtm.mnn
             source_pert.mee = mtm.mee
             source_pert.mdd = mtm.mdd
@@ -79,7 +86,14 @@ def make_shakemap(engine, source, store_id, folder, stations=None, save=True,
                       values_stations_list=values_stations_pertubed,
                       norths_stations=norths_stations,
                       easts_stations=easts_stations)
-
+        if measured is not None:
+            plot_shakemap(sources, norths, easts, values_pertubed,
+                          'gf_shakemap_residuals.png', folder,
+                          stations,
+                          values_stations_list=values_stations_pertubed,
+                          norths_stations=norths_stations,
+                          easts_stations=easts_stations,
+                          measured=measured)
     else:
         plot_shakemap(sources, norths, easts, values_pertubed,
                       'gf_shakemap.png', folder,
@@ -218,7 +232,8 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
                   stations,
                   values_stations_list=None, easts_stations=None,
                   norths_stations=None, latlon=True, show=False,
-                  plot_background_map=True):
+                  plot_background_map=True, measured=None,
+                  value_level=0.004):
     plot.mpl_init()
     fig = plt.figure(figsize=plot.mpl_papersize('a5', 'landscape'))
     axes = fig.add_subplot(1, 1, 1, aspect=1.0)
@@ -235,6 +250,11 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
     for i, values_pertubed in enumerate(values_list):
         if i == 0:
             values = values_pertubed
+            values_cum = num.zeros(num.shape(values))
+            values_cum = values_cum + values
+        else:
+            values_cum = values_cum + values_pertubed
+    vales_cum = values_cum/float(len(values_list))
     if values_stations_list is not None:
         values_stations = values_stations_list[0]
     _, vmax = num.min(values), num.max(values)
@@ -307,10 +327,11 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
         if plot_background_map is True:
             lats_map, lons_map = map(lons, lats)
             values[values == 0] = 'nan'
-            alpha=0.5
+            alpha = 0.5
         else:
             lats_map, lons_map = lats, lons
-            alpha=1.
+            alpha = 1.
+
         im = axes.contourf(
             lats_map, lons_map, values.T,
             vmin=0., vmax=vmax,
@@ -325,12 +346,31 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
                 st_lons.append(st.lon)
             if plot_background_map is True:
                 st_lats, st_lons = map(st_lons, st_lats)
-            plt.scatter(st_lons, st_lats,
-                        c=values_stations, s=36, cmap=plt.get_cmap('YlOrBr'),
-                        vmin=0., vmax=vmax, edgecolor="k", alpha=alpha)
+            if measured is None:
+                plt.scatter(st_lons, st_lats,
+                            c=values_stations, s=36,
+                            cmap=plt.get_cmap('YlOrBr'),
+                            vmin=0., vmax=vmax, edgecolor="k", alpha=alpha)
             for k, st in enumerate(stations):
                 plt.text(st_lons[k], st_lats[k], str(st.station))
-        axes.contour(lats_map, lons_map, values.T, cmap='brg', levels=[num.std(values.T)])
+            if measured is not None:
+                residuals = []
+                stations_write = []
+                for k, st in enumerate(stations):
+                    for data in measured:
+                        if data[0].decode() == st.station:
+                            residuals.append(values_stations[k]-data[1])
+                            stations_write.append(st.station)
+                fobj = open(os.path.join(folder, 'residuals.txt'),'w')
+                for i in range(0, len(residuals)):
+                    fobj.write('%s %.20f\n'%(stations_write[i], residuals[i]))
+                fobj.close()
+
+                plt.scatter(st_lons, st_lats,
+                            c=residuals, s=36, cmap=plt.get_cmap('YlOrBr'),
+                            vmin=0., vmax=vmax, edgecolor="k", alpha=alpha)
+        axes.contour(lats_map, lons_map, vales_cum.T, cmap='brg',
+                     levels=[value_level])
 
     fig.savefig(folder+filename)
     if show is True:
