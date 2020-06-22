@@ -928,11 +928,8 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
         mod = vsp_layered_model()
 
     if nboot > 1:
-        pertubed_mods = store_variation.ensemble_earthmodel(mod,
-                                                            num_vary=nboot,
-                                                            error_depth=0.2,
-                                                            error_velocities=0.2,
-                                                            depth_limit_variation=600)
+        pertubed_mods = store_variation.load_varied_models(folder,
+                                                           nmodels=nboot)
     else:
         pertubed_mods = [mod]
 

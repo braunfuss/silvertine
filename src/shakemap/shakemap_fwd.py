@@ -18,8 +18,12 @@ util.setup_logging('gf_shakemap')
 
 
 def make_shakemap(engine, source, store_id, folder, stations=None, save=True,
-                  stations_corrections_file=None, pertub_mechanism=True,
-                  pertub_degree=20, measured=None, n_pertub=2):
+                  stations_corrections_file=None, pertub_mechanism=False,
+                  pertub_degree=20, measured=None, n_pertub=0,
+                  value_level=0.004, pertub_velocity_model=False):
+
+    if n_pertub != 0:
+        pertub_mechanism = True
     targets, norths, easts, stf_spec = get_scenario(engine,
                                                     source,
                                                     store_id)
@@ -85,7 +89,8 @@ def make_shakemap(engine, source, store_id, folder, stations=None, save=True,
                       stations,
                       values_stations_list=values_stations_pertubed,
                       norths_stations=norths_stations,
-                      easts_stations=easts_stations)
+                      easts_stations=easts_stations,
+                      value_level=value_level)
         if measured is not None:
             plot_shakemap(sources, norths, easts, values_pertubed,
                           'gf_shakemap_residuals.png', folder,
@@ -93,11 +98,12 @@ def make_shakemap(engine, source, store_id, folder, stations=None, save=True,
                           values_stations_list=values_stations_pertubed,
                           norths_stations=norths_stations,
                           easts_stations=easts_stations,
-                          measured=measured)
+                          measured=measured,
+                          value_level=value_level)
     else:
         plot_shakemap(sources, norths, easts, values_pertubed,
                       'gf_shakemap.png', folder,
-                      stations)
+                      stations, value_level=value_level)
 
 
 def get_scenario(engine, source, store_id, extent=30, ngrid=50,
@@ -361,9 +367,10 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
                         if data[0].decode() == st.station:
                             residuals.append(values_stations[k]-data[1])
                             stations_write.append(st.station)
-                fobj = open(os.path.join(folder, 'residuals.txt'),'w')
+                fobj = open(os.path.join(folder, 'residuals.txt'), 'w')
                 for i in range(0, len(residuals)):
-                    fobj.write('%s %.20f\n'%(stations_write[i], residuals[i]))
+                    fobj.write('%s %.20f\n' % (stations_write[i],
+                                               residuals[i]))
                 fobj.close()
 
                 plt.scatter(st_lons, st_lats,

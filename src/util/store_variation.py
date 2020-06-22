@@ -1,8 +1,12 @@
 import copy
 import numpy as num
 from .ref_mods import *
-km = 1000.
 from pyrocko.plot import cake_plot as plot
+from pyrocko.fomosto import qseis, qssp
+from pyrocko import util, trace, gf, cake  # noqa
+
+km = 1000.
+
 
 def ensemble_earthmodel(ref_earthmod, num_vary=10, error_depth=0.4,
                         error_velocities=0.2, depth_limit_variation=600):
@@ -211,12 +215,74 @@ def vary_vsp_ensemble():
     return mods_varied
 
 
-def create_gf_store(model, path):
-    pass
+def create_gf_store(mod, path, name="model"):
+    store_dir = path+"/"+name+"/"
+    qsconf = qseis.QSeisConfig()
+    qsconf.qseis_version = '2006a'
+
+    qsconf.time_region = (
+        gf.meta.Timing('{stored:begin}-5'),
+        gf.meta.Timing('{stored:end}+20'))
+
+    qsconf.cut = (
+        gf.meta.Timing('{stored:begin}-5'),
+        gf.meta.Timing('{stored:end}+20'))
+
+    qsconf.wavelet_duration_samples = 0.001
+    qsconf.sw_flat_earth_transform = 0
+
+    config = gf.meta.ConfigTypeA(
+        id='qseis_%s' %name,
+        sample_rate=100,
+        receiver_depth=0.*km,
+        source_depth_min=0*km,
+        source_depth_max=15*km,
+        source_depth_delta=0.4*km,
+        distance_min=0.5,
+        distance_max=40*km,
+        distance_delta=0.4*km,
+        modelling_code_id='qseis.2006a',
+        earthmodel_1d=mod,
+        tabulated_phases=[
+            gf.meta.TPDef(
+                id='any_P',
+                definition='p,P'),
+            gf.meta.TPDef(
+                id='end',
+                definition='1.5'),
+            gf.meta.TPDef(
+                id='begin',
+                definition='10'),
+        ])
+
+    config.validate()
+    gf.store.Store.create_editables(
+        store_dir, config=config, extra={'qseis': qsconf})
+
+    store = gf.store.Store(store_dir, 'r')
+    store.make_ttt()
+    store.close()
+
+    try:
+        qseis.build(store_dir, nworkers=1)
+    except qseis.QSeisError as e:
+        if str(e).find('could not start qseis') != -1:
+            logger.warn('qseis not installed; '
+                        'skipping test_pyrocko_gf_vs_qseis')
+            return
+        else:
+            raise
 
 
-def save_varied_models():
-    mods = vary_vsp_ensemble()
+def save_varied_models(mods, folder, plot=False, name="model"):
     for i, mod in enumerate(mods):
-        #plot.my_model_plot(mod)
-        cake.write_nd_model(mod, "scenarios/minimum_1d_models/model_%s" % i)
+        if plot is True:
+            plot.my_model_plot(mod)
+        cake.write_nd_model(mod, folder+"/%s_%s" % (name, i))
+
+
+def load_varied_models(folder, nmodels=1):
+    mods = []
+    for i in range(0, nmodels):
+        mods.append(cake.load_model(folder+"/model_%s" % i))
+    return mods

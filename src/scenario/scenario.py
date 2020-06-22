@@ -438,22 +438,27 @@ def gen_white_noise(synthetic_traces, scale=2e-8, scale_spectral='False'):
 
 
 def fwd_shakemap_post(projdir, wanted_start=0, wanted_end=None,
-                      store_id="insheim_100hz", gf_store_superdirs=None):
+                      store_id="insheim_100hz", gf_store_superdirs=None,
+                      n_pertub=0, pertub_degree=20,
+                      pertub_velocity_model=False):
     if gf_store_superdirs is None:
         engine = gf.LocalEngine(use_config=True)
     else:
         engine = gf.LocalEngine(store_superdirs=[gf_store_superdirs])
 
     for scenario in range(wanted_start, wanted_end):
-#        try:
+        try:
             savedir = projdir + '/scenario_' + str(scenario) + '/'
             event = model.load_events(savedir+"event.txt")[0]
             source, event = rand_source(event, SourceType="MT")
             stations = model.load_stations(savedir+"stations.pf")
             shakemap_fwd.make_shakemap(engine, source, store_id,
-                                       savedir, stations=stations)
-#        except:
-#            pass
+                                       savedir, stations=stations,
+                                       n_pertub=n_pertub,
+                                       pertub_degree=pertub_degree,
+                                       pertub_velocity_model=pertub_velocity_model)
+        except:
+            pass
 
 
 def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,

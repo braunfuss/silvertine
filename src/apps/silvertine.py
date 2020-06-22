@@ -46,6 +46,7 @@ subcommand_descriptions = {
     'locate': 'locate a single or a set of earthquakes',
     'post_shakemap': 'post_shakemap a single or a set of earthquakes',
     'plot_prod': 'plot_prod a single or a set of earthquakes',
+    'pertub_earthmodels': 'Pertub earthmodels',
     'plot_mods': 'plot_mods a single or a set of earthquakes',
     'analyse_statistics': 'command_analyse_statistics',
     'optimize': 'optimize',
@@ -79,6 +80,7 @@ subcommand_usages = {
     'locate': 'locate [options] <projectdir>',
     'post_shakemap': 'post_shakemap [options] <projectdir>',
     'plot_prod': 'plot_prod [options] <projectdir>',
+    'pertub_earthmodels': 'pertub_earthmodels [options]',
     'plot_mods': 'plot_mods [options] <projectdir>',
     'analyse_statistics': 'command_analyse_statistics [options] <projectdir>',
     'detect': 'detect [options] <projectdir>',
@@ -139,6 +141,7 @@ Subcommands:
     scenario        %(scenario)s
     plot_prod     %(plot_prod)s
     plot_mods     %(plot_mods)s
+    pertub_earthmodels     %(pertub_earthmodels)s
     analyse_statistics     %(analyse_statistics)s
     locate        %(locate)s
     post_shakemap %(post_shakemap)s
@@ -697,6 +700,58 @@ def command_analyse_statistics(args):
     #prod_data.plot_insheim_prod_data()
 
 
+def command_pertub_earthmodels(args):
+    def setup(parser):
+        parser.add_option(
+            '--folder', dest='folder', type=str, default="data/",
+            help='model.')
+        parser.add_option(
+            '--model', dest='mod', type=str, default="vsp",
+            help='model.')
+        parser.add_option(
+            '--nboot', dest='nboot', type=int, default=1,
+            help='Number of boots.')
+        parser.add_option(
+            '--error_depth', dest='error_depth', type=float, default=0.2,
+            help='Error in depth.')
+        parser.add_option(
+            '--error_velocities', dest='error_velocities', type=float, default=0.2,
+            help='Error in depth.')
+        parser.add_option(
+            '--depth_variation', dest='depth_variation', type=float, default=600.,
+            help='Max. error in depth.')
+        parser.add_option(
+            '--gf_store', dest='gf_store', type=str, default=None,
+            help='model.')
+
+    parser, options, args = cl_parse('pertub_earthmodels', args, setup)
+    from silvertine.util import store_variation, ref_mods
+
+    if options.mod == "insheim":
+        mod = ref_mods.insheim_layered_model()
+    elif options.mod == "landau":
+        mod = ref_mods.landau_layered_model()
+    elif options.mod == "vsp":
+        mod = ref_mods.vsp_layered_model()
+    else:
+        from pyrocko import cake
+        mod = cake.load_model(folder+options.mod)
+
+    pertubed_mods = store_variation.ensemble_earthmodel(mod,
+                                                        num_vary=options.nboot,
+                                                        error_depth=options.error_depth,
+                                                        error_velocities=options.error_velocities,
+                                                        depth_limit_variation=options.depth_variation)
+
+    store_variation.save_varied_models(pertubed_mods, options.folder,
+                                       name=options.mod)
+
+    if options.gf_store is not None:
+        for k, mod in enumerate(pertubed_mods):
+            store_variation.create_gf_store(mod, options.gf_store,
+                                            name=options.mod+"_pertubation_%s" % (k))
+
+
 def command_beam_process(args):
 
     def setup(parser):
@@ -909,9 +964,23 @@ def command_post_shakemap(args):
             '--force', dest='force', action='store_true',
             help='overwrite existing project folder.')
         parser.add_option(
+            '--pertub_velocity_model', dest='pertub_velocity_model', type=str,
+            default=False,
+            help='pertub_velocity_model.')
+        parser.add_option(
             '--gf-store-superdirs',
             dest='gf_store_superdirs',
             help='Comma-separated list of directories containing GF stores')
+        parser.add_option(
+            '--n_pertub', dest='n_pertub', type=int, default=0,
+            help='number of pertubations to create (default: %default)')
+        parser.add_option(
+            '--pertub_degree', dest='pertub_degree', type=float, default=20,
+            help='number of pertubations to create (default: %default)')
+        parser.add_option(
+            '--pgv_outline', dest='value_level', type=float, default=0.004,
+            help='Outline of certain PGV value (default: %default)')
+
     parser, options, args = cl_parse('post_shakemap', args, setup)
 
     gf_store_superdirs = None
@@ -922,8 +991,12 @@ def command_post_shakemap(args):
     from silvertine import scenario as silvertine_scenario
     project_dir = args[0]
     scenario = silvertine.scenario.fwd_shakemap_post(
-        project_dir, wanted_start=options.wanted_start, wanted_end=options.wanted_end, store_id=options.store_id,
-        gf_store_superdirs=options.gf_store_superdirs)
+        project_dir, wanted_start=options.wanted_start,
+        wanted_end=options.wanted_end, store_id=options.store_id,
+        gf_store_superdirs=options.gf_store_superdirs,
+        pertub_degree=options.pertub_degree, n_pertub=options.n_pertub,
+        value_level=options.value_level,
+        pertub_velocity_model=options.pertub_velocity_model)
 
 
 def command_init(args):
