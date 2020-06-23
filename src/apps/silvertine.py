@@ -961,6 +961,14 @@ def command_post_shakemap(args):
             default="insheim_100hz",
             help='maximum depth (default: %default)')
         parser.add_option(
+            '--measured', dest='measured', type=str,
+            default=None,
+            help='maximum depth (default: %default)')
+        parser.add_option(
+            '--scenario', dest='scenario', type=str,
+            default=False,
+            help='maximum depth (default: %default)')
+        parser.add_option(
             '--force', dest='force', action='store_true',
             help='overwrite existing project folder.')
         parser.add_option(
@@ -988,6 +996,10 @@ def command_post_shakemap(args):
         gf_store_superdirs = options.gf_store_superdirs.split(',')
     else:
         gf_store_superdirs = None
+    if options.measured is not None:
+        options.measured = True
+    if options.scenario is not False:
+        options.scenario = True
     from silvertine import scenario as silvertine_scenario
     project_dir = args[0]
     scenario = silvertine.scenario.fwd_shakemap_post(
@@ -996,7 +1008,9 @@ def command_post_shakemap(args):
         gf_store_superdirs=options.gf_store_superdirs,
         pertub_degree=options.pertub_degree, n_pertub=options.n_pertub,
         value_level=options.value_level,
-        pertub_velocity_model=options.pertub_velocity_model)
+        pertub_velocity_model=options.pertub_velocity_model,
+        measured=options.measured,
+        scenario_run=options.scenario)
 
 
 def command_init(args):

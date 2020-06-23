@@ -1231,11 +1231,14 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
                 for i, event in enumerate(result_events):
                     model.dump_events([event], scenario_folder+"/event_%s/event_%s.txt" % (i, str(kmod)))
                     model.dump_events([event], scenario_folder+"/event_%s/event.txt" % (i))
-                    model.dump_stations(pyrocko_stations[i], scenario_folder+"/event_%s/stations.pf" % (i))
+                    try:
+                        model.dump_stations(pyrocko_stations[i], scenario_folder+"/event_%s/stations.pf" % (i))
+                    except Exception:
+                        model.dump_stations(pyrocko_stations_copy[i], scenario_folder+"/event_%s/stations.pf" % (i))
+
         meta_results.append(result_events)
         nevents = len(result_events)
     nevent = 0
-
 
     for k in range(nstart, nevents+nstart):
         if scenario is True:

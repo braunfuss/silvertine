@@ -2,16 +2,14 @@ from collections import defaultdict
 
 import numpy as num
 from matplotlib import pyplot as plt
-
 from pyrocko.guts import Float
-
 from pyrocko import gf, trace, plot, beachball, util, orthodrome
 from pyrocko import moment_tensor as pmt
 import _pickle as pickle
 from mpl_toolkits.basemap import Basemap
 import copy
 import os
-
+import urllib
 km = 1000.
 
 util.setup_logging('gf_shakemap')
@@ -29,7 +27,9 @@ def make_shakemap(engine, source, store_id, folder, stations=None, save=True,
                                                     store_id)
 
     try:
-        measured = num.genfromtxt(folder+"measured_pgv", delimiter=',', dtype=None)
+        if measured is True:
+            measured = num.genfromtxt(folder+"measured_pgv",
+                                      delimiter=',', dtype=None)
     except:
         pass
     if pertub_mechanism is True:
@@ -59,10 +59,16 @@ def make_shakemap(engine, source, store_id, folder, stations=None, save=True,
     values_pertubed = []
     values_stations_pertubed = []
     for source in sources:
-        response = engine.process(source, targets)
-        values = post_process(response, norths, easts, stf_spec, savedir=folder,
-                              save=save)
-        values_pertubed.append(values)
+        if pertub_velocity_model is True:
+            response = engine.process(source, targets)
+            values = post_process(response, norths, easts, stf_spec, savedir=folder,
+                                  save=save)
+            values_pertubed.append(values)
+        else:
+            response = engine.process(source, targets)
+            values = post_process(response, norths, easts, stf_spec, savedir=folder,
+                                  save=save)
+            values_pertubed.append(values)
         if stations is not None:
             targets_stations, norths_stations, easts_stations, stf_spec = get_scenario(engine,
                                                                                        source,
@@ -313,9 +319,11 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
             map.drawparallels(parallels, labels=[1, 0,0,0], fontsize=22)
             map.drawmeridians(meridians, labels=[1, 1,0,1], fontsize=22)
             xpixels = 1000
-            map.arcgisimage(service='World_Shaded_Relief', xpixels=xpixels,
+            try:
+                map.arcgisimage(service='World_Shaded_Relief', xpixels=xpixels,
                             verbose=False, zorder=1, cmap="gray")
-
+            except urllib.error.URLError:
+                pass
     #    axes.set_xlim(lats.min()/km, lats.max()/km)
     #    axes.set_ylim(norths.min()/km, norths.max()/km)
         if plot_background_map is True:
