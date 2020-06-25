@@ -986,8 +986,26 @@ def command_post_shakemap(args):
             '--pertub_degree', dest='pertub_degree', type=float, default=20,
             help='number of pertubations to create (default: %default)')
         parser.add_option(
-            '--pgv_outline', dest='value_level', type=float, default=0.004,
+            '--pgv_outline', dest='value_level', type=float, default=0.005,
             help='Outline of certain PGV value (default: %default)')
+        parser.add_option(
+            '--strike', dest='strike', type=float, default=None,
+            help='Outline of certain PGV value (default: %default)')
+        parser.add_option(
+            '--dip', dest='dip', type=float, default=None,
+            help='Outline of certain PGV value (default: %default)')
+        parser.add_option(
+            '--rake', dest='rake', type=float, default=None,
+            help='Outline of certain PGV value (default: %default)')
+        parser.add_option(
+            '--moment', dest='moment', type=float, default=None,
+            help='Outline of certain PGV value (default: %default)')
+        parser.add_option(
+            '--depth', dest='depth', type=float, default=None,
+            help='Outline of certain PGV value (default: %default)')
+        parser.add_option(
+            '--source_type', dest='source_type', type=str, default="MT",
+            help='Source Type (default: %default)')
 
     parser, options, args = cl_parse('post_shakemap', args, setup)
 
@@ -1010,7 +1028,13 @@ def command_post_shakemap(args):
         value_level=options.value_level,
         pertub_velocity_model=options.pertub_velocity_model,
         measured=options.measured,
-        scenario_run=options.scenario)
+        scenario_run=options.scenario,
+        strike=options.strike,
+        dip=options.dip,
+        rake=options.rake,
+        moment=options.moment,
+        depth=options.depth,
+        source_type=options.source_type)
 
 
 def command_init(args):

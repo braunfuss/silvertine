@@ -25,13 +25,12 @@ def make_shakemap(engine, source, store_id, folder, stations=None, save=True,
     targets, norths, easts, stf_spec = get_scenario(engine,
                                                     source,
                                                     store_id)
-
     try:
         if measured is True:
             measured = num.genfromtxt(folder+"measured_pgv",
                                       delimiter=',', dtype=None)
     except:
-        pass
+        measured = None
     if pertub_mechanism is True:
         sources = []
         sources.append(source)
@@ -74,6 +73,7 @@ def make_shakemap(engine, source, store_id, folder, stations=None, save=True,
                                                                                        source,
                                                                                        store_id,
                                                                                        stations=stations)
+
             response_stations = engine.process(source, targets_stations)
             values_stations = post_process(response_stations, norths_stations,
                                            easts_stations,
@@ -96,7 +96,8 @@ def make_shakemap(engine, source, store_id, folder, stations=None, save=True,
                       values_stations_list=values_stations_pertubed,
                       norths_stations=norths_stations,
                       easts_stations=easts_stations,
-                      value_level=value_level)
+                      value_level=value_level, measured=measured,
+                      plot_values=True)
         if measured is not None:
             plot_shakemap(sources, norths, easts, values_pertubed,
                           'gf_shakemap_residuals.png', folder,
@@ -112,7 +113,7 @@ def make_shakemap(engine, source, store_id, folder, stations=None, save=True,
                       stations, value_level=value_level)
 
 
-def get_scenario(engine, source, store_id, extent=30, ngrid=50,
+def get_scenario(engine, source, store_id, extent=50, ngrid=20,
                  stations=None):
     '''
     Setup scenario with source model, STF and a rectangular grid of targets.
@@ -167,6 +168,7 @@ def get_scenario(engine, source, store_id, extent=30, ngrid=50,
             norths.append(north[0])
             easts.append(east[0])
             norths2, easts2 = coords_2d(north, east)
+
             for cha in st.channels:
                 target = gf.Target(
                     quantity='displacement',
@@ -187,21 +189,28 @@ def get_scenario(engine, source, store_id, extent=30, ngrid=50,
 
 
 def post_process(response, norths, easts, stf_spec, stations=False,
-                 show=True, savedir=None, save=True):
+                 show=True, savedir=None, save=True, quantity="velocity"):
     nnorth = norths.size
     neast = easts.size
 
     norths2, easts2 = coords_2d(norths, easts)
 
     by_i = defaultdict(list)
+    traces = []
     for source, target, tr in response.iter_results():
         tr = tr.copy()
-        trans = trace.DifferentiationResponse(2)
 
-        trans = trace.MultiplyResponse(
-            [trans, stf_spec])
+        if quantity == "velocity":
+            trans = trace.DifferentiationResponse(1)
+        if quantity == "acceleration":
+            trans = trace.DifferentiationResponse(2)
 
-        tr = tr.transfer(transfer_function=trans)
+
+        if quantity is not "displacement":
+            trans = trace.MultiplyResponse(
+                [trans, stf_spec])
+
+            tr = tr.transfer(transfer_function=trans)
 
         tr.highpass(4, 0.5)
         tr.lowpass(4, 4.0)
@@ -210,9 +219,15 @@ def post_process(response, norths, easts, stf_spec, stations=False,
         # uncomment to active resampling to get a smooth image (slow):
         tr_resamp.resample(tr.deltat*0.25)
         by_i[int(target.codes[1])].append(tr_resamp)
-
+        traces.append(tr)
     values = num.zeros(nnorth*neast)
+    from pyrocko import trace as trd
+#    if stations is True:
 
+#        trd.snuffle(traces)
+#    if stations is True:
+#        from pyrocko import io
+#        io.save(traces, "traces_pgv.mseed")
     plot_trs = []
     for i in range(norths2.size):
         trs = by_i[i]
@@ -245,7 +260,8 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
                   values_stations_list=None, easts_stations=None,
                   norths_stations=None, latlon=True, show=False,
                   plot_background_map=True, measured=None,
-                  value_level=0.004):
+                  value_level=0.004, quantity="velocity",
+                  scale="mm", plot_values=False):
     plot.mpl_init()
     fig = plt.figure(figsize=plot.mpl_papersize('a5', 'landscape'))
     axes = fig.add_subplot(1, 1, 1, aspect=1.0)
@@ -267,8 +283,12 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
         else:
             values_cum = values_cum + values_pertubed
     vales_cum = values_cum/float(len(values_list))
+    if scale == "mm":
+        values = values*1000.
     if values_stations_list is not None:
         values_stations = values_stations_list[0]
+        if scale == "mm":
+            values_stations = values_stations*1000.
     _, vmax = num.min(values), num.max(values)
 
     if latlon is False:
@@ -283,7 +303,16 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
             vmin=0., vmax=vmax,
             cmap=plt.get_cmap('YlOrBr'))
 
-        fig.colorbar(im, label='Acceleration [m/s^2]')
+        if quantity == "velocity":
+            if scale == "mm":
+                fig.colorbar(im, label='Velocity [mm/s]')
+            else:
+                fig.colorbar(im, label='Velocity [m/s]')
+        if quantity == "acceleration":
+            if scale == "mm":
+                fig.colorbar(im, label='Velocity [mm/s]')
+            else:
+                fig.colorbar(im, label='Velocity [m/s]')
 
         beachball.plot_fuzzy_beachball_mpl_pixmap(
             mts, axes, best_mt,
@@ -313,15 +342,19 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
             ratio_lat = num.max(lats)/num.min(lats)
             ratio_lon = num.max(lons)/num.min(lons)
 
-            map.drawmapscale(num.min(lons)+ratio_lon*0.25, num.min(lats)+ratio_lat*0.25, num.mean(lons), num.mean(lats), 10)
-            parallels = num.arange(num.around(num.min(lats), decimals=2), num.around(num.max(lats), decimals=2), 0.1)
-            meridians = num.arange(num.around(num.min(lons), decimals=2), num.around(num.max(lons), decimals=2), 0.1)
-            map.drawparallels(parallels, labels=[1, 0,0,0], fontsize=22)
-            map.drawmeridians(meridians, labels=[1, 1,0,1], fontsize=22)
+            map.drawmapscale(num.min(lons)+ratio_lon*0.25,
+                             num.min(lats)+ratio_lat*0.25,
+                             num.mean(lons), num.mean(lats), 10)
+            parallels = num.arange(num.around(num.min(lats), decimals=2),
+                                   num.around(num.max(lats), decimals=2), 0.1)
+            meridians = num.arange(num.around(num.min(lons), decimals=2),
+                                   num.around(num.max(lons), decimals=2), 0.1)
+            map.drawparallels(parallels, labels=[1, 0, 0, 0], fontsize=22)
+            map.drawmeridians(meridians, labels=[1, 1, 0, 1], fontsize=22)
             xpixels = 1000
             try:
                 map.arcgisimage(service='World_Shaded_Relief', xpixels=xpixels,
-                            verbose=False, zorder=1, cmap="gray")
+                                verbose=False, zorder=1, cmap="gray")
             except urllib.error.URLError:
                 pass
     #    axes.set_xlim(lats.min()/km, lats.max()/km)
@@ -352,7 +385,17 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
             cmap=plt.get_cmap('YlOrBr'),
             alpha=alpha)
 
-        fig.colorbar(im, label='Acceleration [m/s^2]')
+        if quantity == "velocity":
+            if scale == "mm":
+                fig.colorbar(im, label='Velocity [mm/s]')
+            else:
+                fig.colorbar(im, label='Velocity [m/s]')
+        if quantity == "acceleration":
+            if scale == "mm":
+                fig.colorbar(im, label='Velocity [mm/s]')
+            else:
+                fig.colorbar(im, label='Velocity [m/s]')
+
         if values_stations_list is not None:
             st_lats, st_lons = [], []
             for st in stations:
@@ -360,14 +403,21 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
                 st_lons.append(st.lon)
             if plot_background_map is True:
                 st_lats, st_lons = map(st_lons, st_lats)
-            if measured is None:
-                plt.scatter(st_lons, st_lats,
-                            c=values_stations, s=36,
+            if plot_values is True and measured is not None:
+                measured_values = []
+                for k, st in enumerate(stations):
+                    for data in measured:
+                        if data[0].decode() == st.station:
+                            if scale == "mm":
+                                measured_values.append(data[1]*1000.)
+            if plot_values is True and measured is None:
+                plt.scatter(st_lats, st_lons,
+                            c=num.asarray(values_station), s=36,
                             cmap=plt.get_cmap('YlOrBr'),
                             vmin=0., vmax=vmax, edgecolor="k", alpha=alpha)
             for k, st in enumerate(stations):
-                plt.text(st_lons[k], st_lats[k], str(st.station))
-            if measured is not None:
+                plt.text(st_lats[k], st_lons[k], str(st.station))
+            if measured is not None and plot_values is False:
                 residuals = []
                 stations_write = []
                 for k, st in enumerate(stations):
@@ -381,7 +431,13 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
                                                residuals[i]))
                 fobj.close()
 
-                plt.scatter(st_lons, st_lats,
+                fobj = open(os.path.join(folder, 'synthetic_pga.txt'), 'w')
+                for i in range(0, len(residuals)):
+                    fobj.write('%s %.20f\n' % (stations_write[i],
+                                               values_stations[i]))
+                fobj.close()
+
+                plt.scatter(st_lats, st_lons,
                             c=residuals, s=36, cmap=plt.get_cmap('YlOrBr'),
                             vmin=0., vmax=vmax, edgecolor="k", alpha=alpha)
         axes.contour(lats_map, lons_map, vales_cum.T, cmap='brg',

@@ -442,7 +442,14 @@ def fwd_shakemap_post(projdir, wanted_start=0, wanted_end=None,
                       n_pertub=0, pertub_degree=20,
                       pertub_velocity_model=False,
                       value_level=0.004, scenario_run=True,
-                      measured=True):
+                      measured=True,
+                      strike=None,
+                      dip=None,
+                      rake=None,
+                      moment=None,
+                      depth=None,
+                      source_type="MT"):
+
     if gf_store_superdirs is None:
         engine = gf.LocalEngine(use_config=True)
     else:
@@ -455,7 +462,22 @@ def fwd_shakemap_post(projdir, wanted_start=0, wanted_end=None,
             else:
                 savedir = projdir + '/scenario_' + str(scenario) + '/'
             event = model.load_events(savedir+"event.txt")[0]
-            source, event = rand_source(event, SourceType="MT")
+            if strike is not None:
+
+                mtm = pmt.MomentTensor.from_values((strike, dip, rake))
+                event.moment_tensor.mnn = mtm.mnn
+                event.moment_tensor.mee = mtm.mee
+                event.moment_tensor.mdd = mtm.mdd
+                event.moment_tensor.mne = mtm.mne
+                event.moment_tensor.mnd = mtm.mnd
+                event.moment_tensor.med = mtm.med
+                #event.moment_tensor.moment = moment
+            if depth is not None:
+                event.depth = depth
+            if moment is None:
+                moment = event.moment_tensor.moment
+            source, event = rand_source(event, SourceType=source_type)
+
             try:
                 stations = model.load_stations(savedir+"stations.pf")
             except:
