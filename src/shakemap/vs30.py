@@ -2,7 +2,6 @@ import os
 import gdal
 import matplotlib
 import numpy as num
-from mpl_toolkits.basemap import Basemap
 
 
 def read_usgs_vs30():
@@ -26,8 +25,8 @@ def read_usgs_vs30():
 
 def extract_rectangle(lonmin, lonmax, latmin, latmax):
     data, xOrigin, yOrigin, pixelWidth, pixelHeight = read_usgs_vs30()
-    p1 = (lonmin, lonmax)
-    p2 = (latmin, latmax)
+    p1 = (lonmin, latmax)
+    p2 = (lonmax, latmin)
     col1 = int((p1[0] - xOrigin) / pixelWidth)
     row1 = int((yOrigin - p1[1]) / pixelHeight)
     col2 = int((p2[0] - xOrigin) / pixelWidth)
@@ -38,10 +37,6 @@ def extract_rectangle(lonmin, lonmax, latmin, latmax):
     for r in rows:
         for c in cols:
             values.append(data[r][c])
-    values = np.asarray(values)
+    values = num.asarray(values)
     values = values.reshape(len(rows), len(cols))
-
     return values
-
-p1 = (8.225, 54.931)
-p2 = (10.425, 50.131)

@@ -89,6 +89,7 @@ def make_shakemap(engine, source, store_id, folder, stations=None, save=True,
                             stations_corrections_value.append(stc[1])
                 values_stations = values_stations * num.asarray(stations_corrections_value)
             values_stations_pertubed.append(values_stations)
+
     if stations is not None:
         plot_shakemap(sources, norths, easts, values_pertubed,
                       'gf_shakemap.png', folder,
@@ -97,7 +98,8 @@ def make_shakemap(engine, source, store_id, folder, stations=None, save=True,
                       norths_stations=norths_stations,
                       easts_stations=easts_stations,
                       value_level=value_level, measured=measured,
-                      plot_values=True)
+                      engine=engine, plot_values=True,
+                      store_id=store_id)
         if measured is not None:
             plot_shakemap(sources, norths, easts, values_pertubed,
                           'gf_shakemap_residuals.png', folder,
@@ -106,11 +108,13 @@ def make_shakemap(engine, source, store_id, folder, stations=None, save=True,
                           norths_stations=norths_stations,
                           easts_stations=easts_stations,
                           measured=measured,
-                          value_level=value_level)
+                          value_level=value_level, engine=engine,
+                          store_id=store_id)
     else:
         plot_shakemap(sources, norths, easts, values_pertubed,
                       'gf_shakemap.png', folder,
-                      stations, value_level=value_level)
+                      stations, value_level=value_level, engine=engine,
+                      store_id=store_id)
 
 
 def get_scenario(engine, source, store_id, extent=50, ngrid=20,
@@ -205,7 +209,6 @@ def post_process(response, norths, easts, stf_spec, stations=False,
         if quantity == "acceleration":
             trans = trace.DifferentiationResponse(2)
 
-
         if quantity is not "displacement":
             trans = trace.MultiplyResponse(
                 [trans, stf_spec])
@@ -261,7 +264,8 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
                   norths_stations=None, latlon=True, show=False,
                   plot_background_map=True, measured=None,
                   value_level=0.004, quantity="velocity",
-                  scale="mm", plot_values=False):
+                  scale="mm", plot_values=False, vs30=True,
+                  engine=None, type_factors=None, store_id=None):
     plot.mpl_init()
     fig = plt.figure(figsize=plot.mpl_papersize('a5', 'landscape'))
     axes = fig.add_subplot(1, 1, 1, aspect=1.0)
@@ -289,7 +293,6 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
         values_stations = values_stations_list[0]
         if scale == "mm":
             values_stations = values_stations*1000.
-    _, vmax = num.min(values), num.max(values)
 
     if latlon is False:
         axes.set_xlim(easts.min()/km, easts.max()/km)
@@ -331,6 +334,25 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
                                                north, east)
             lats.append(lat)
             lons.append(lon)
+
+        if vs30 is True:
+            from silvertine.shakemap import vs30
+            values_vs30 = vs30.extract_rectangle(num.min(lons), num.max(lons), num.min(lats), num.max(lats))
+            from scipy import ndimage
+            factor_x = num.shape(values)[0]/num.shape(values_vs30)[0]
+            factor_y = num.shape(values)[1]/num.shape(values_vs30)[1]
+            values_vs30_resam = ndimage.zoom(values_vs30, (factor_x, factor_y))
+
+            store = engine.get_store(store_id)
+            if type_factors is None:
+                layer0 = store.config.earthmodel_1d.layer(0)
+                base_velocity = layer0.mtop.vs
+                base_velocity = 400.
+                type_factors = 1
+                amp_factor = (base_velocity/values_vs30_resam)**type_factors
+                values = values*amp_factor
+
+        _, vmax = num.min(values), num.max(values)
 
         if plot_background_map is True:
             map = Basemap(projection='merc',
@@ -410,13 +432,21 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
                         if data[0].decode() == st.station:
                             if scale == "mm":
                                 measured_values.append(data[1]*1000.)
+
             if plot_values is True and measured is None:
                 plt.scatter(st_lats, st_lons,
-                            c=num.asarray(values_station), s=36,
+                            c=num.asarray(values_stations), s=36,
                             cmap=plt.get_cmap('YlOrBr'),
                             vmin=0., vmax=vmax, edgecolor="k", alpha=alpha)
-            for k, st in enumerate(stations):
-                plt.text(st_lats[k], st_lons[k], str(st.station))
+                for k, st in enumerate(stations):
+                    plt.text(st_lats[k], st_lons[k], str(st.station))
+            if plot_values is True and measured is not None:
+                plt.scatter(st_lats, st_lons,
+                            c=num.asarray(measured_values), s=36,
+                            cmap=plt.get_cmap('YlOrBr'),
+                            vmin=0., vmax=vmax, edgecolor="k", alpha=alpha)
+                for k, st in enumerate(stations):
+                    plt.text(st_lats[k], st_lons[k], str(st.station))
             if measured is not None and plot_values is False:
                 residuals = []
                 stations_write = []
@@ -448,6 +478,7 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
         plt.show()
     else:
         plt.close()
+
 
 
 def coords_2d(norths, easts):
