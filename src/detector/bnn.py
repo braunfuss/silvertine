@@ -20,6 +20,7 @@ from keras.layers import Conv1D, MaxPooling1D, Input
 from keras import models
 from PIL import Image
 from pathlib import Path
+from silvertine.util import waveform
 
 import os
 try:
@@ -464,67 +465,6 @@ def load_data(data_dir, store_id):
     return waveforms, nsamples, len(stations), events
 
 
-def load_data_archieve(validation_data, gf_freq, duration=4,
-                       wanted_start=None, wanted_end=None):
-    folder = validation_data
-    pathlist = Path(folder).glob('day*')
-    waveforms = []
-    stations = []
-    print(wanted_end, wanted_start)
-    if wanted_start is not None:
-        wanted_start = util.stt(wanted_start)
-        wanted_end = util.stt(wanted_end)
-    print(wanted_end, wanted_start)
-
-    from pyrocko import pile
-    paths = []
-    safecon = 0
-    for path in sorted(pathlist):
-        path = str(path)
-        d2 = float(str(path)[-12:])
-        d1 = float(str(path)[-25:-13])
-        if wanted_start is not None:
-            if (d1 >= wanted_start and d2 <= wanted_end) or (d2-wanted_end<86400. and d2-wanted_end>0. and safecon == 0):
-                #traces = io.load(path+"/waveforms/rest/traces.mseed")
-                st = model.load_stations(path+"/waveforms/stations.raw.txt")
-
-                d_diff = d2 - d1
-                tr_packages = int(d_diff/duration)
-                #for tr in traces:
-                #    tr.downsample_to(gf_freq)
-        #        if safecon == 0:
-                print(path)
-
-                pathlist_waveform_files = Path(path+"/waveforms/rest/").glob('*.mseed')
-                for path_wave in sorted(pathlist_waveform_files):
-        #                if
-
-        #        if safecon != 0:
-                    paths.append(str(path_wave))
-                safecon += 1
-
-    p = pile.make_pile(paths)
-    for traces in p.chopper(tmin=wanted_start, tinc=duration):
-        if traces:
-            if traces[0].tmax < wanted_end:
-            #    for i in range(0, tr_packages):
-            #        traces = traces
-                for tr in traces:
-            #    tr.chop(tr.tmin+i*duration,
-            #            tr.tmin+i*duration+duration)
-                    tr.downsample_to(gf_freq)
-                waveforms.append(traces)
-                stations.append(st)
-    #    else:
-    #        traces = io.load(path+"/waveforms/rest/traces.mseed")
-    #        st = model.load_stations(path+"/waveforms/stations.raw.txt")
-    #        for tr in traces:
-    #            tr.downsample_to(gf_freq)
-    #        waveforms.append(traces)
-    #        stations.append(st)
-    return waveforms, stations
-
-
 def plot_prescission(input, output):
     mislocation_rel = []
     for inp, outp in zip(input, output):
@@ -619,7 +559,7 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
         # hardcoded for bgr envs
         trace_comp_event = waveforms_events[0][0]
         gf_freq = trace_comp_event.deltat
-        waveforms_unseen, stations_unseen = load_data_archieve(validation_data,
+        waveforms_unseen, stations_unseen = waveform.load_data_archieve(validation_data,
                                                                gf_freq=gf_freq,
                                                                wanted_start=wanted_start,
                                                                wanted_end=wanted_end)

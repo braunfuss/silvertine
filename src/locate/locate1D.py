@@ -10,7 +10,7 @@ from pyrocko.gf import DCSource, RectangularSource
 from pyrocko.guts import Object, Int, String
 import os
 from pyrocko import orthodrome as ortho
-from pyrocko import cake, model, gf
+from pyrocko import cake, model, gf, pile
 from pyrocko.gf import meta
 import time as timesys
 import scipy
@@ -485,16 +485,23 @@ def associate_waveforms(test_events, stations_list, reference_events=None,
         # hardcoded for bgr envs
         pathlist = Path(folder).glob('day*')
         for path in sorted(pathlist):
-            d1 = str(path)[4:16]
-            d2 = str(path)[17:]
+            d1 = float(str(path)[-25:-13])
+            d2 = float(str(path)[-12:])
             for ev in test_events:
                 no_reference = True
                 #if reference_events is not None:
                 #    for ref_ev in reference_events:
                 event_time = ev.time
                 if ev.time > d1 and ev.time < d2:
-                    traces = io.load(path)
-                    for tr in traces:
+                    path_con = str(path)+"/waveforms/rest/"
+                    pathlist_mseeds = Path(path_con).glob('*mseed')
+                    paths_mseeds = []
+                    for p_mseed in pathlist_mseeds:
+                        paths_mseeds.append(str(p_mseed))
+                    print(paths_mseeds)
+                    p = pile.make_pile(paths_mseeds)
+                    for tr in p.chopper():
+                        tr.snuffle()
                         tr.chop(ev.time-10, ev.time+60)
     if scenario is True:
         for i, event in enumerate(test_events):
@@ -908,7 +915,7 @@ def solve(show=False, n_tests=1, scenario_folder="scenarios",
         if reference == "catalog":
             reference_events = model.load_events("data/events_ler.pf")
         maxiter = 55
-        folder_waveforms = "/md3/projects3/seiger/acquisition"
+        folder_waveforms = "/home/asteinbe/bgr_data/acquisition"
     else:
         reference_events = None
         maxiter = 25

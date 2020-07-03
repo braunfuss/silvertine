@@ -5,6 +5,7 @@ from pyrocko import trace, model, util
 from pyrocko.cake_plot import str_to_mpl_color as scolor
 from pyrocko.cake_plot import light
 from pyrocko import plot
+from pathlib import Path
 fontsize = 9
 ntickmarks_max = 2
 label_pad = 25
@@ -311,3 +312,88 @@ def plot_waveforms(traces, event, stations, savedir, picks, show=True):
                     plt.close()
                 fig = plt.figure(figsize=plot.mpl_papersize('a4', 'landscape'))
                 k = 0
+
+
+def load_data_archieve(validation_data, gf_freq, duration=4,
+                       wanted_start=None, wanted_end=None):
+    folder = validation_data
+    pathlist = Path(folder).glob('day*')
+    waveforms = []
+    stations = []
+    if wanted_start is not None:
+        try:
+            wanted_start = util.stt(wanted_start)
+            wanted_end = util.stt(wanted_end)
+        except:
+            pass
+
+    from pyrocko import pile
+    paths = []
+    safecon = 0
+    for path in sorted(pathlist):
+        path = str(path)
+        d2 = float(str(path)[-12:])
+        d1 = float(str(path)[-25:-13])
+        if wanted_start is not None:
+            do_safety_files = False
+            if (d1 >= wanted_start and d2 <= wanted_end) or (d2-wanted_end<86400. and d2-wanted_end>0. and safecon == 0):
+                st = model.load_stations(path+"/waveforms/stations.raw.txt")
+
+                d_diff = d2 - d1
+                tr_packages = int(d_diff/duration)
+                #for tr in traces:
+                #    tr.downsample_to(gf_freq)
+        #        if safecon == 0:
+
+                pathlist_waveform_files = Path(path+"/waveforms/rest/").glob('*.mseed')
+                wanted_start_str = util.tts(wanted_start)[14:16]
+                diff_to_full = float(wanted_start_str)
+                max_diff = 55.
+                min_diff = 5.
+                if diff_to_full > max_diff or diff_to_full < min_diff:
+                    do_safety_files = True
+                for path_wave in sorted(pathlist_waveform_files):
+                    path_wave = str(path_wave)
+                    p1 = path_wave[-25:-15]
+                    p2 = path_wave[-14:-12]
+                    p3 = path_wave[-11:-9]
+                    p4 = path_wave[-8:-6]
+                    try:
+                        file_time = util.stt(p1+" "+p2+":"+p3+":"+p4)
+                        tdiff = file_time - wanted_start
+                        if do_safety_files is True:
+                            if float(p2)-float(util.tts(wanted_start)[11:13]) == 0:
+                                paths.append(str(path_wave))
+                            if diff_to_full > max_diff and float(p2)-float(util.tts(wanted_start)[11:13]) == 1.:
+                                paths.append(str(path_wave))
+                            if diff_to_full < min_diff and float(p2)-float(util.tts(wanted_start)[11:13]) == -1.:
+                                paths.append(str(path_wave))
+
+                        else:
+                            if float(p2)-float(util.tts(wanted_start)[11:13]) == 0:
+                                paths.append(str(path_wave))
+                    except:
+                        pass
+
+                safecon += 1
+
+    p = pile.make_pile(paths)
+    for traces in p.chopper(tmin=wanted_start, tinc=duration):
+        if traces:
+            if traces[0].tmax < wanted_end:
+            #    for i in range(0, tr_packages):
+            #        traces = traces
+                #for tr in traces:
+            #    tr.chop(tr.tmin+i*duration,
+            #            tr.tmin+i*duration+duration)
+                    #tr.downsample_to(gf_freq)
+                waveforms.append(traces)
+                stations.append(st)
+    #    else:
+    #        traces = io.load(path+"/waveforms/rest/traces.mseed")
+    #        st = model.load_stations(path+"/waveforms/stations.raw.txt")
+    #        for tr in traces:
+    #            tr.downsample_to(gf_freq)
+    #        waveforms.append(traces)
+    #        stations.append(st)
+    return waveforms, stations

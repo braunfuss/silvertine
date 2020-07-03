@@ -3,13 +3,15 @@ from collections import defaultdict
 import numpy as num
 from matplotlib import pyplot as plt
 from pyrocko.guts import Float
-from pyrocko import gf, trace, plot, beachball, util, orthodrome
+from pyrocko import gf, trace, plot, beachball, util, orthodrome, model
 from pyrocko import moment_tensor as pmt
 import _pickle as pickle
 from mpl_toolkits.basemap import Basemap
 import copy
 import os
 import urllib
+from silvertine.locate import locate1D
+from silvertine.util import waveform
 km = 1000.
 
 util.setup_logging('gf_shakemap')
@@ -18,19 +20,27 @@ util.setup_logging('gf_shakemap')
 def make_shakemap(engine, source, store_id, folder, stations=None, save=True,
                   stations_corrections_file=None, pertub_mechanism=False,
                   pertub_degree=20, measured=None, n_pertub=0,
-                  value_level=0.004, pertub_velocity_model=False):
+                  value_level=0.004, pertub_velocity_model=False,
+                  scenario=False, picks=None,
+                  folder_waveforms="/home/asteinbe/bgr_data/acquisition",
+                  get_measured=True):
 
     if n_pertub != 0:
         pertub_mechanism = True
     targets, norths, easts, stf_spec = get_scenario(engine,
                                                     source,
                                                     store_id)
-    try:
-        if measured is True:
-            measured = num.genfromtxt(folder+"measured_pgv",
-                                      delimiter=',', dtype=None)
-    except:
-        measured = None
+#    try:
+    if measured is True:
+        event = model.Event(lat=source.lat, lon=source.lon,
+                                  time=source.time)
+        measured = get_max_pga([event], folder_waveforms)
+        measured = measured[0]
+    if measured is True and get_measured is False:
+        measured = num.genfromtxt(folder+"measured_pgv",
+                                  delimiter=',', dtype=None)
+#    except Exception:
+#        measured = None
     if pertub_mechanism is True:
         sources = []
         sources.append(source)
@@ -258,6 +268,30 @@ def load_shakemap(path):
     return values, easts, norths
 
 
+def get_max_pga(events, folder_waveforms, gf_freq=10., duration=30,
+                forerun=10.):
+    event = events[0]
+    tmin = event.time-forerun
+    tmax = event.time+duration
+    waveforms, stations_list = waveform.load_data_archieve(folder_waveforms,
+                                                        gf_freq,
+                                                        duration=duration,
+                                                        wanted_start=tmin,
+                                                        wanted_end=tmax)
+    pgas_waveforms = []
+    for i, pile_data in enumerate(waveforms):
+        stations = stations_list[i]
+        pga = []
+        for tr in pile_data:
+            for st in stations:
+                if st.station == tr.station:
+                    pga.append(num.max(tr.ydata))
+                    # here ableitung
+            pgas_waveforms.append(pga)
+
+    return pgas_waveforms
+
+
 def plot_shakemap(sources, norths, easts, values_list, filename, folder,
                   stations,
                   values_stations_list=None, easts_stations=None,
@@ -274,6 +308,7 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
         'size': 4000,
         'edgecolor': 'black'
         }
+
 
     for i, source in enumerate(sources):
         mts.append(source.pyrocko_moment_tensor())
