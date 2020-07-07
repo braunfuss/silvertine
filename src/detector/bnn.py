@@ -173,7 +173,8 @@ def normalize_all(traces, min, max):
     return traces
 
 
-def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False):
+def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
+                      mechanism=False):
     data_traces = []
     maxsamples = 0
     max_traces = None
@@ -245,16 +246,25 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False):
                 if len(ev.tags) > 0:
                     if ev.tags[0] == "no_event":
                         tag = 0
-                        labels.append([0, 0 , 0])
+                        labels.append([0, 0, 0])
 
                     else:
-                        tag = 1
-                        labels.append([lats[i], lons[i], depths[i]])
+                        if mechanism is True:
+                            rake = 0.5-(ev.moment_tensor.rake1/180.)*0.5
+                            labels.append([ev.moment_tensor.strike1/360.,
+                                           ev.moment_tensor.dip1/90., rake])
+                        else:
+                            tag = 1
+                            labels.append([lats[i], lons[i], depths[i]])
 
                 else:
                     tag = 1
-                #labels.append([tag, ev.moment_tensor.strike1/360., ev.moment_tensor.dip1/90.])
-                    labels.append([lats[i], lons[i], depths[i]])
+                    if mechanism is True:
+                        rake = 0.5-(ev.moment_tensor.rake1/180.)*0.5
+                        labels.append([ev.moment_tensor.strike1/360.,
+                                       ev.moment_tensor.dip1/90., rake])
+                    else:
+                        labels.append([lats[i], lons[i], depths[i]])
             labels = np.asarray(labels)
         else:
             for i, ev in enumerate(events):
@@ -479,7 +489,7 @@ def plot_prescission(input, output):
 def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                  multilabel=True, data_dir=None, train_model=True,
                  detector_only=False, validation_data=None, wanted_start=None,
-                 wanted_end=None):
+                 wanted_end=None, mechanism=True):
     import _pickle as pickle
     if detector_only is True:
         multilabel = False
@@ -527,33 +537,24 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                 if np.max(tr.ydata) > max_traces:
                     max_traces = np.max(tr.ydata)
 
-        data_events, labels_events, nstations, nsamples = bnn_detector_data(waveforms_events, max_traces, events=events, multilabel=multilabel)
+        data_events, labels_events, nstations, nsamples = bnn_detector_data(waveforms_events, max_traces, events=events, multilabel=multilabel, mechanism=mechanism)
+        print(len(data_events))
         if data_dir is not None:
-            data_events_unseen, labels_events_unseen, nstations_unseen, nsamples_unseen = bnn_detector_data(waveforms_unseen, max_traces, events=events_unseen, multilabel=multilabel)
+            data_events_unseen, labels_events_unseen, nstations_unseen, nsamples_unseen = bnn_detector_data(waveforms_unseen, max_traces, events=events_unseen, multilabel=multilabel,
+                                                                                                        mechanism=mechanism)
         if detector_only is True:
-            data_noise, labels_noise, nstations, nsamples = bnn_detector_data(waveforms_noise, max_traces, events=None, multilabel=multilabel)
+            data_noise, labels_noise, nstations, nsamples = bnn_detector_data(waveforms_noise, max_traces, events=None, multilabel=multilabel, mechanism=mechanism)
             x_data = np.concatenate((data_events, data_noise), axis=0)
             y_data = np.concatenate((labels_events, labels_noise), axis= 0)
             #x_data = data_events
             #y_data = labels_events
             from keras.utils import to_categorical
             y_array = None
-        #    nlabels = 3
-            #for k in range(0, nlabels):
-            #    print(np.shape(y_data))
-            #    lst2 = [[item[k]] for item in y_data]
-            #    print(np.shape(lst2))
-            #    X_train_enc, X_test_enc_1 = prepare_inputs(lst2, lst2)
-            #    y_data_vec = to_categorical(X_train_enc)
-            #    y_data_vec = np.asarray(y_data_vec)
-            #    if y_array is None:
-        #            y_array = y_data_vec
-            #    else:
-            #        y_array = np.concatenate((y_array, y_data_vec), axis=0)
-        #    y_data = y_array
         else:
             x_data = data_events
             y_data = labels_events
+            print(len(x_data))
+            print(len(y_data))
 
     else:
         # hardcoded for bgr envs
@@ -575,7 +576,8 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                 for tr in traces:
                     if np.max(tr.ydata) > max_traces:
                         max_traces = np.max(tr.ydata)
-        data_events_unseen, labels_events_unseen, nstations_unseen, nsamples_unseen = bnn_detector_data(waveforms_unseen, max_traces, events=None, multilabel=multilabel)
+        data_events_unseen, labels_events_unseen, nstations_unseen, nsamples_unseen = bnn_detector_data(waveforms_unseen, max_traces, events=None, multilabel=multilabel, mechanism=mechanism)
+
         x_data = data_events_unseen
         y_data = labels_events_unseen
     ncomponents = 3
@@ -734,27 +736,46 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
     print(np.sum(abs(y_val)-abs(pred)))
     recover_real_value = False
     if multilabel is True:
-        lons = []
-        lats = []
-        depths = []
-        for i, ev in enumerate(events):
-            lats.append(ev.lat)
-            lons.append(ev.lon)
-            depths.append(ev.depth)
-        lats = np.asarray(lats)
-        lats_max = np.max(lats)
-        lons = np.asarray(lons)
-        lons_max = np.max(lons)
-        depths = np.asarray(depths)
-        depths_max = np.max(depths)
-        real_values = []
-        for i, vals in enumerate(y_val):
-            real_values.append([vals[0]*lats_max, vals[1]*lons_max, vals[2]*depths_max])
-        real_values_pred = []
-        diff_values = []
-        for i, vals in enumerate(pred):
-            real_values_pred.append([vals[0]*lats_max, vals[1]*lons_max, vals[2]*depths_max])
-            diff_values.append([real_values[i][0]-real_values_pred[i][0], real_values[i][1]-real_values_pred[i][1], real_values[i][2]-real_values_pred[i][2]])
+        if mechanism is True:
+            strikes = []
+            dips = []
+            rakes = []
+            for i, ev in enumerate(events):
+                strikes.append(ev.moment_tensor.strike1)
+                dips.append(ev.moment_tensor.dip1)
+                rakes.append(ev.moment_tensor.rake1)
+            real_values = []
+            for i, vals in enumerate(y_val):
+                real_values.append([vals[0]*360., vals[1]*90.,
+                                    180.-360.*vals[2]])
+            real_values_pred = []
+            diff_values = []
+            for i, vals in enumerate(pred):
+                real_values_pred.append([vals[0]*360., vals[1]*90., 180.-360.*vals[2]])
+                diff_values.append([real_values[i][0]-real_values_pred[i][0], real_values[i][1]-real_values_pred[i][1], real_values[i][2]-real_values_pred[i][2]])
+
+        else:
+            lons = []
+            lats = []
+            depths = []
+            for i, ev in enumerate(events):
+                lats.append(ev.lat)
+                lons.append(ev.lon)
+                depths.append(ev.depth)
+            lats = np.asarray(lats)
+            lats_max = np.max(lats)
+            lons = np.asarray(lons)
+            lons_max = np.max(lons)
+            depths = np.asarray(depths)
+            depths_max = np.max(depths)
+            real_values = []
+            for i, vals in enumerate(y_val):
+                real_values.append([vals[0]*lats_max, vals[1]*lons_max, vals[2]*depths_max])
+            real_values_pred = []
+            diff_values = []
+            for i, vals in enumerate(pred):
+                real_values_pred.append([vals[0]*lats_max, vals[1]*lons_max, vals[2]*depths_max])
+                diff_values.append([real_values[i][0]-real_values_pred[i][0], real_values[i][1]-real_values_pred[i][1], real_values[i][2]-real_values_pred[i][2]])
 
         print(real_values)
         print(real_values_pred)
