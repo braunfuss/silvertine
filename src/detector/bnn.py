@@ -485,14 +485,15 @@ def plot_prescission(input, output):
     plt.show()
 
 
-
 def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                  multilabel=True, data_dir=None, train_model=True,
                  detector_only=False, validation_data=None, wanted_start=None,
-                 wanted_end=None, mechanism=True):
+                 wanted_end=None, mode="detector_only"):
     import _pickle as pickle
     if detector_only is True:
         multilabel = False
+    if mode == "mechanism_mode":
+        mechanism = True
 
     if data_dir is not None:
         try:
@@ -500,7 +501,8 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
             waveforms_events, nsamples, nstations, events = pickle.load(f)
             f.close()
         except:
-            waveforms_events, nsamples, nstations, events = load_data(data_dir, "landau_100hz")
+            waveforms_events, nsamples, nstations, events = load_data(data_dir,
+                                                                      "landau_100hz")
             f = open("data_unseen_waveforms_bnn_gt_loaded", 'wb')
             pickle.dump([waveforms_events, nsamples, nstations, events], f)
             f.close()
@@ -561,9 +563,9 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
         trace_comp_event = waveforms_events[0][0]
         gf_freq = trace_comp_event.deltat
         waveforms_unseen, stations_unseen = waveform.load_data_archieve(validation_data,
-                                                               gf_freq=gf_freq,
-                                                               wanted_start=wanted_start,
-                                                               wanted_end=wanted_end)
+                                                                        gf_freq=gf_freq,
+                                                                        wanted_start=wanted_start,
+                                                                        wanted_end=wanted_end)
         max_traces = 0.
         calculate_max = False
         nstations = 0

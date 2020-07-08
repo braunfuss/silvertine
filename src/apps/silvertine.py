@@ -502,7 +502,10 @@ def command_detect(args):
             help='train_model')
         parser.add_option(
             '--detector_only', dest='detector_only', type=str, default=False,
-            help='detector_only')
+            help='Detector only mode.')
+        parser.add_option(
+            '--mode', dest='mode', type=str, default="location_mode",
+            help='mechanism_mode, detector_only mode, or location_mode choice.')
         parser.add_option(
             '--data_dir', dest='data_dir', type=str, default=None,
             help='data_dir')
@@ -523,6 +526,8 @@ def command_detect(args):
         options.train_model = False
     if options.detector_only is not False:
         options.detector_only = True
+    if options.mode is "detector_only":
+        options.detector_only = True
 
     from silvertine import detector
     if options.bnn is True:
@@ -531,7 +536,8 @@ def command_detect(args):
                                   data_dir=options.data_dir,
                                   validation_data=options.validation_data,
                                   wanted_start=options.wanted_start,
-                                  wanted_end=options.wanted_end)
+                                  wanted_end=options.wanted_end,
+                                  mode=options.mode)
 
 
 def command_optimize(args):
