@@ -21,6 +21,7 @@ from keras import models
 from PIL import Image
 from pathlib import Path
 from silvertine.util import waveform
+import scipy
 
 import os
 try:
@@ -175,6 +176,8 @@ def normalize_all(traces, min, max):
 
 def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
                       mechanism=False):
+
+    add_spectrum = False
     data_traces = []
     maxsamples = 0
     max_traces = None
@@ -215,7 +218,16 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
                 data = np.pad(data, (0, maxsamples-nsamples), 'constant')
                 nsamples = len(data)
                 tr.ydata = data
-
+            if add_spectrum is True:
+                freqs, fdata = tr.spectrum()
+                fdata = 10*np.log10(fdata)
+                fdata_zero = np.zeros(len(fdata))
+                fdata, dict = scipy.signal.find_peaks(fdata)
+                for idx in fdata:
+                    fdata_zero[idx] = 1
+            #    fdata = fdata_zero
+            #    data = np.concatenate((data, fdata),  axis=0)
+                data = fdata
             if traces_coll is None:
                 traces_coll = tr.ydata
             else:
@@ -494,6 +506,8 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
         multilabel = False
     if mode == "mechanism_mode":
         mechanism = True
+    else:
+        mechanism = False
 
     if data_dir is not None:
         try:
@@ -616,6 +630,8 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
     #    model.add(Dense(2056, activation='relu', input_dim=nsamples))
 
         model.add(Dense(1060, activation='relu', input_dim=nsamples))
+    #    model.add(Dropout(0.1))
+
     #    model.add(Dense(256, activation='relu', input_dim=nsamples))
         model.add(Dense(64, activation='relu', input_dim=nsamples))
         model.add(Dense(32, activation='relu', input_dim=nsamples))
@@ -625,7 +641,6 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
     #    model.add(Dense(4, activation='relu', input_dim=nsamples))
     #    model.add(Dense(64, activation='relu', input_dim=nsamples))
 
-    #    model.add(Dropout(0.5))
         model.add(Dense(nlabels, activation='sigmoid'))
         # adadelta
         model.compile(optimizer='rmsprop',
@@ -665,7 +680,7 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                 history = model.fit(train, y_train, epochs=5, batch_size=20,
                                     callbacks=[checkpointer])
             else:
-                history = model.fit(train, y_train, epochs=20, batch_size=1,
+                history = model.fit(train, y_train, epochs=20, batch_size=2,
                                     callbacks=[checkpointer])
 
             plot_model(model)
@@ -755,7 +770,27 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
             for i, vals in enumerate(pred):
                 real_values_pred.append([vals[0]*360., vals[1]*90., 180.-360.*vals[2]])
                 diff_values.append([real_values[i][0]-real_values_pred[i][0], real_values[i][1]-real_values_pred[i][1], real_values[i][2]-real_values_pred[i][2]])
-
+            from pyrocko import gf, trace, plot, beachball, util, orthodrome, model
+            for i, vals in enumerate(pred):
+                fig = plt.figure()
+                axes = fig.add_subplot(1, 1, 1)
+                axes.set_axis_off()
+                plot.beachball.plot_beachball_mpl(
+                            mt_val,
+                            axes,
+                            beachball_type="'full'",
+                            size=60.,
+                            position=(0, 1),
+                            color_t=plot.mpl_color('scarletred2'),
+                            linewidth=1.0)
+                plot.beachball.plot_beachball_mpl(
+                            mt_pred,
+                            axes,
+                            beachball_type="'full'",
+                            size=60.,
+                            position=(0, 1),
+                            color_t=plot.mpl_color('scarletred2'),
+                            linewidth=1.0)
         else:
             lons = []
             lats = []
@@ -766,17 +801,29 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                 depths.append(ev.depth)
             lats = np.asarray(lats)
             lats_max = np.max(lats)
+            lats_min = np.min(lats)
             lons = np.asarray(lons)
             lons_max = np.max(lons)
+            lons_min = np.min(lons)
             depths = np.asarray(depths)
             depths_max = np.max(depths)
+            depths_min = np.min(depths)
             real_values = []
+            #lons = (lons-np.min(lons))/(np.max(lons)-np.min(lons))
+            #vals*(lons_max-lons_min)/lons_min
             for i, vals in enumerate(y_val):
-                real_values.append([vals[0]*lats_max, vals[1]*lons_max, vals[2]*depths_max])
+                lat = (-vals[0]*lats_min)+(vals[0]*lats_max)+lats_min
+                lon =  (-vals[1]*lons_min)+(vals[1]*lons_max)+lons_min
+                depth = (-vals[2]*depths_min)+(vals[2]*depths_max)+depths_min
+
+                real_values.append([lat, lon, depth])
             real_values_pred = []
             diff_values = []
             for i, vals in enumerate(pred):
-                real_values_pred.append([vals[0]*lats_max, vals[1]*lons_max, vals[2]*depths_max])
+                lat = (-vals[0]*lats_min)+(vals[0]*lats_max)+lats_min
+                lon = (-vals[1]*lons_min)+(vals[1]*lons_max)+lons_min
+                depth = (-vals[2]*depths_min)+(vals[2]*depths_max)+depths_min
+                real_values_pred.append([lat, lon, depth])
                 diff_values.append([real_values[i][0]-real_values_pred[i][0], real_values[i][1]-real_values_pred[i][1], real_values[i][2]-real_values_pred[i][2]])
 
         print(real_values)
@@ -784,14 +831,20 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
         print(diff_values)
 
     plot_prescission(y_val, pred)
-    if multilabel is True:
+    if multilabel is True and mechanism is False:
+        fig = plt.figure()
+        ax.scatter(diff_values[:][0], diff_values[:][1])
+        plt.show()
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(real_values[:][0], real_values[:][1], real_values[:][2], c="k")
-        ax.scatter(real_values_pred[:][0], real_values_pred[:][1], real_values_pred[:][2], c="r")
+        for i, vals in enumerate(pred):
+            ax.scatter(real_values[i][0], real_values[i][1], real_values[i][2], c="k")
+            ax.scatter(real_values_pred[i][0], real_values_pred[i][1], real_values_pred[i][2], c="r")
         plt.show()
     if detector_only is True:
         model.save('model_detector')
+    elif mechanism is True:
+        model.save('model_mechanism')
     else:
         model.save('model_locator')
 
@@ -803,6 +856,7 @@ def layer_activation(model):
     functors = [K.function([inp, K.learning_phase()], [out]) for out in outputs]    # evaluation functions
     test = x_val
     layer_outs = [func([test, 1.]) for func in functors]
+
 
 def prepare_inputs(X_train, X_test):
     from sklearn.preprocessing import OrdinalEncoder

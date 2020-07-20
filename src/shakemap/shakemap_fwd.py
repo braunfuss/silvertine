@@ -7,6 +7,7 @@ from pyrocko import gf, trace, plot, beachball, util, orthodrome, model
 from pyrocko import moment_tensor as pmt
 import _pickle as pickle
 from mpl_toolkits.basemap import Basemap
+import matplotlib.cm as cm
 import copy
 import os
 import urllib
@@ -34,13 +35,13 @@ def make_shakemap(engine, source, store_id, folder, stations=None, save=True,
     if measured is True:
         event = model.Event(lat=source.lat, lon=source.lon,
                                   time=source.time)
-        measured = get_max_pga([event], folder_waveforms)
-        measured = measured[0]
+        measured = get_max_pga([event], folder_waveforms, stations=stations)
     if measured is True and get_measured is False:
         measured = num.genfromtxt(folder+"measured_pgv",
                                   delimiter=',', dtype=None)
 #    except Exception:
 #        measured = None
+
     if pertub_mechanism is True:
         sources = []
         sources.append(source)
@@ -127,7 +128,7 @@ def make_shakemap(engine, source, store_id, folder, stations=None, save=True,
                       store_id=store_id)
 
 
-def get_scenario(engine, source, store_id, extent=50, ngrid=20,
+def get_scenario(engine, source, store_id, extent=30, ngrid=40,
                  stations=None):
     '''
     Setup scenario with source model, STF and a rectangular grid of targets.
@@ -225,8 +226,8 @@ def post_process(response, norths, easts, stf_spec, stations=False,
 
             tr = tr.transfer(transfer_function=trans)
 
-        tr.highpass(4, 0.5)
-        tr.lowpass(4, 4.0)
+        #tr.highpass(4, 0.5)
+        #tr.lowpass(4, 4.0)
         tr_resamp = tr.copy()
 
         # uncomment to active resampling to get a smooth image (slow):
@@ -269,26 +270,33 @@ def load_shakemap(path):
 
 
 def get_max_pga(events, folder_waveforms, gf_freq=10., duration=30,
-                forerun=10.):
+                forerun=10., quantity="pgv", stations=None):
     event = events[0]
     tmin = event.time-forerun
     tmax = event.time+duration
     waveforms, stations_list = waveform.load_data_archieve(folder_waveforms,
-                                                        gf_freq,
-                                                        duration=duration,
-                                                        wanted_start=tmin,
-                                                        wanted_end=tmax)
+                                                           gf_freq,
+                                                           duration=duration,
+                                                           wanted_start=tmin,
+                                                           wanted_end=tmax)
     pgas_waveforms = []
     for i, pile_data in enumerate(waveforms):
-        stations = stations_list[i]
+        if stations is None:
+            stations = stations_list[i]
         pga = []
-        for tr in pile_data:
-            for st in stations:
+        for st in stations:
+            max_value = 0
+            for tr in pile_data:
                 if st.station == tr.station:
-                    pga.append(num.max(tr.ydata))
+                    if quantity == "pga":
+                        value = num.max(num.diff(num.diff(tr.ydata)))
+                    if quantity == "pgv":
+                        value = num.max(num.abs(num.diff(tr.ydata)))
+                    if value > max_value:
+                        max_value = value
+            #pga.append(max_value)
                     # here ableitung
-            pgas_waveforms.append(pga)
-
+            pgas_waveforms.append(max_value)
     return pgas_waveforms
 
 
@@ -297,7 +305,7 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
                   values_stations_list=None, easts_stations=None,
                   norths_stations=None, latlon=True, show=False,
                   plot_background_map=True, measured=None,
-                  value_level=0.004, quantity="velocity",
+                  value_level=0.001, quantity="velocity",
                   scale="mm", plot_values=False, vs30=True,
                   engine=None, type_factors=None, store_id=None):
     plot.mpl_init()
@@ -352,11 +360,12 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
             else:
                 fig.colorbar(im, label='Velocity [m/s]')
 
-        beachball.plot_fuzzy_beachball_mpl_pixmap(
-            mts, axes, best_mt,
-            position=(0, 0.),
-            color_t='black',
-            **plot_kwargs)
+        if source.base_key()[6] is not "ExplosionSource":
+            beachball.plot_fuzzy_beachball_mpl_pixmap(
+                mts, axes, best_mt,
+                position=(0, 0.),
+                color_t='black',
+                **plot_kwargs)
         if values_stations is not None:
             plt.scatter(easts_stations/km, norths_stations/km,
                         c=values_stations, s=36, cmap=plt.get_cmap('YlOrBr'),
@@ -386,8 +395,8 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
                 type_factors = 1
                 amp_factor = (base_velocity/values_vs30_resam)**type_factors
                 values = values*amp_factor
-
-        _, vmax = num.min(values), num.max(values)
+                values = values/15.87
+                #values = values/10.
 
         if plot_background_map is True:
             map = Basemap(projection='merc',
@@ -399,13 +408,13 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
             ratio_lat = num.max(lats)/num.min(lats)
             ratio_lon = num.max(lons)/num.min(lons)
 
-            map.drawmapscale(num.min(lons)+ratio_lon*0.25,
-                             num.min(lats)+ratio_lat*0.25,
-                             num.mean(lons), num.mean(lats), 10)
+            map.drawmapscale(num.min(lons)+0.05,
+                             num.min(lats)+0.05,
+                             num.min(lons), num.min(lats), 10)
             parallels = num.arange(num.around(num.min(lats), decimals=2),
                                    num.around(num.max(lats), decimals=2), 0.1)
             meridians = num.arange(num.around(num.min(lons), decimals=2),
-                                   num.around(num.max(lons), decimals=2), 0.1)
+                                   num.around(num.max(lons), decimals=2), 0.2)
             map.drawparallels(parallels, labels=[1, 0, 0, 0], fontsize=22)
             map.drawmeridians(meridians, labels=[1, 1, 0, 1], fontsize=22)
             xpixels = 1000
@@ -421,12 +430,13 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
         else:
             pos1 = source.lat
             pos2 = source.lon
-        beachball.plot_fuzzy_beachball_mpl_pixmap(
-            mts, axes, best_mt,
-            position=(pos1, pos2),
-            color_t='black',
-            zorder=2,
-            **plot_kwargs)
+        if source.base_key()[6] is not "ExplosionSource":
+            beachball.plot_fuzzy_beachball_mpl_pixmap(
+                mts, axes, best_mt,
+                position=(pos1, pos2),
+                color_t='black',
+                zorder=2,
+                **plot_kwargs)
 
         if plot_background_map is True:
             lats_map, lons_map = map(lons, lats)
@@ -435,23 +445,7 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
         else:
             lats_map, lons_map = lats, lons
             alpha = 1.
-
-        im = axes.contourf(
-            lats_map, lons_map, values.T,
-            vmin=0., vmax=vmax,
-            cmap=plt.get_cmap('YlOrBr'),
-            alpha=alpha)
-
-        if quantity == "velocity":
-            if scale == "mm":
-                fig.colorbar(im, label='Velocity [mm/s]')
-            else:
-                fig.colorbar(im, label='Velocity [m/s]')
-        if quantity == "acceleration":
-            if scale == "mm":
-                fig.colorbar(im, label='Velocity [mm/s]')
-            else:
-                fig.colorbar(im, label='Velocity [m/s]')
+        _, vmax = num.min(values), num.max(values)
 
         if values_stations_list is not None:
             st_lats, st_lons = [], []
@@ -462,11 +456,23 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
                 st_lats, st_lons = map(st_lons, st_lats)
             if plot_values is True and measured is not None:
                 measured_values = []
+            try:
                 for k, st in enumerate(stations):
                     for data in measured:
-                        if data[0].decode() == st.station:
-                            if scale == "mm":
-                                measured_values.append(data[1]*1000.)
+                            if data[0].decode() == st.station:
+                                if scale == "mm":
+                                    measured_values.append(data[1]*1000.)
+                _, vmax = num.min(measured_values), num.max(measured_values)
+
+            except:
+                measured_values = []
+                if measured is not None:
+                    for data in measured:
+                        if scale == "mm":
+                        #    measured_values.append(data*1000.*100)
+                            measured_values.append(data*1000.)
+
+                    _, vmax = num.min(measured_values), num.max(measured_values)
 
             if plot_values is True and measured is None:
                 plt.scatter(st_lats, st_lons,
@@ -485,10 +491,18 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
             if measured is not None and plot_values is False:
                 residuals = []
                 stations_write = []
-                for k, st in enumerate(stations):
-                    for data in measured:
-                        if data[0].decode() == st.station:
-                            residuals.append(values_stations[k]-data[1])
+                try:
+                    for k, st in enumerate(stations):
+                        for data in measured:
+                            # case for manual input
+                            if data[0].decode() == st.station:
+                                residuals.append(values_stations[k]-data[1])
+                                stations_write.append(st.station)
+                except:
+                    if measured is not None:
+                        for data in measured:
+                            # case for measured input
+                            residuals.append(values_stations[k]-data)
                             stations_write.append(st.station)
                 fobj = open(os.path.join(folder, 'residuals.txt'), 'w')
                 for i in range(0, len(residuals)):
@@ -505,6 +519,29 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
                 plt.scatter(st_lats, st_lons,
                             c=residuals, s=36, cmap=plt.get_cmap('YlOrBr'),
                             vmin=0., vmax=vmax, edgecolor="k", alpha=alpha)
+        #values = values*77.66
+        im = axes.contourf(
+            lats_map, lons_map, values.T,
+            vmin=0., vmax=vmax,
+            cmap=plt.get_cmap('YlOrBr'),
+            alpha=alpha)
+        print(vmax, num.max(values))
+        if quantity == "velocity":
+            if scale == "mm":
+                #fig.colorbar(im, label='Velocity [mm/s]')
+                m = plt.cm.ScalarMappable(cmap=plt.get_cmap('YlOrBr'))
+                m.set_array(values)
+                m.set_clim(0., vmax)
+                plt.colorbar(m, boundaries=num.linspace(0, vmax, 6))
+            else:
+                fig.colorbar(im, label='Velocity [m/s]')
+        if quantity == "acceleration":
+            if scale == "mm":
+                fig.colorbar(im, label='Velocity [mm/s]')
+            else:
+                fig.colorbar(im, label='Velocity [m/s]')
+
+
         axes.contour(lats_map, lons_map, vales_cum.T, cmap='brg',
                      levels=[value_level])
 
@@ -513,6 +550,28 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
         plt.show()
     else:
         plt.close()
+    if vs30 is not False:
+        fig = plt.figure(figsize=plot.mpl_papersize('a5', 'landscape'))
+        axes = fig.add_subplot(1, 1, 1, aspect=1.0)
+
+        map = Basemap(projection='merc',
+                      llcrnrlon=num.min(lons),
+                      llcrnrlat=num.min(lats),
+                      urcrnrlon=num.max(lons),
+                      urcrnrlat=num.max(lats),
+                      resolution='h', epsg=3395)
+        ratio_lat = num.max(lats)/num.min(lats)
+        ratio_lon = num.max(lons)/num.min(lons)
+
+        parallels = num.arange(num.around(num.min(lats), decimals=2),
+                               num.around(num.max(lats), decimals=2), 0.1)
+        meridians = num.arange(num.around(num.min(lons), decimals=2),
+                               num.around(num.max(lons), decimals=2), 0.2)
+        map.drawparallels(parallels, labels=[1, 0, 0, 0], fontsize=22)
+        map.drawmeridians(meridians, labels=[1, 1, 0, 1], fontsize=22)
+        im = map.imshow(num.rot90(values_vs30.T))
+        fig.colorbar(im, label='Velocity [m/s]')
+        fig.savefig(folder+"vs30.png")
 
 
 

@@ -8,7 +8,7 @@ from pyrocko import util, trace, gf, cake  # noqa
 km = 1000.
 
 
-def ensemble_earthmodel(ref_earthmod, num_vary=10, error_depth=0.4,
+def ensemble_earthmodel(ref_earthmod, num_vary=10, error_depth=0.2,
                         error_velocities=0.2, depth_limit_variation=600):
     """
     Create ensemble of earthmodels that vary around a given input earth model
@@ -40,7 +40,7 @@ def ensemble_earthmodel(ref_earthmod, num_vary=10, error_depth=0.4,
             error_velocities,
             depth_limit_variation)
 
-        if cost > 20:
+        if cost > 200000:
             print('Skipped unlikely model %f' % cost)
         else:
             i += 1
@@ -51,7 +51,8 @@ def ensemble_earthmodel(ref_earthmod, num_vary=10, error_depth=0.4,
 
 def vary_model(
         earthmod, error_depth=0.4, error_velocities=0.4,
-        depth_limit_variation=600):
+        depth_limit_variation=1600, depth_limit_variation_upper=5000,
+        ensure_depth_consistency=False):
     """
     Vary depths and velocities in the given source model by Gaussians with
     given 2-sigma errors [percent]. Ensures increasing velocity with depth.
@@ -129,6 +130,7 @@ def vary_model(
 
             if layer.ztop == 0:
                 layer.mtop.vp += deltavp
+                layer.mtop.vs += (deltavp / layer.mbot.vp_vs_ratio())
                 layer.mbot.vs += (deltavp / layer.mbot.vp_vs_ratio())
 
             # ensure increasing velocity with depth
@@ -154,6 +156,8 @@ def vary_model(
                         layer.mbot.vs += (deltavp / layer.mbot.vp_vs_ratio())
                     repeat = 0
                     cost += count
+            if ensure_depth_consistency is False:
+                repeat = 0
             else:
                 repeat = 0
 

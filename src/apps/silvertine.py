@@ -647,6 +647,9 @@ def command_plot_mods(args):
         parser.add_option(
             '--ref_models', dest='ref_models', type=str, default=False,
             help='Plot reference models only.')
+        parser.add_option(
+            '--folder', dest='folder', type=str, default="data/",
+            help='model.')
 
 
     parser, options, args = cl_parse('plot_mods', args, setup)
@@ -659,11 +662,19 @@ def command_plot_mods(args):
     mod_landau = ref_mods.landau_layered_model()
     mod_vsp = ref_mods.vsp_layered_model()
 
-    mods = [mod_insheim, mod_landau, mod_vsp]
+    mods = [mod_vsp,mod_insheim, mod_landau]
     if options.ref_models is not False:
         fig, axes = silvertine_plot.bayesian_model_plot(mods, axes=None, highlightidx=[2])
     else:
-        fig, axes = silvertine_plot.bayesian_model_plot(mods, axes=None, highlightidx=[0,1,2])
+    #    try:
+            from pathlib import Path
+            pathlist = Path(options.folder).glob('*_*')
+            for path in pathlist:
+                mod = cake.load_model(str(path))
+                mods.append(mod)
+    #    except:
+    #        pass
+            fig, axes = silvertine_plot.bayesian_model_plot(mods, axes=None, highlightidx=[0,1,2])
 
 
     if options.show is not False:
@@ -724,7 +735,7 @@ def command_pertub_earthmodels(args):
             '--error_velocities', dest='error_velocities', type=float, default=0.2,
             help='Error in depth.')
         parser.add_option(
-            '--depth_variation', dest='depth_variation', type=float, default=600.,
+            '--depth_variation', dest='depth_variation', type=float, default=16000.,
             help='Max. error in depth.')
         parser.add_option(
             '--gf_store', dest='gf_store', type=str, default=None,

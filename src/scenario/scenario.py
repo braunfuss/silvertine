@@ -159,7 +159,8 @@ def rand_source(event, SourceType="MT", pressure=None, volume=None):
             north_shift=event.north_shift,
             east_shift=event.east_shift,
             depth=event.depth,
-            time=event.time)
+            time=event.time,
+            moment=mt.moment)
 
     if SourceType == "VLVD":
         if volume is None:
@@ -471,9 +472,11 @@ def fwd_shakemap_post(projdir, wanted_start=0, wanted_end=None,
                 event.moment_tensor.mne = mtm.mne
                 event.moment_tensor.mnd = mtm.mnd
                 event.moment_tensor.med = mtm.med
-                #event.moment_tensor.moment = moment
+                event.moment_tensor.moment = moment
             if depth is not None:
                 event.depth = depth
+            if moment is not None:
+                event.moment_tensor.moment = moment
             if moment is None:
                 moment = event.moment_tensor.moment
             source, event = rand_source(event, SourceType=source_type)
@@ -488,7 +491,7 @@ def fwd_shakemap_post(projdir, wanted_start=0, wanted_end=None,
                                        pertub_degree=pertub_degree,
                                        pertub_velocity_model=pertub_velocity_model,
                                        value_level=value_level,
-                                       measured=True)
+                                       measured=measured)
     #    except:
     #        pass
 
