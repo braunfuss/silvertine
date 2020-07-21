@@ -131,7 +131,7 @@ dat.dtn = 10000						 # max number timesteps
 
 # run the simulation
 # ------------------
-exe = '/home/asteinbe/src/FEHM/src/xfehm_v3.3.1'						# CHANGE to path of your FEHM executable
+exe = 'xfehm_v3.3.1'						# CHANGE to path of your FEHM executable
 dat.run(input='ok_model.dat', exe=exe, verbose=False)
 
 # process output
@@ -406,7 +406,7 @@ dat.dtn = 10000						 # max number timesteps
 
 # run the simulation
 # ------------------
-exe = '/home/asteinbe/src/FEHM/src/xfehm_v3.3.1'						# CHANGE to path of your FEHM executable
+exe = 'xfehm_v3.3.1'						# CHANGE to path of your FEHM executable
 dat.run(input='ok_model.dat', exe=exe, verbose=False)
 
 # process output
