@@ -12,19 +12,18 @@ EMC = 0.57721566490153286060651209008240243104215933593992   # Euler-Mascheroni 
 class InducedSeismicity(object):
 	''' Create an induced seismicity model object.
 
-		Parameters
-		----------
-		f : float
-			Fraction to cut injection rate.
-		dim : int
-			Flow dimension (1, 2 or 3).
-		pcrit : float, optional
-			Critical pressure for earthquake triggering (default = 0).
-		sim : dict, optional
-			Reservoir simulation output. Dictionary comprises vector of distances, r,
-			vector of times, t, and matrix of simulated fluid pressure increases, p.
-			Dimension of p must conform with r and t. If sim is not None, ignores dim.
-
+	Parameters
+	----------
+	f : float
+		Fraction to cut injection rate.
+	dim : int
+		Flow dimension (1, 2 or 3).
+	pcrit : float, optional
+		Critical pressure for earthquake triggering (default = 0).
+	sim : dict, optional
+		Reservoir simulation output. Dictionary comprises vector of distances, r,
+		vector of times, t, and matrix of simulated fluid pressure increases, p.
+		Dimension of p must conform with r and t. If sim is not None, ignores dim.
 	'''
 	def __init__(self, f, dim, pcrit=0, sim = None):
 		# error checking
@@ -47,20 +46,22 @@ class InducedSeismicity(object):
 			self.t = sim['t']
 			self.p = sim['p']
 				# set up pressure interpolator
-			self.pint = interp2d(self.r, self.t, self.p.T, kind = 'linear', bounds_error=False, fill_value=None)
+			self.pint = interp2d(self.r, self.t, self.p.T, kind='linear',
+								 bounds_error=False, fill_value=None)
 				# set up pressure gradient interpolators
-			tt,rr = np.meshgrid(self.t,self.r)
+			tt,rr = np.meshgrid(self.t, self.r)
 					# in time
 			dpdt = np.diff(self.p)/np.diff(tt)
 			tmid = 0.5*(self.t[:-1]+self.t[1:])
-			self.dpint = interp2d(self.r, tmid, dpdt.T, kind = 'linear', bounds_error=False, fill_value=None)
+			self.dpint = interp2d(self.r, tmid, dpdt.T, kind='linear',
+			 					  bounds_error=False, fill_value=None)
 					# with distance
-			dpdr = np.diff(self.p,axis=0)/np.diff(rr,axis=0)
+			dpdr = np.diff(self.p, axis=0)/np.diff(rr, axis=0)
 			rmid = 0.5*(self.r[:-1]+self.r[1:])
-			self.dpdrint = interp2d(rmid, self.t, dpdr.T, kind = 'linear', bounds_error=False, fill_value=None)
+			self.dpdrint = interp2d(rmid, self.t, dpdr.T, kind='linear',
+									bounds_error=False, fill_value=None)
 
-
-	def prt(self,t,r,p0=0): 					# p(r,t)
+	def prt(self, t, r, p0=0): 					# p(r,t)
 		''' Fluid pressure.
 
 			Parameters
@@ -88,7 +89,7 @@ class InducedSeismicity(object):
 		elif self.d == 3:
 			_prt = self._prt3
 		return _prt(iterable(t),r,p0)
-	def _prt1(self,t,r,p0):						#   - 1D point source
+	def _prt1(self, t, r, p0):						#   - 1D point source
 		''' Fluid pressure in 1 dimension.
 
 			Parameters
@@ -124,7 +125,9 @@ class InducedSeismicity(object):
 
 		# subtract reference pressure
 		return pi - p0
-	def _prt2(self,t,r,p0):						#   - 2D point source (Theis)
+
+
+	def _prt2(self, t, r, p0):						#   - 2D point source (Theis)
 		''' Fluid pressure in 2 dimensions.
 
 			Parameters
@@ -161,7 +164,9 @@ class InducedSeismicity(object):
 
 		# subtract reference pressure
 		return pi - p0
-	def _prt2i(self,t,r,p0):					#   - 2D distributed source (interpolation)
+
+
+	def _prt2i(self, t, r, p0):					#   - 2D distributed source (interpolation)
 		''' Fluid pressure in 2 dimensions for distributed injection source.
 
 			Parameters
@@ -183,7 +188,9 @@ class InducedSeismicity(object):
 			Interpolates solution from reservoir simulator output.
 		'''
 		return self.pint(r,t)
-	def _prt3(self,t,r,p0):						#   - 3D point source
+
+
+	def _prt3(self, t, r, p0):						#   - 3D point source
 		''' Fluid pressure in 3 dimensions.
 
 			Parameters
@@ -218,7 +225,8 @@ class InducedSeismicity(object):
 
 		# subtract reference pressure
 		return pi - p0
-	def dpdt(self,t,r,dpdt0=0):					# dp/dt(r,t)
+
+	def dpdt(self, t, r, dpdt0=0):					# dp/dt(r,t)
 		''' Fluid pressure partial derivative with time.
 
 			Parameters
@@ -245,8 +253,9 @@ class InducedSeismicity(object):
 			_dpdt = self._dpdt2i
 		elif self.d == 3:
 			_dpdt = self._dpdt3
-		return _dpdt(iterable(t),r,dpdt0)
-	def _dpdt1(self,t,x,dpdt0):					#   - 1D point source
+		return _dpdt(iterable(t), r, dpdt0)
+
+	def _dpdt1(self, t, x, dpdt0):					#   - 1D point source
 		''' Fluid pressure partial derivative with time in 1 dimension.
 
 			Parameters
@@ -282,7 +291,8 @@ class InducedSeismicity(object):
 
 		# subtract reference gradient
 		return dpdti - dpdt0
-	def _dpdt2(self,t,r,dpdt0):					#   - 2D point source (Theis)
+
+	def _dpdt2(self, t, r, dpdt0):					#   - 2D point source (Theis)
 		''' Fluid pressure partial derivative with time in 2 dimensions.
 
 			Parameters
@@ -317,7 +327,8 @@ class InducedSeismicity(object):
 
 		# subtract reference gradient
 		return dpdti - dpdt0
-	def _dpdt2i(self,t,r,dpdt0):				#   - 2D distributed source (interpolation)
+
+	def _dpdt2i(self, t, r, dpdt0):				#   - 2D distributed source (interpolation)
 		''' Fluid pressure partial derivative with time in 2 dimensions for distributed injection source.
 
 			Parameters
@@ -377,7 +388,8 @@ class InducedSeismicity(object):
 
 		# subtract reference gradient
 		return dpdti - dpdt0
-	def dpdtn(self,t,r,dpdt0):					# -dp/dt(r,t)
+
+	def dpdtn(self, t, r, dpdt0):					# -dp/dt(r,t)
 		''' Negative of fluid pressure partial derivative with time.
 
 			Parameters
@@ -398,8 +410,9 @@ class InducedSeismicity(object):
 			-----
 			Required for root solve.
 		'''
-		return -self.dpdt(t,r,dpdt0)
-	def ptr(self,r,t,p0=0):						# p(t,r)
+		return -self.dpdt(t, r, dpdt0)
+
+	def ptr(self, r, t, p0=0):						# p(t,r)
 		''' Fluid pressure.
 
 			Parameters
@@ -451,7 +464,7 @@ class InducedSeismicity(object):
 			_dpdr = self._dpdr2i
 		elif self.d == 3:
 			_dpdr=self._dpdr3
-		return _dpdr(r,iterable(t),dpdr0)
+		return _dpdr(r, iterable(t), dpdr0)
 
 
 	def _dpdr1(self, x, t, dpdr0=0):				#	- 1D point source
@@ -490,7 +503,8 @@ class InducedSeismicity(object):
 
 		# subtract reference gradient
 		return dpdri - dpdr0
-	def _dpdr2(self,r,t,dpdr0=0):				# 	- 2D point source (Theis)
+
+	def _dpdr2(self, r, t, dpdr0=0):				# 	- 2D point source (Theis)
 		''' Fluid pressure partial derivative with distance in 2 dimensions.
 
 			Parameters
@@ -525,7 +539,8 @@ class InducedSeismicity(object):
 
 		# subtract reference gradient
 		return dpdri - dpdr0
-	def _dpdr2i(self,t,r,dpdr0=0):				#	- 2D distributed source (interpolation)
+
+	def _dpdr2i(self, t, r, dpdr0=0):				#	- 2D distributed source (interpolation)
 		''' Fluid pressure partial derivative with distance in 2 dimensions for distributed injection source.
 
 			Parameters
@@ -546,8 +561,9 @@ class InducedSeismicity(object):
 			-----
 			Interpolates solution from reservoir simulator output.
 		'''
-		return self.dpdrint(r,t)
-	def _dpdr3(self,r,t,dpdr0=0):				# 	- 3D point source
+		return self.dpdrint(r, t)
+
+	def _dpdr3(self, r, t, dpdr0=0):				# 	- 3D point source
 		''' Fluid pressure partial derivative with distance in 3 dimensions.
 
 			Parameters
@@ -658,7 +674,8 @@ class InducedSeismicity(object):
 			raise ValueError
 
 		return np.sqrt(np.log(self.f**(2./self.d)*t/(t-1.))*(t*(t-1.))*self.d/2.) - r0
-	def dgdt(self,t,dgdt0=0):					# dg/dt(t)
+
+	def dgdt(self, t, dgdt0=0):					# dg/dt(t)
 		''' Partial derivative with time of g(t).
 
 			Parameters
@@ -673,7 +690,8 @@ class InducedSeismicity(object):
 		'''
 		lnfdt = np.log(t*self.f**(2./self.d)/(t-1.))
 		return self.d*((2.*t-1.)*lnfdt-1.)/np.sqrt(8.*self.d*t*(t-1.)*lnfdt)
-	def gr(self,r):								# t=g^-1(r)
+
+	def gr(self, r):								# t=g^-1(r)
 		''' Time where dpdt=0 for given distance, function g^-1(r).
 
 			Parameters
@@ -704,7 +722,8 @@ class InducedSeismicity(object):
 		root1 = root(self.gt, 1.+1.e-8, (r,), jac = self.dgdt).x
 		root2 = root(self.gt, 1./(1.-self.f**(2./self.d))-1.e-8, (r,), jac = self.dgdt).x
 		return root1, root2
-	def gp0(self,ta,p):
+
+	def gp0(self, ta, p):
 		''' Root equation for method gp.
 
 			Parameters
@@ -715,8 +734,9 @@ class InducedSeismicity(object):
 				Pressure.
 		'''
 		ra = self.gt(ta)
-		return self.prt(ta,ra)-p
-	def gp(self,p):								# solve p(g(ta),ta) = pcrit
+		return self.prt(ta, ra)-p
+
+	def gp(self, p):								# solve p(g(ta),ta) = pcrit
 		''' Time and distance where dpdt=0 for fluid pressure.
 
 			Parameters
@@ -756,8 +776,10 @@ class InducedSeismicity(object):
 				Time of curve g(t).
 		'''
 		r = self.gt(th)
-		return self.prt(th,r)-self.prt(t,r)
-	def ht(self,t):								# r=h(t) for p=pmax(r(t))
+		return self.prt(th, r)-self.prt(t, r)
+
+
+	def ht(self, t):								# r=h(t) for p=pmax(r(t))
 		''' Distance on curve h(t).
 
 			Parameters
@@ -800,7 +822,8 @@ class InducedSeismicity(object):
 				elif self.d == 3:
 					out.append(1.e-32)
 		return out
-	def hr(self,r):								# t=h^-1(r) for p(t,r)=pmax(r)
+
+	def hr(self, r):								# t=h^-1(r) for p(t,r)=pmax(r)
 		''' Time on curve h(t).
 
 			Parameters
@@ -825,7 +848,9 @@ class InducedSeismicity(object):
 		tmax,tmin = self.gr(r)
 
 		return root(self.prt, tmin+1.e-5, (r,self.prt(tmax,r)), jac=self.dpdtn, method = 'hybr').x
-	def hp(self,p):								# h^-1(r) where p(t,r)=pmax(r)
+
+
+	def hp(self, p):								# h^-1(r) where p(t,r)=pmax(r)
 		''' Compute point on curve r=h(t) at given pressure.
 
 			Parameters
@@ -849,12 +874,13 @@ class InducedSeismicity(object):
 		ta,ra = self.gp(p)
 		tb = self.hr(ra)
 		return tb, ra
+
 	def apex(self):								# locate bifurcation point
 		''' Compute bifurcation point.
 		'''
 		# find maximum of path dgdt=0
 		tstar = brenth(self.dgdt, 1.+1.e-5, 1./(1.-self.f**(2./self.d))-1.e-5)
-		return [tstar, self.gt(np.array([tstar,]))]
+		return [tstar, self.gt(np.array([tstar, ]))]
 
 
 	def nrt(self, t, r):							# n(r,t)
@@ -932,7 +958,7 @@ class InducedSeismicity(object):
 					return 1.e-32
 
 
-	def nt(self,t,rmax=None):					# n(t)
+	def nt(self, t, rmax=None):					# n(t)
 		''' Compute global seismicity rate.
 
 			Parameters
@@ -960,8 +986,9 @@ class InducedSeismicity(object):
 			_nt=self._nt2i
 		elif self.d == 3:
 			_nt=self._nt3
-		return _nt(iterable(t),rmax)
-	def _nt1(self,t,rmax):						#   - 1D point source
+		return _nt(iterable(t), rmax)
+
+	def _nt1(self, t, rmax):						#   - 1D point source
 		''' Compute global seismicity rate.
 
 			Parameters
@@ -991,8 +1018,8 @@ class InducedSeismicity(object):
 		r0 = np.concatenate([0.*inds1[0],self.gt(t[indsg]),self.ht(t[indsh])])
 
 		# case with rcrit=r(t)
-		if self.pc>0. or rmax is not None:
-			if self.pc>0.:
+		if self.pc > 0. or rmax is not None:
+			if self.pc > 0.:
 				r1 = self.rp(t, self.pc)
 			else:
 				r1 = 1.e32+0.*t
@@ -1006,8 +1033,8 @@ class InducedSeismicity(object):
 		n[inds2] = 0.5*(erf(r1[inds2]/np.sqrt(t[inds2]))-erf(r0[inds2]/np.sqrt(t[inds2]))-self.f*erf(r1[inds2]/np.sqrt((t[inds2]-1)))+self.f*erf(r0[inds2]/np.sqrt((t[inds2]-1))))
 
 		# compute seismicity at rate cut and normalise
-		if self.pc>0. or rmax is not None:
-			if self.pc>0.:
+		if self.pc > 0. or rmax is not None:
+			if self.pc > 0.:
 				rcut = self.rp(1., self.pc)
 			else:
 				rcut = 1.e32+0.*t
@@ -1031,7 +1058,8 @@ class InducedSeismicity(object):
 		n[inds3] = 0.
 
 		return np.array(n)
-	def _nt2(self,t,rmax):						#   - 2D point source (Theis)
+
+	def _nt2(self, t, rmax):						#   - 2D point source (Theis)
 		''' Compute global seismicity rate.
 
 			Parameters
@@ -1090,13 +1118,15 @@ class InducedSeismicity(object):
 				if rcut > rmax:
 					rcut = rmax
 			n0 += -np.exp(-rcut**2)
+
 		if abs(n0) < 1.e-10:
 			raise ValueError('seismicity at rate cut is zero')
 
 		n = n/n0
 
 		return np.array(n)
-	def _nt2i(self,t,rmax):						#   - 2D distributed source (interpolation)
+
+	def _nt2i(self, t, rmax):						#   - 2D distributed source (interpolation)
 		''' Compute global seismicity rate.
 
 			Parameters
@@ -1162,7 +1192,8 @@ class InducedSeismicity(object):
 		n = 2*np.pi*np.sum(rr*dp*mask*dr, axis=0)
 
 		return n
-	def _nt3(self,t,rmax):						#   - 3D point source
+
+	def _nt3(self, t, rmax):						#   - 3D point source
 		''' Compute global seismicity rate.
 
 			Parameters
@@ -1232,6 +1263,7 @@ class InducedSeismicity(object):
 		n[inds3] = 0.
 
 		return np.array(n)
+
 
 def iterable(x):
 	# convert vector to iterable if not already
