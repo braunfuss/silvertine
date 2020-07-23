@@ -449,7 +449,8 @@ def fwd_shakemap_post(projdir, wanted_start=0, wanted_end=None,
                       rake=None,
                       moment=None,
                       depth=None,
-                      source_type="MT"):
+                      source_type="MT",
+                      stations_corrections_file=None):
 
     if gf_store_superdirs is None:
         engine = gf.LocalEngine(use_config=True)
@@ -491,7 +492,8 @@ def fwd_shakemap_post(projdir, wanted_start=0, wanted_end=None,
                                        pertub_degree=pertub_degree,
                                        pertub_velocity_model=pertub_velocity_model,
                                        value_level=value_level,
-                                       measured=measured)
+                                       measured=measured,
+                                       stations_corrections_file=stations_corrections_file)
     #    except:
     #        pass
 

@@ -937,6 +937,8 @@ def command_scenario(args):
         parser.add_option(
             '--station_dropout', dest='station_dropout', type=str, default=False,
             help='t_station_dropout')
+
+
     parser, options, args = cl_parse('scenario', args, setup)
 
     gf_store_superdirs = None
@@ -1023,6 +1025,9 @@ def command_post_shakemap(args):
         parser.add_option(
             '--source_type', dest='source_type', type=str, default="MT",
             help='Source Type (default: %default)')
+        parser.add_option(
+            '--stations_corrections_file', dest='stations_corrections_file', type=str, default=None,
+            help='stations_corrections_file')
 
     parser, options, args = cl_parse('post_shakemap', args, setup)
 
@@ -1051,7 +1056,8 @@ def command_post_shakemap(args):
         rake=options.rake,
         moment=options.moment,
         depth=options.depth,
-        source_type=options.source_type)
+        source_type=options.source_type,
+        stations_corrections_file=options.stations_corrections_file)
 
 
 def command_init(args):

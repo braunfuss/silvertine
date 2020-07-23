@@ -34,7 +34,7 @@ def make_shakemap(engine, source, store_id, folder, stations=None, save=True,
 #    try:
     if measured is True:
         event = model.Event(lat=source.lat, lon=source.lon,
-                                  time=source.time)
+                            time=source.time)
         measured = get_max_pga([event], folder_waveforms, stations=stations)
     if measured is True and get_measured is False:
         measured = num.genfromtxt(folder+"measured_pgv",
@@ -92,13 +92,15 @@ def make_shakemap(engine, source, store_id, folder, stations=None, save=True,
                                            savedir=folder, save=save)
             values_stations = values_stations[0][0:len(stations)]
             if stations_corrections_file is not None:
-                stations_corrections_file = num.loadtxt(stations_corrections_file)
+                stations_corrections_file = num.genfromtxt(stations_corrections_file,
+                                                        delimiter=",", dtype=None)
                 stations_corrections_value = []
-                for st in stations:
+                for i_st, st in enumerate(stations):
                     for stc in stations_corrections_file:
-                        if st.station == stc[0]:
-                            stations_corrections_value.append(stc[1])
-                values_stations = values_stations * num.asarray(stations_corrections_value)
+                        if st.station == stc[0].decode():
+                            stations_corrections_value.append(float(stc[1]))
+                            values_stations[i_st] = values_stations[i_st] + (values_stations[i_st]*float(stc[1]))
+                # values_stations = values_stations * num.asarray(stations_corrections_value)
             values_stations_pertubed.append(values_stations)
 
     if stations is not None:
@@ -270,7 +272,8 @@ def load_shakemap(path):
 
 
 def get_max_pga(events, folder_waveforms, gf_freq=10., duration=30,
-                forerun=10., quantity="pgv", stations=None):
+                forerun=10., quantity="pgv", stations=None,
+                absolute_max=False):
     event = events[0]
     tmin = event.time-forerun
     tmax = event.time+duration
@@ -286,16 +289,36 @@ def get_max_pga(events, folder_waveforms, gf_freq=10., duration=30,
         pga = []
         for st in stations:
             max_value = 0
+            value_E = 0
+            value_N = 0
+            value_Z = 0
             for tr in pile_data:
-                if st.station == tr.station:
-                    if quantity == "pga":
-                        value = num.max(num.diff(num.diff(tr.ydata)))
-                    if quantity == "pgv":
-                        value = num.max(num.abs(num.diff(tr.ydata)))
-                    if value > max_value:
-                        max_value = value
-            #pga.append(max_value)
-                    # here ableitung
+                if absolute_max is True:
+                    if st.station == tr.station:
+                        if quantity == "pga":
+                            value = num.max(num.diff(num.diff(tr.ydata)))
+                        if quantity == "pgv":
+                            value = num.max(num.abs(num.diff(tr.ydata)))
+                        if value > max_value:
+                            max_value = value
+                else:
+                    if st.station == tr.station:
+                        if tr.channel[-1] == "E" or tr.channel == "R":
+                            if quantity == "pga":
+                                value_E = num.max(num.diff(num.diff(tr.ydata)))
+                            if quantity == "pgv":
+                                value_E = num.max(num.abs(num.diff(tr.ydata)))
+                        if tr.channel[-1] == "N" or tr.channel == "T":
+                            if quantity == "pga":
+                                value_N = num.max(num.diff(num.diff(tr.ydata)))
+                            if quantity == "pgv":
+                                value_N = num.max(num.abs(num.diff(tr.ydata)))
+                        if tr.channel[-1] == "Z":
+                            if quantity == "pga":
+                                value_Z = num.max(num.diff(num.diff(tr.ydata)))
+                            if quantity == "pgv":
+                                value_Z = num.max(num.abs(num.diff(tr.ydata)))
+            max_value = num.sqrt((value_E**2)+(value_N)**2+(value_Z**2))
             pgas_waveforms.append(max_value)
     return pgas_waveforms
 
@@ -307,7 +330,8 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
                   plot_background_map=True, measured=None,
                   value_level=0.001, quantity="velocity",
                   scale="mm", plot_values=False, vs30=True,
-                  engine=None, type_factors=None, store_id=None):
+                  engine=None, type_factors=None, store_id=None,
+                  plot_snr=False):
     plot.mpl_init()
     fig = plt.figure(figsize=plot.mpl_papersize('a5', 'landscape'))
     axes = fig.add_subplot(1, 1, 1, aspect=1.0)
@@ -316,7 +340,6 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
         'size': 4000,
         'edgecolor': 'black'
         }
-
 
     for i, source in enumerate(sources):
         mts.append(source.pyrocko_moment_tensor())
@@ -525,7 +548,6 @@ def plot_shakemap(sources, norths, easts, values_list, filename, folder,
             vmin=0., vmax=vmax,
             cmap=plt.get_cmap('YlOrBr'),
             alpha=alpha)
-        print(vmax, num.max(values))
         if quantity == "velocity":
             if scale == "mm":
                 #fig.colorbar(im, label='Velocity [mm/s]')
