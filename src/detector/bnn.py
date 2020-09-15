@@ -23,6 +23,8 @@ from pathlib import Path
 from silvertine.util import waveform
 import scipy
 
+
+
 import os
 try:
   import seaborn as sns  # pylint: disable=g-import-not-at-top
@@ -34,6 +36,27 @@ except ImportError:
 #tf.disable_eager_execution()
 
 #tf.enable_v2_behavior()
+
+
+def _mat(m):
+    return np.array(([[m[0], m[3], m[4]],
+                      [m[3], m[1], m[5]],
+                      [m[4], m[5], m[2]]]))
+
+
+def omega_angle(M1x, M2x):
+    M1 = _mat(M1x)
+    M2 = _mat(M2x)
+
+    n = len(M1)
+    cosom = np.zeros(n)
+
+    M1r = M1
+    M2r = M2
+    omega = 0.5 * (1-((np.sum(M1r*M2r))/(np.sqrt(np.sum(M1r**2))*np.sqrt(np.sum((M2r**2))))))
+
+    return omega
+
 
 def rgb2gray(rgb):
     return np.dot(rgb[...,:3], [0.2989, 0.5870, 0.1140])
@@ -175,7 +198,7 @@ def normalize_all(traces, min, max):
 
 
 def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
-                      mechanism=False):
+                      mechanism=False, sources=None):
 
     add_spectrum = False
     data_traces = []
@@ -208,7 +231,7 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
         #traces = normalize_all(traces, min_traces, max_traces)
 
         for tr in traces:
-            tr.lowpass(4, 13.)
+            tr.lowpass(4, 20.2)
             tr.highpass(4, 0.03)
             tr.ydata = tr.ydata/np.max(tr.ydata)
             nsamples = len(tr.ydata)
@@ -234,6 +257,7 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
                 traces_coll = np.concatenate((traces_coll, data),  axis=0)
         nsamples = len(traces_coll)
         data_traces.append(traces_coll)
+
     # normalize coordinates
     if multilabel is True and events is not None:
         lons = []
@@ -251,6 +275,7 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
         lons = (lons-np.min(lons))/(np.max(lons)-np.min(lons))
         depths = np.asarray(depths)
         depths = (depths-np.min(depths))/(np.max(depths)-np.min(depths))
+
     if events is not None:
         labels = []
         if multilabel is True:
@@ -262,7 +287,7 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
 
                     else:
                         if mechanism is True:
-                            rake = 0.5-(ev.moment_tensor.rake1/180.)*0.5
+                            rake = 0.5-(ev.moment_tensor.rake1/90.)*0.5
                             labels.append([ev.moment_tensor.strike1/360.,
                                            ev.moment_tensor.dip1/90., rake])
                         else:
@@ -271,13 +296,35 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
 
                 else:
                     tag = 1
+                #    print(ev)
+                #    print(ev.moment_tensor)
+                #    print(sources[i])
                     if mechanism is True:
-                        rake = 0.5-(ev.moment_tensor.rake1/180.)*0.5
-                        labels.append([ev.moment_tensor.strike1/360.,
-                                       ev.moment_tensor.dip1/90., rake])
+                    #    rake = 0.5-(ev.moment_tensor.rake2/90.)*0.5
+                        #labels.append([ev.moment_tensor.strike2/360.,
+                    #                   ev.moment_tensor.dip2/90., rake])
+                    #   rake = 0.5-(sources[i].rake/180.)*0.5
+                     #  labels.append([sources[i].strike/360.,
+                    #                  sources[i].dip/90., rake])
+                        # rake2 = 0.5-(ev.moment_tensor.rake2/180.)*0.5
+                        # rake1 = 0.5-(ev.moment_tensor.rake1/180.)*0.5
+                        # labels.append([ev.moment_tensor.strike2/360.,
+                        #                ev.moment_tensor.dip2/90., rake2,
+                        #                ev.moment_tensor.strike1/360.,
+                        #                ev.moment_tensor.dip1/90., rake1])
+                        labels.append([0.5-((ev.moment_tensor.mnn/ev.moment_tensor.moment)/2)*0.5,
+                                        0.5-((ev.moment_tensor.mee/ev.moment_tensor.moment)/2)*0.5,
+                                        0.5-((ev.moment_tensor.mdd/ev.moment_tensor.moment)/2)*0.5,
+                                        0.5-((ev.moment_tensor.mne/ev.moment_tensor.moment)/2)*0.5,
+                                        0.5-((ev.moment_tensor.mnd/ev.moment_tensor.moment)/2)*0.5,
+                                        0.5-((ev.moment_tensor.med/ev.moment_tensor.moment)/2)*0.5,
+                                        lats[i], lons[i], depths[i]])
+                    #    print(labels)
+                    #    print(ev)
                     else:
                         labels.append([lats[i], lons[i], depths[i]])
             labels = np.asarray(labels)
+
         else:
             for i, ev in enumerate(events):
                 if len(ev.tags) > 0:
@@ -297,10 +344,16 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
             labels = np.ones(len(data_traces), dtype=np.int32)*0
     data_traces = np.asarray(data_traces)
     labels = np.asarray(labels)
-    return data_traces, labels, len(data_traces)/nsamples, nsamples
+    print(len(data_traces))
+    print(len(waveforms[0]))
+    print(nsamples)
+    print(len(events))
+    print(len(data))
+    return data_traces, labels, len(data_traces), nsamples
 
 
-def generate_test_data(store_id, nevents=50, noised=True):
+def generate_test_data(store_id, nevents=50, noised=True,
+                       real_noise_traces=None):
     mod = landau_layered_model()
     engine = LocalEngine(store_superdirs=['gf_stores'])
     scale = 2e-14
@@ -416,6 +469,161 @@ def generate_test_data(store_id, nevents=50, noised=True):
     return waveforms_events, waveforms_noise, nsamples, len(stations), events
 
 
+def make_grid(center, dimx, dimy, zmin, zmax, dim_step, depth_step):
+
+    lats = np.arange(center[0]-dimx, center[0]+dimx, dim_step)
+    lons = np.arange(center[1]-dimy, center[1]+dimy, dim_step)
+    depths = np.arange(zmin, zmax, depth_step)
+    # single val
+
+    return lats, lons, depths
+
+
+def generate_test_data_grid(store_id, nevents=50, noised=False,
+                            real_noise_traces=None, strike_min=0.,
+                            strike_max=360., strike_step=100.,
+                            dip_min=0., dip_max=90., dip_step=45.,
+                            rake_min=-180., rake_max=180., rake_step=180.,
+                            mag_min=5., mag_max=5.5, mag_step=0.5,
+                            depth_step=1000., zmin=4000., zmax=8000.,
+                            dimx=0.2, dimy=0.2, center=None):
+    mod = landau_layered_model()
+    engine = LocalEngine(store_superdirs=['gf_stores'])
+    scale = 2e-14
+    cake_phase = cake.PhaseDef("P")
+    phase_list = [cake_phase]
+    waveforms_events = []
+    waveforms_noise = []
+    sources = []
+    stations = model.load_stations("scenarios/stations.raw.txt")
+    targets = []
+    events = []
+    mean_lat = []
+    mean_lon = []
+    for st in stations:
+        mean_lat.append(st.lat)
+        mean_lon.append(st.lon)
+        for cha in st.channels:
+            target = Target(
+                    lat=st.lat,
+                    lon=st.lon,
+                    store_id=store_id,
+                    interpolation='multilinear',
+                    quantity='displacement',
+                    codes=st.nsl() + (cha.name,))
+            targets.append(target)
+    center = [np.mean(mean_lat), np.mean(mean_lon)]
+    dim_step = 0.05
+    lats, lons, depths = make_grid(center, dimx, dimy, zmin, zmax, dim_step, depth_step)
+    strikes = np.arange(strike_min, strike_max, strike_step)
+    dips = np.arange(dip_min, dip_max, dip_step)
+    rakes = np.arange(rake_min, rake_max, rake_step)
+    magnitudes = np.arange(mag_min, mag_max, mag_step)
+
+    i = 0
+    # loop over all mechanisms needed to desribe each grid point
+    for lat in lats:
+        for lon in lons:
+            for depth in depths:
+                for strike in strikes:
+                    for dip in dips:
+                        for rake in rakes:
+                            for mag in magnitudes:
+                                #try:
+                                    event = scenario.gen_random_tectonic_event(i, magmin=-0.5, magmax=3.)
+                                    i = i+1
+                                    source_dc = DCSource(
+                                        lat=lat,
+                                        lon=lon,
+                                        depth=depth,
+                                        strike=strike,
+                                        dip=dip,
+                                        rake=rake,
+                                        magnitude=mag)
+                                    response = engine.process(source_dc, targets)
+                                    traces = response.pyrocko_traces()
+                                    event.lat = source_dc.lat
+                                    event.lon = source_dc.lon
+                                    event.depth = source_dc.depth
+                                    mt = moment_tensor.MomentTensor(strike=source_dc.strike, dip=source_dc.dip, rake=source_dc.rake,
+                                                                    magnitude=source_dc.magnitude)
+
+                                    event.moment_tensor = mt
+                                    sources.append(source_dc)
+                                    events.append(event)
+                                    for tr in traces:
+                                        for st in stations:
+                                            if st.station == tr.station:
+                                                dists = (orthodrome.distance_accurate50m(source_dc.lat,
+                                                                                     source_dc.lon,
+                                                                                     st.lat,
+                                                                                     st.lon)+st.elevation)*cake.m2d
+                                                processed = False
+                                                for ar, arrival in enumerate(mod.arrivals([dists],
+                                                                            phases=get_phases_list(),
+                                                                            zstart=source_dc.depth)):
+                                                    if processed is False:
+                                                        tr.chop(arrival.t-0.5, arrival.t+0.5)
+                                                        processed = True
+                                                    else:
+                                                        pass
+
+
+                                        nsamples = len(tr.ydata)
+                                        randdata = np.random.normal(size=nsamples)*np.min(tr.ydata)
+                                        white_noise = trace.Trace(deltat=tr.deltat, tmin=tr.tmin,
+                                                                  ydata=randdata)
+                                        if noised is True:
+                                            tr.add(white_noise)
+                                    waveforms_events.append(traces)
+                                #except:
+                                #    pass
+    # same number of non-events
+    for i in range(0, nevents):
+        try:
+            source_dc = DCSource(
+                lat=scenario.randlat(49., 49.2),
+                lon=scenario.rand(8.1, 8.2),
+                depth=scenario.rand(100., 3000.),
+                strike=scenario.rand(0., 360.),
+                dip=scenario.rand(0., 90.),
+                rake=scenario.rand(-180., 180.),
+                magnitude=scenario.rand(-1., 0.1))
+
+            response = engine.process(source_dc, targets)
+            traces = response.pyrocko_traces()
+            for tr in traces:
+                for st in stations:
+                    if st.station == tr.station:
+                        dists = (orthodrome.distance_accurate50m(source_dc.lat,
+                                                                 source_dc.lon,
+                                                                 st.lat,
+                                                                 st.lon)+st.elevation)*cake.m2d
+                        processed = False
+                        for ar, arrival in enumerate(mod.arrivals([dists],
+                                                    phases=get_phases_list(),
+                                                    zstart=source_dc.depth)):
+                            if processed is False:
+                                tr.chop(arrival.t-2, arrival.t+2)
+                                processed = True
+                            else:
+                                pass
+                tr.ydata = tr.ydata*0.
+
+                nsamples = len(tr.ydata)
+                randdata = np.random.normal(size=nsamples)*scale
+                white_noise = trace.Trace(deltat=tr.deltat, tmin=tr.tmin,
+                                          ydata=randdata)
+                tr.add(white_noise)
+            waveforms_noise.append(traces)
+
+        except:
+            pass
+
+    return waveforms_events, waveforms_noise, nsamples, len(stations), events, sources
+
+
+
 def rgb2gray(rgb):
     return np.dot(rgb[...,:3], [0.2989, 0.5870, 0.1140])
 
@@ -509,42 +717,55 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
     else:
         mechanism = False
 
-    if data_dir is not None:
-        try:
-            f = open("data_unseen_waveforms_bnn_gt_loaded", 'rb')
-            waveforms_events, nsamples, nstations, events = pickle.load(f)
-            f.close()
-        except:
-            waveforms_events, nsamples, nstations, events = load_data(data_dir,
-                                                                      "landau_100hz")
-            f = open("data_unseen_waveforms_bnn_gt_loaded", 'wb')
-            pickle.dump([waveforms_events, nsamples, nstations, events], f)
-            f.close()
-        waveforms_unseen = waveforms_events
-        events_unseen = events
-    if load is True:
-        try:
-            f = open("data_waveforms_bnn_gt_loaded", 'rb')
-            waveforms_events, nsamples, nstations, events = pickle.load(f)
-            f.close()
-        except:
-            data_dir = "./shaky"
-            waveforms_events, nsamples, nstations, events = load_data(data_dir, "landau_100hz")
-            f = open("data_waveforms_bnn_gt_loaded", 'wb')
-            pickle.dump([waveforms_events, nsamples, nstations, events], f)
-            f.close()
-    else:
-        try:
-            f = open("data_waveforms_bnn_gt", 'rb')
-            waveforms_events, waveforms_noise, nsamples, nstations, events = pickle.load(f)
-            f.close()
-        except:
+    if mechanism is False:
+        if data_dir is not None:
+            try:
+                f = open("data_unseen_waveforms_bnn_gt_loaded", 'rb')
+                waveforms_events, nsamples, nstations, events = pickle.load(f)
+                f.close()
+            except:
+                waveforms_events, nsamples, nstations, events = load_data(data_dir,
+                                                                          "landau_100hz")
+                f = open("data_unseen_waveforms_bnn_gt_loaded", 'wb')
+                pickle.dump([waveforms_events, nsamples, nstations, events], f)
+                f.close()
+            waveforms_unseen = waveforms_events
+            events_unseen = events
+        if load is True:
+            try:
+                f = open("data_waveforms_bnn_gt_loaded", 'rb')
+                waveforms_events, nsamples, nstations, events = pickle.load(f)
+                f.close()
+            except:
+                data_dir = "./shaky"
+                waveforms_events, nsamples, nstations, events = load_data(data_dir, "landau_100hz")
+                f = open("data_waveforms_bnn_gt_loaded", 'wb')
+                pickle.dump([waveforms_events, nsamples, nstations, events], f)
+                f.close()
+        else:
+            try:
+                f = open("data_waveforms_bnn_gt", 'rb')
+                waveforms_events, waveforms_noise, nsamples, nstations, events = pickle.load(f)
+                f.close()
+            except:
 
-            waveforms_events, waveforms_noise, nsamples, nstations, events = generate_test_data("landau_100hz", nevents=1200)
-            f = open("data_waveforms_bnn_gt", 'wb')
-            pickle.dump([waveforms_events, waveforms_noise, nsamples, nstations,
-                         events], f)
+                waveforms_events, waveforms_noise, nsamples, nstations, events = generate_test_data("landau_100hz", nevents=1200)
+                f = open("data_waveforms_bnn_gt", 'wb')
+                pickle.dump([waveforms_events, waveforms_noise, nsamples, nstations,
+                             events], f)
+                f.close()
+    else:
+    #    try:
+            f = open("data_waveforms_bnn_mechanism", 'rb')
+            waveforms_events, waveforms_noise, nsamples, nstations, events, sources = pickle.load(f)
             f.close()
+    #    except:
+
+    #        waveforms_events, waveforms_noise, nsamples, nstations, events, sources = generate_test_data_grid("landau_100hz", nevents=1200)
+    #        f = open("data_waveforms_bnn_mechanism", 'wb')
+    #        pickle.dump([waveforms_events, waveforms_noise, nsamples, nstations,
+    #                     events, sources], f)
+    #        f.close()
 
     if validation_data is None:
         max_traces = 0.
@@ -553,8 +774,9 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                 if np.max(tr.ydata) > max_traces:
                     max_traces = np.max(tr.ydata)
 
-        data_events, labels_events, nstations, nsamples = bnn_detector_data(waveforms_events, max_traces, events=events, multilabel=multilabel, mechanism=mechanism)
-        print(len(data_events))
+        data_events, labels_events, nstations, nsamples = bnn_detector_data(waveforms_events, max_traces, events=events, multilabel=multilabel, mechanism=mechanism, sources=sources)
+#        print(len(data_events))
+#        print(labels_events)
         if data_dir is not None:
             data_events_unseen, labels_events_unseen, nstations_unseen, nsamples_unseen = bnn_detector_data(waveforms_unseen, max_traces, events=events_unseen, multilabel=multilabel,
                                                                                                         mechanism=mechanism)
@@ -569,8 +791,8 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
         else:
             x_data = data_events
             y_data = labels_events
-            print(len(x_data))
-            print(len(y_data))
+    #        print(len(x_data))
+    #        print(len(y_data))
 
     else:
         # hardcoded for bgr envs
@@ -599,16 +821,16 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
     ncomponents = 3
     nstations = nstations*ncomponents
 
-
     if multilabel is False:
         nlabels = 1
     else:
         nlabels = (y_data.shape[1])
     dat = x_data.copy()
     labels = y_data.copy()
-
     print('shape of x_data: ', x_data.shape)
     print('shape of y_data: ', y_data.shape)
+    dat = dat[::10]
+    labels = labels[::10]
 
     np.random.seed(42)  # Set a random seed for reproducibility
 
@@ -622,27 +844,50 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
     from keras.layers import Dense, Dropout, Activation
 # For a single-input model with 2 classes (binary classi    fication):
     if train_model is True:
-
+        #print(nstations)
         model = Sequential()
         model.add(Activation('relu'))
-    #    model.add(Dense(6056, activation='relu', input_dim=nsamples))
 
-    #    model.add(Dense(2056, activation='relu', input_dim=nsamples))
+#        model.add(Dense(2056, activation='relu', input_dim=nsamples))
 
-        model.add(Dense(1060, activation='relu', input_dim=nsamples))
-    #    model.add(Dropout(0.1))
+    #    model.add(Dense(1060, activation='relu', input_dim=nsamples))
+    #    model.add(Dropout(0.5))
 
-    #    model.add(Dense(256, activation='relu', input_dim=nsamples))
-        model.add(Dense(64, activation='relu', input_dim=nsamples))
-        model.add(Dense(32, activation='relu', input_dim=nsamples))
-    #    model.add(Dense(16, activation='relu', input_dim=nsamples))
+        model.add(Dense(256, activation='relu', input_dim=nsamples))
+#        model.add(Dropout(0.5))
+    #    model.add(Dense(64, activation='relu', input_dim=nsamples))
+    #    model.add(Dropout(0.5))
+    #    model.add(Dense(120, activation='relu', input_dim=nsamples))
+    #    model.add(Dense(120, activation='relu', input_dim=nsamples))
+        model.add(Dense(40, activation='relu', input_dim=nsamples))
+
+        #model.add(Dense(11664, activation='relu', input_dim=nsamples))
+    #    model.add(Dense(36, activation='relu', input_dim=nsamples))
+    #    model.add(Dense(12, activation='relu', input_dim=nsamples))
+
+#        model.add(Dense(38, activation='relu', input_dim=nsamples))
+    #    model.add(Dense(3600, activation='relu', input_dim=nsamples))
+    #    model.add(Dense(36, activation='relu', input_dim=nsamples))
+    #    model.add(Dense(12, activation='relu', input_dim=nsamples))
+
+    #    model.add(Dense(nstations, activation='relu', input_dim=nsamples))
+    #    model.add(Dense(3600, activation='relu', input_dim=nsamples))
+
+    #    model.add(Dropout(0.5))
+    #    model.add(Dropout(0.5))
+    #    model.add(Dense(int(nstations/ncomponents), activation='relu', input_dim=nsamples))
+#        model.add(Dropout(0.5))
+
     #    model.add(Dense(8, activation='relu', input_dim=nsamples))
-    #    model.add(Dense(6, activation='relu', input_dim=nsamples))
-    #    model.add(Dense(4, activation='relu', input_dim=nsamples))
+    #    model.add(Dense(5, activation='relu', input_dim=nsamples))
+    #    model.add(Dropout(0.5))
+
+#        model.add(Dense(3, activation='relu', input_dim=nsamples))
     #    model.add(Dense(64, activation='relu', input_dim=nsamples))
 
         model.add(Dense(nlabels, activation='sigmoid'))
         # adadelta
+        #opt = keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=True)
         model.compile(optimizer='rmsprop',
                       loss='binary_crossentropy',
                       metrics=['accuracy'])
@@ -668,6 +913,8 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
         train, x_val, y_train, y_val = train_test_split(dat, labels,
                                                         test_size=0.05,
                                                         random_state=10)
+        x_val = dat
+        y_val = labels
         # Train the model, iterating on the data in batches of 32 samples
         from keras.callbacks import ModelCheckpoint
         checkpointer = ModelCheckpoint(filepath="best_weights.hdf5",
@@ -680,7 +927,7 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                 history = model.fit(train, y_train, epochs=5, batch_size=20,
                                     callbacks=[checkpointer])
             else:
-                history = model.fit(train, y_train, epochs=20, batch_size=2,
+                history = model.fit(dat, labels, epochs=1000, batch_size=1,
                                     callbacks=[checkpointer])
 
             plot_model(model)
@@ -697,8 +944,8 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
             pred = model.predict(data_events_unseen)
         else:
             pred = model.predict(x_val)
-        print(np.shape(pred))
-        print("here", pred)
+    #    print(np.shape(pred))
+    #    print("here", pred)
 
     else:
         train, x_val, y_train, y_val = train_test_split(dat,
@@ -748,87 +995,249 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                                               .format(heldout_log_prob))
 
                 step = step+1
-    print(y_val, pred)
-    print(abs(y_val)-abs(pred))
+    print(y_val[0:3], pred[0:3])
+    print(y_val[-3:-1], pred[-3:-1])
+
+    #print(abs(y_val)-abs(pred))
     print(np.sum(abs(y_val)-abs(pred)))
     recover_real_value = False
+    sdr = False
     if multilabel is True:
         if mechanism is True:
-            strikes = []
-            dips = []
-            rakes = []
-            for i, ev in enumerate(events):
-                strikes.append(ev.moment_tensor.strike1)
-                dips.append(ev.moment_tensor.dip1)
-                rakes.append(ev.moment_tensor.rake1)
-            real_values = []
-            for i, vals in enumerate(y_val):
-                real_values.append([vals[0]*360., vals[1]*90.,
-                                    180.-360.*vals[2]])
-            real_values_pred = []
-            diff_values = []
-            for i, vals in enumerate(pred):
-                real_values_pred.append([vals[0]*360., vals[1]*90., 180.-360.*vals[2]])
-                diff_values.append([real_values[i][0]-real_values_pred[i][0], real_values[i][1]-real_values_pred[i][1], real_values[i][2]-real_values_pred[i][2]])
-            from pyrocko import gf, trace, plot, beachball, util, orthodrome, model
-            for i, vals in enumerate(pred):
+            if sdr is False:
+                real_values = []
+                real_ms = []
+                for i, vals in enumerate(y_val[0:2]):
+                    real_value = [(1.-(2.*vals[0]))*events[i].moment_tensor.moment*2, (1.-(2.*vals[1]))*events[i].moment_tensor.moment*2,
+                                        (1.-(2.*vals[2]))*events[i].moment_tensor.moment*2, (1.-(2.*vals[3]))*events[i].moment_tensor.moment*2,
+                                        (1.-(2.*vals[4]))*events[i].moment_tensor.moment*2, (1.-(2.*vals[5]))*events[i].moment_tensor.moment*2]
+                    real_values.append(real_value)
+                    m = moment_tensor.MomentTensor(mnn=(1.-(2.*vals[0]))*events[i].moment_tensor.moment*2, mee=(1.-(2.*vals[1]))*events[i].moment_tensor.moment*2,
+                                        mdd=(1.-(2.*vals[2]))*events[i].moment_tensor.moment*2, mne=(1.-(2.*vals[3]))*events[i].moment_tensor.moment*2,
+                                        mnd=(1.-(2.*vals[4]))*events[i].moment_tensor.moment*2, med=(1.-(2.*vals[5]))*events[i].moment_tensor.moment*2)
+                    #print(real_value)
+                    #print(vals)
+                #    print(m.both_strike_dip_rake())
+                #    print(events[i])
+                #    print(sources[i])
+                    real_ms.append(m)
+                real_values_pred = []
+                diff_values = []
+                pred_ms = []
+                for i, vals in enumerate(pred[0:2]):
+                    real_value = [(1.-(2.*vals[0]))*events[i].moment_tensor.moment*2, (1.-(2.*vals[1]))*events[i].moment_tensor.moment*2,
+                                        (1.-(2.*vals[2]))*events[i].moment_tensor.moment*2, (1.-(2.*vals[3]))*events[i].moment_tensor.moment*2,
+                                        (1.-(2.*vals[4]))*events[i].moment_tensor.moment*2, (1.-(2.*vals[5]))*events[i].moment_tensor.moment*2]
+                    real_values_pred.append(real_value)
+                    m = moment_tensor.MomentTensor(mnn=(1.-(2.*vals[0]))*events[i].moment_tensor.moment*2, mee=(1.-(2.*vals[1]))*events[i].moment_tensor.moment*2,
+                                        mdd=(1.-(2.*vals[2]))*events[i].moment_tensor.moment*2, mne=(1.-(2.*vals[3]))*events[i].moment_tensor.moment*2,
+                                        mnd=(1.-(2.*vals[4]))*events[i].moment_tensor.moment*2, med=(1.-(2.*vals[5]))*events[i].moment_tensor.moment*2)
+                #    print(m.both_strike_dip_rake())
+                #    print(real_value)
+                    pred_ms.append(m)
+                    #diff_values.append([real_values[i][0]-real_values_pred[i][0], real_values[i][1]-real_values_pred[i][1], real_values[i][2]-real_values_pred[i][2]])
+            for pred_m, real_m in zip(pred_ms, real_ms):
+                from pyrocko import plot
+                from pyrocko.plot import beachball
+                omega = omega_angle(real_m.m6(), pred_m.m6())
+                kagan = moment_tensor.kagan_angle(real_m, pred_m)
                 fig = plt.figure()
                 axes = fig.add_subplot(1, 1, 1)
+                axes.set_xlim(-2., 4.)
+                axes.set_ylim(-2., 2.)
                 axes.set_axis_off()
                 plot.beachball.plot_beachball_mpl(
-                            mt_val,
+                            real_m,
                             axes,
-                            beachball_type="'full'",
+                            beachball_type='deviatoric',
                             size=60.,
                             position=(0, 1),
                             color_t=plot.mpl_color('scarletred2'),
                             linewidth=1.0)
                 plot.beachball.plot_beachball_mpl(
-                            mt_pred,
+                            pred_m,
                             axes,
-                            beachball_type="'full'",
+                            beachball_type='deviatoric',
+                            size=60.,
+                            position=(1.5, 1),
+                            color_t=plot.mpl_color('scarletred2'),
+                            linewidth=1.0)
+                plt.show()
+                print(omega, kagan)
+
+                real_values = []
+                real_ms = []
+                for i, vals in enumerate(y_val[-3:-1]):
+                    real_value = [(1.-(2.*vals[0]))*events[i].moment_tensor.moment*2, (1.-(2.*vals[1]))*events[i].moment_tensor.moment*2,
+                                        (1.-(2.*vals[2]))*events[i].moment_tensor.moment*2, (1.-(2.*vals[3]))*events[i].moment_tensor.moment*2,
+                                        (1.-(2.*vals[4]))*events[i].moment_tensor.moment*2, (1.-(2.*vals[5]))*events[i].moment_tensor.moment*2]
+                    real_values.append(real_value)
+                    m = moment_tensor.MomentTensor(mnn=(1.-(2.*vals[0]))*events[i].moment_tensor.moment*2, mee=(1.-(2.*vals[1]))*events[i].moment_tensor.moment*2,
+                                        mdd=(1.-(2.*vals[2]))*events[i].moment_tensor.moment*2, mne=(1.-(2.*vals[3]))*events[i].moment_tensor.moment*2,
+                                        mnd=(1.-(2.*vals[4]))*events[i].moment_tensor.moment*2, med=(1.-(2.*vals[5]))*events[i].moment_tensor.moment*2)
+                    #print(real_value)
+                    #print(vals)
+                #    print(m.both_strike_dip_rake())
+                #    print(events[i])
+                #    print(sources[i])
+                    real_ms.append(m)
+                real_values_pred = []
+                diff_values = []
+                pred_ms = []
+                for i, vals in enumerate(pred[-3:-1]):
+                    real_value = [(1.-(2.*vals[0]))*events[i].moment_tensor.moment*2, (1.-(2.*vals[1]))*events[i].moment_tensor.moment*2,
+                                        (1.-(2.*vals[2]))*events[i].moment_tensor.moment*2, (1.-(2.*vals[3]))*events[i].moment_tensor.moment*2,
+                                        (1.-(2.*vals[4]))*events[i].moment_tensor.moment*2, (1.-(2.*vals[5]))*events[i].moment_tensor.moment*2]
+                    real_values_pred.append(real_value)
+                    m = moment_tensor.MomentTensor(mnn=(1.-(2.*vals[0]))*events[i].moment_tensor.moment*2, mee=(1.-(2.*vals[1]))*events[i].moment_tensor.moment*2,
+                                        mdd=(1.-(2.*vals[2]))*events[i].moment_tensor.moment*2, mne=(1.-(2.*vals[3]))*events[i].moment_tensor.moment*2,
+                                        mnd=(1.-(2.*vals[4]))*events[i].moment_tensor.moment*2, med=(1.-(2.*vals[5]))*events[i].moment_tensor.moment*2)
+                #    print(m.both_strike_dip_rake())
+                #    print(real_value)
+                    pred_ms.append(m)
+                    #diff_values.append([real_values[i][0]-real_values_pred[i][0], real_values[i][1]-real_values_pred[i][1], real_values[i][2]-real_values_pred[i][2]])
+            for pred_m, real_m in zip(pred_ms, real_ms):
+                from pyrocko import plot
+                from pyrocko.plot import beachball
+                omega = omega_angle(real_m.m6(), pred_m.m6())
+                kagan = moment_tensor.kagan_angle(real_m, pred_m)
+                fig = plt.figure()
+                axes = fig.add_subplot(1, 1, 1)
+                axes.set_xlim(-2., 4.)
+                axes.set_ylim(-2., 2.)
+                axes.set_axis_off()
+                plot.beachball.plot_beachball_mpl(
+                            real_m,
+                            axes,
+                            beachball_type='deviatoric',
                             size=60.,
                             position=(0, 1),
                             color_t=plot.mpl_color('scarletred2'),
                             linewidth=1.0)
-        else:
-            lons = []
-            lats = []
-            depths = []
-            for i, ev in enumerate(events):
-                lats.append(ev.lat)
-                lons.append(ev.lon)
-                depths.append(ev.depth)
-            lats = np.asarray(lats)
-            lats_max = np.max(lats)
-            lats_min = np.min(lats)
-            lons = np.asarray(lons)
-            lons_max = np.max(lons)
-            lons_min = np.min(lons)
-            depths = np.asarray(depths)
-            depths_max = np.max(depths)
-            depths_min = np.min(depths)
-            real_values = []
-            #lons = (lons-np.min(lons))/(np.max(lons)-np.min(lons))
-            #vals*(lons_max-lons_min)/lons_min
-            for i, vals in enumerate(y_val):
-                lat = (-vals[0]*lats_min)+(vals[0]*lats_max)+lats_min
-                lon =  (-vals[1]*lons_min)+(vals[1]*lons_max)+lons_min
-                depth = (-vals[2]*depths_min)+(vals[2]*depths_max)+depths_min
+                plot.beachball.plot_beachball_mpl(
+                            pred_m,
+                            axes,
+                            beachball_type='deviatoric',
+                            size=60.,
+                            position=(1.5, 1),
+                            color_t=plot.mpl_color('scarletred2'),
+                            linewidth=1.0)
+                plt.show()
+                print(omega, kagan)
 
-                real_values.append([lat, lon, depth])
-            real_values_pred = []
-            diff_values = []
-            for i, vals in enumerate(pred):
-                lat = (-vals[0]*lats_min)+(vals[0]*lats_max)+lats_min
-                lon = (-vals[1]*lons_min)+(vals[1]*lons_max)+lons_min
-                depth = (-vals[2]*depths_min)+(vals[2]*depths_max)+depths_min
-                real_values_pred.append([lat, lon, depth])
-                diff_values.append([real_values[i][0]-real_values_pred[i][0], real_values[i][1]-real_values_pred[i][1], real_values[i][2]-real_values_pred[i][2]])
+                lons = []
+                lats = []
+                depths = []
+                for i, ev in enumerate(events):
+                    lats.append(ev.lat)
+                    lons.append(ev.lon)
+                    depths.append(ev.depth)
+                lats = np.asarray(lats)
+                lats_max = np.max(lats)
+                lats_min = np.min(lats)
+                lons = np.asarray(lons)
+                lons_max = np.max(lons)
+                lons_min = np.min(lons)
+                depths = np.asarray(depths)
+                depths_max = np.max(depths)
+                depths_min = np.min(depths)
+                real_values = []
+                #lons = (lons-np.min(lons))/(np.max(lons)-np.min(lons))
+                #vals*(lons_max-lons_min)/lons_min
+                for i, vals in enumerate(y_val):
+                    lat = (-vals[6]*lats_min)+(vals[6]*lats_max)+lats_min
+                    lon =  (-vals[7]*lons_min)+(vals[7]*lons_max)+lons_min
+                    depth = (-vals[8]*depths_min)+(vals[8]*depths_max)+depths_min
 
-        print(real_values)
-        print(real_values_pred)
-        print(diff_values)
+                    real_values.append([lat, lon, depth])
+                real_values_pred = []
+                diff_values = []
+                for i, vals in enumerate(pred):
+                    lat = (-vals[6]*lats_min)+(vals[6]*lats_max)+lats_min
+                    lon = (-vals[7]*lons_min)+(vals[7]*lons_max)+lons_min
+                    depth = (-vals[8]*depths_min)+(vals[8]*depths_max)+depths_min
+                    real_values_pred.append([lat, lon, depth])
+                    diff_values.append([real_values[i][0]-real_values_pred[i][0], real_values[i][1]-real_values_pred[i][1], real_values[i][2]-real_values_pred[i][2]])
+                print(np.max(diff_values), np.min(diff_values))
+            if sdr is True:
+                strikes = []
+                dips = []
+                rakes = []
+                for i, ev in enumerate(events):
+                    strikes.append(ev.moment_tensor.strike1)
+                    dips.append(ev.moment_tensor.dip1)
+                    rakes.append(ev.moment_tensor.rake1)
+                real_values = []
+                for i, vals in enumerate(y_val):
+                    real_values.append([vals[0]*360., vals[1]*90.,
+                                        180.-(360.*vals[2])])
+                real_values_pred = []
+                diff_values = []
+                for i, vals in enumerate(pred):
+                    real_values_pred.append([vals[0]*360., vals[1]*90., 180.-(360.*vals[2])])
+                    diff_values.append([real_values[i][0]-real_values_pred[i][0], real_values[i][1]-real_values_pred[i][1], real_values[i][2]-real_values_pred[i][2]])
+                plot_beachball = False
+                if plot_beachball is True:
+                    from pyrocko import gf, trace, plot, beachball, util, orthodrome, model
+                    for i, vals in enumerate(pred):
+                        fig = plt.figure()
+                        axes = fig.add_subplot(1, 1, 1)
+                        axes.set_axis_off()
+                        plot.beachball.plot_beachball_mpl(
+                                    mt_val,
+                                    axes,
+                                    beachball_type="'full'",
+                                    size=60.,
+                                    position=(0, 1),
+                                    color_t=plot.mpl_color('scarletred2'),
+                                    linewidth=1.0)
+                        plot.beachball.plot_beachball_mpl(
+                                    mt_pred,
+                                    axes,
+                                    beachball_type="'full'",
+                                    size=60.,
+                                    position=(0, 1),
+                                    color_t=plot.mpl_color('scarletred2'),
+                                    linewidth=1.0)
+                        plt.show()
+                else:
+                    lons = []
+                    lats = []
+                    depths = []
+                    for i, ev in enumerate(events):
+                        lats.append(ev.lat)
+                        lons.append(ev.lon)
+                        depths.append(ev.depth)
+                    lats = np.asarray(lats)
+                    lats_max = np.max(lats)
+                    lats_min = np.min(lats)
+                    lons = np.asarray(lons)
+                    lons_max = np.max(lons)
+                    lons_min = np.min(lons)
+                    depths = np.asarray(depths)
+                    depths_max = np.max(depths)
+                    depths_min = np.min(depths)
+                    real_values = []
+                    #lons = (lons-np.min(lons))/(np.max(lons)-np.min(lons))
+                    #vals*(lons_max-lons_min)/lons_min
+                    for i, vals in enumerate(y_val):
+                        lat = (-vals[0]*lats_min)+(vals[0]*lats_max)+lats_min
+                        lon =  (-vals[1]*lons_min)+(vals[1]*lons_max)+lons_min
+                        depth = (-vals[2]*depths_min)+(vals[2]*depths_max)+depths_min
+
+                        real_values.append([lat, lon, depth])
+                    real_values_pred = []
+                    diff_values = []
+                    for i, vals in enumerate(pred):
+                        lat = (-vals[0]*lats_min)+(vals[0]*lats_max)+lats_min
+                        lon = (-vals[1]*lons_min)+(vals[1]*lons_max)+lons_min
+                        depth = (-vals[2]*depths_min)+(vals[2]*depths_max)+depths_min
+                        real_values_pred.append([lat, lon, depth])
+                        diff_values.append([real_values[i][0]-real_values_pred[i][0], real_values[i][1]-real_values_pred[i][1], real_values[i][2]-real_values_pred[i][2]])
+
+        #    print(real_values)
+        #    print(real_values_pred)
+        #    print(diff_values)
 
     plot_prescission(y_val, pred)
     if multilabel is True and mechanism is False:
@@ -885,7 +1294,7 @@ def plot_model(model):
 
 
 def plot_acc_loss(history):
-    print(history.history)
+#    print(history.history)
     acc = history.history['accuracy']
     val_acc = history.history['accuracy']
     loss = history.history['loss']
