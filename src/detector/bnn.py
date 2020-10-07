@@ -634,53 +634,53 @@ def get_parallel_dc(i, targets, store_id, noised, real_noise_traces, post, pre, 
     for strike in strikes:
         for dip in dips:
             for rake in rakes:
-        event = scenario.gen_random_tectonic_event(i, magmin=-0.5, magmax=3.)
-        source_dc = DCSource(
-            lat=lat,
-            lon=lon,
-            depth=depth,
-            strike=strike,
-            dip=dip,
-            rake=rake,
-            magnitude=mag)
-        response = engine.process(source_dc, targets)
-        traces = response.pyrocko_traces()
-        event.lat = source_dc.lat
-        event.lon = source_dc.lon
-        event.depth = source_dc.depth
-        mt = moment_tensor.MomentTensor(strike=source_dc.strike, dip=source_dc.dip, rake=source_dc.rake,
-                                        magnitude=source_dc.magnitude)
-        event.moment_tensor = mt
-        traces_uncut = copy.deepcopy(traces)
-        traces_uncuts.append(traces_uncut)
-        for tr in traces:
-            for st in stations:
-                if st.station == tr.station:
-                    dist = (orthodrome.distance_accurate50m(source_dc.lat,
-                                                            source_dc.lon,
-                                                            st.lat,
-                                                            st.lon)+st.elevation)*cake.m2d
-                    processed = False
-                    while processed is False:
-                        for i, arrival in enumerate(mod.arrivals([dist],
-                                                    phases=get_phases_list(),
-                                                    zstart=source_dc.depth)):
-                            if processed is False:
-                                tr.chop(arrival.t-pre, arrival.t+post)
-                                processed = True
-                            else:
-                                pass
+                event = scenario.gen_random_tectonic_event(i, magmin=-0.5, magmax=3.)
+                source_dc = DCSource(
+                    lat=lat,
+                    lon=lon,
+                    depth=depth,
+                    strike=strike,
+                    dip=dip,
+                    rake=rake,
+                    magnitude=mag)
+                response = engine.process(source_dc, targets)
+                traces = response.pyrocko_traces()
+                event.lat = source_dc.lat
+                event.lon = source_dc.lon
+                event.depth = source_dc.depth
+                mt = moment_tensor.MomentTensor(strike=source_dc.strike, dip=source_dc.dip, rake=source_dc.rake,
+                                                magnitude=source_dc.magnitude)
+                event.moment_tensor = mt
+                traces_uncut = copy.deepcopy(traces)
+                traces_uncuts.append(traces_uncut)
+                for tr in traces:
+                    for st in stations:
+                        if st.station == tr.station:
+                            dist = (orthodrome.distance_accurate50m(source_dc.lat,
+                                                                    source_dc.lon,
+                                                                    st.lat,
+                                                                    st.lon)+st.elevation)*cake.m2d
+                            processed = False
+                            while processed is False:
+                                for i, arrival in enumerate(mod.arrivals([dist],
+                                                            phases=get_phases_list(),
+                                                            zstart=source_dc.depth)):
+                                    if processed is False:
+                                        tr.chop(arrival.t-pre, arrival.t+post)
+                                        processed = True
+                                    else:
+                                        pass
 
 
-            nsamples = len(tr.ydata)
-            randdata = np.random.normal(size=nsamples)*np.min(tr.ydata)
-            white_noise = trace.Trace(deltat=tr.deltat, tmin=tr.tmin,
-                                      ydata=randdata)
-            if noised is True:
-                tr.add(white_noise)
-        tracess.append(traces)
-        events.append(event)
-        sources.append(source_dc)
+                    nsamples = len(tr.ydata)
+                    randdata = np.random.normal(size=nsamples)*np.min(tr.ydata)
+                    white_noise = trace.Trace(deltat=tr.deltat, tmin=tr.tmin,
+                                              ydata=randdata)
+                    if noised is True:
+                        tr.add(white_noise)
+                tracess.append(traces)
+                events.append(event)
+                sources.append(source_dc)
     return [tracess, events, nsamples, sources, traces_uncuts]
 
 
