@@ -25,6 +25,9 @@ from silvertine.util import waveform
 import scipy
 from mtpar import cmt2tt, cmt2tt15, tt2cmt, tt152cmt
 from mtpar.basis import change_basis
+import ray
+import psutil
+num_cpus = psutil.cpu_count(logical=False)
 
 
 import os
@@ -235,7 +238,7 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
         #traces = normalize_all(traces, min_traces, max_traces)
 
         for tr in traces:
-            tr.lowpass(4, 20.2)
+            tr.lowpass(4, 5.)
             tr.highpass(4, 0.03)
             tr.ydata = tr.ydata/np.max(tr.ydata)
             nsamples = len(tr.ydata)
@@ -375,16 +378,66 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
             labels = np.ones(len(data_traces), dtype=np.int32)*0
     data_traces = np.asarray(data_traces)
     labels = np.asarray(labels)
-    print(len(data_traces))
-    print(len(waveforms[0]))
-    print(nsamples)
-    print(len(events))
-    print(len(data))
     return data_traces, labels, len(data_traces), nsamples
+
+@ray.remote
+def get_parallel_scenario(i, targets, store_id, noised, real_noise_traces, post, pre, no_events, stations, mod):
+            engine = LocalEngine(store_superdirs=['gf_stores'])
+            store = engine.get_store(store_id)
+            event = scenario.gen_random_tectonic_event(i, magmin=-0.5, magmax=3.)
+            source_dc = DCSource(
+                lat=scenario.randlat(49., 49.3),
+                lon=scenario.rand(8.0, 8.3),
+                depth=scenario.rand(3000., 13000.),
+                strike=scenario.rand(0., 360.),
+                dip=scenario.rand(0., 90.),
+                rake=scenario.rand(-180., 180.),
+                magnitude=scenario.rand(-1., 3.))
+     #       try:
+            response = engine.process(source_dc, targets)
+            traces = response.pyrocko_traces()
+            event.lat = source_dc.lat
+            event.lon = source_dc.lon
+            event.depth = source_dc.depth
+            mt = moment_tensor.MomentTensor(strike=source_dc.strike, dip=source_dc.dip, rake=source_dc.rake,
+                                    magnitude=source_dc.magnitude)
+
+            event.moment_tensor = mt
+
+            for tr in traces:
+                    for st in stations:
+                        if st.station == tr.station:
+                            dists = (orthodrome.distance_accurate50m(source_dc.lat,
+                                                     source_dc.lon,
+                                                     st.lat,
+                                                     st.lon)+st.elevation)*cake.m2d
+                            processed = False
+                            for i, arrival in enumerate(mod.arrivals([dists],
+                                            phases=get_phases_list(),
+                                            zstart=source_dc.depth)):
+                                if processed is False:
+                                    tr.chop(arrival.t-pre, arrival.t+post)
+                                    processed = True
+                                else:
+                                    pass
+
+
+                    nsamples = len(tr.ydata)
+                    randdata = np.random.normal(size=nsamples)*np.min(tr.ydata)
+                    white_noise = trace.Trace(deltat=tr.deltat, tmin=tr.tmin,
+                                  ydata=randdata)
+                    if noised is True:
+                        tr.add(white_noise)
+         #   except:
+               #         traces = None
+                #        event = None
+                 #       nsamples = None
+            return [traces, event, nsamples]
 
 
 def generate_test_data(store_id, nevents=50, noised=True,
-                       real_noise_traces=None, post=2., pre=2.):
+                       real_noise_traces=None, post=2., pre=2.,
+                       no_events=False, parallel=True):
     mod = landau_layered_model()
     engine = LocalEngine(store_superdirs=['gf_stores'])
     store = engine.get_store(store_id)
@@ -399,105 +452,115 @@ def generate_test_data(store_id, nevents=50, noised=True,
     events = []
     for st in stations:
         for cha in st.channels:
-            target = Target(
-                    lat=st.lat,
-                    lon=st.lon,
-                    store_id=store_id,
-                    interpolation='multilinear',
-                    quantity='displacement',
-                    codes=st.nsl() + (cha.name,))
-            targets.append(target)
-    for i in range(0, nevents):
-        try:
-            event = scenario.gen_random_tectonic_event(i, magmin=-0.5, magmax=3.)
-            source_dc = DCSource(
-                lat=scenario.randlat(49., 49.3),
-                lon=scenario.rand(8.0, 8.3),
-                depth=scenario.rand(100., 13000.),
-                strike=scenario.rand(0., 360.),
-                dip=scenario.rand(0., 90.),
-                rake=scenario.rand(-180., 180.),
-                magnitude=scenario.rand(-1., 3.))
-            response = engine.process(source_dc, targets)
-            traces = response.pyrocko_traces()
-            event.lat = source_dc.lat
-            event.lon = source_dc.lon
-            event.depth = source_dc.depth
-            mt = moment_tensor.MomentTensor(strike=source_dc.strike, dip=source_dc.dip, rake=source_dc.rake,
-                                            magnitude=source_dc.magnitude)
+            if cha.name is not "R" and cha.name is not "T" and cha.name is not "Z":
+                        target = Target(
+		            lat=st.lat,
+		            lon=st.lon,
+		            store_id=store_id,
+		            interpolation='multilinear',
+		            quantity='displacement',
+		            codes=st.nsl() + (cha.name,))
+                        targets.append(target)
+    if parallel is True:
+        ray.init(num_cpus=num_cpus-1)
+        results = ray.get([get_parallel_scenario.remote(i, targets, store_id, noised, real_noise_traces, post, pre, no_events, stations, mod) for i in range(0, nevents)])
+        for res in results:
+            events.append(res[1])
+            waveforms_events.append(res[0])
+            nsamples = res[2]
+    else:
+        for i in range(0, nevents):
+        #    try:
+                event = scenario.gen_random_tectonic_event(i, magmin=-0.5, magmax=3.)
+                source_dc = DCSource(
+                    lat=scenario.randlat(49., 49.3),
+                    lon=scenario.rand(8.0, 8.3),
+                    depth=scenario.rand(3000., 13000.),
+                    strike=scenario.rand(0., 360.),
+                    dip=scenario.rand(0., 90.),
+                    rake=scenario.rand(-180., 180.),
+                    magnitude=scenario.rand(-1., 3.))
+                response = engine.process(source_dc, targets)
+                traces = response.pyrocko_traces()
+                event.lat = source_dc.lat
+                event.lon = source_dc.lon
+                event.depth = source_dc.depth
+                mt = moment_tensor.MomentTensor(strike=source_dc.strike, dip=source_dc.dip, rake=source_dc.rake,
+                                                magnitude=source_dc.magnitude)
 
-            event.moment_tensor = mt
+                event.moment_tensor = mt
 
-            events.append(event)
-            for tr in traces:
-                for st in stations:
-                    if st.station == tr.station:
-                        dists = (orthodrome.distance_accurate50m(source_dc.lat,
-                                                             source_dc.lon,
-                                                             st.lat,
-                                                             st.lon)+st.elevation)*cake.m2d
-                        processed = False
-                        for i, arrival in enumerate(mod.arrivals([dists],
-                                                    phases=get_phases_list(),
-                                                    zstart=source_dc.depth)):
-                            if processed is False:
-                                tr.chop(arrival.t-pre, arrival.t+post)
-                                processed = True
-                            else:
-                                pass
-
-
-                nsamples = len(tr.ydata)
-                randdata = np.random.normal(size=nsamples)*np.min(tr.ydata)
-                white_noise = trace.Trace(deltat=tr.deltat, tmin=tr.tmin,
-                                          ydata=randdata)
-                if noised is True:
-                    tr.add(white_noise)
-
-            waveforms_events.append(traces)
-        except:
-            pass
-    # same number of non-events
-    for i in range(0, nevents):
-        try:
-            source_dc = DCSource(
-                lat=scenario.randlat(49., 49.2),
-                lon=scenario.rand(8.1, 8.2),
-                depth=scenario.rand(100., 3000.),
-                strike=scenario.rand(0., 360.),
-                dip=scenario.rand(0., 90.),
-                rake=scenario.rand(-180., 180.),
-                magnitude=scenario.rand(-1., 0.1))
-
-            response = engine.process(source_dc, targets)
-            traces = response.pyrocko_traces()
-            for tr in traces:
-                for st in stations:
-                    if st.station == tr.station:
-                        dists = (orthodrome.distance_accurate50m(source_dc.lat,
+                events.append(event)
+                for tr in traces:
+                    for st in stations:
+                        if st.station == tr.station:
+                            dists = (orthodrome.distance_accurate50m(source_dc.lat,
                                                                  source_dc.lon,
                                                                  st.lat,
                                                                  st.lon)+st.elevation)*cake.m2d
-                        processed = False
-                        for i, arrival in enumerate(mod.arrivals([dists],
-                                                    phases=get_phases_list(),
-                                                    zstart=source_dc.depth)):
-                            if processed is False:
-                                tr.chop(arrival.t-2, arrival.t+2)
-                                processed = True
-                            else:
-                                pass
-                tr.ydata = tr.ydata*0.
+                            processed = False
+                            for i, arrival in enumerate(mod.arrivals([dists],
+                                                        phases=get_phases_list(),
+                                                        zstart=source_dc.depth)):
+                                if processed is False:
+                                    tr.chop(arrival.t-pre, arrival.t+post)
+                                    processed = True
+                                else:
+                                    pass
 
-                nsamples = len(tr.ydata)
-                randdata = np.random.normal(size=nsamples)*scale
-                white_noise = trace.Trace(deltat=tr.deltat, tmin=tr.tmin,
-                                          ydata=randdata)
-                tr.add(white_noise)
-            waveforms_noise.append(traces)
 
-        except:
-            pass
+                    nsamples = len(tr.ydata)
+                    randdata = np.random.normal(size=nsamples)*np.min(tr.ydata)
+                    white_noise = trace.Trace(deltat=tr.deltat, tmin=tr.tmin,
+                                              ydata=randdata)
+                    if noised is True:
+                        tr.add(white_noise)
+
+                waveforms_events.append(traces)
+        #    except:
+        #        pass
+        # same number of non-events
+        if no_events is True:
+            for i in range(0, nevents):
+                try:
+                    source_dc = DCSource(
+                        lat=scenario.randlat(49., 49.2),
+                        lon=scenario.rand(8.1, 8.2),
+                        depth=scenario.rand(100., 3000.),
+                        strike=scenario.rand(0., 360.),
+                        dip=scenario.rand(0., 90.),
+                        rake=scenario.rand(-180., 180.),
+                        magnitude=scenario.rand(-1., 0.1))
+
+                    response = engine.process(source_dc, targets)
+                    traces = response.pyrocko_traces()
+                    for tr in traces:
+                        for st in stations:
+                            if st.station == tr.station:
+                                dists = (orthodrome.distance_accurate50m(source_dc.lat,
+                                                                         source_dc.lon,
+                                                                         st.lat,
+                                                                         st.lon)+st.elevation)*cake.m2d
+                                processed = False
+                                for i, arrival in enumerate(mod.arrivals([dists],
+                                                            phases=get_phases_list(),
+                                                            zstart=source_dc.depth)):
+                                    if processed is False:
+                                        tr.chop(arrival.t-2, arrival.t+2)
+                                        processed = True
+                                    else:
+                                        pass
+                        tr.ydata = tr.ydata*0.
+
+                        nsamples = len(tr.ydata)
+                        randdata = np.random.normal(size=nsamples)*scale
+                        white_noise = trace.Trace(deltat=tr.deltat, tmin=tr.tmin,
+                                                  ydata=randdata)
+                        tr.add(white_noise)
+                    waveforms_noise.append(traces)
+
+                except:
+                    pass
 
     return waveforms_events, waveforms_noise, nsamples, len(stations), events
 
@@ -558,20 +621,72 @@ def get_scn_mechs():
     return mechs, dates, strikes, dips, rakes, lats, lons, depths
 
 
+@ray.remote
+def get_parallel_dc(i, targets, store_id, noised, real_noise_traces, post, pre, no_events, stations, mod, params):
+    engine = LocalEngine(store_superdirs=['gf_stores'])
+    store = engine.get_store(store_id)
+    lat, lon, depth, strike, dip, rake, mag = params
+    event = scenario.gen_random_tectonic_event(i, magmin=-0.5, magmax=3.)
+    source_dc = DCSource(
+        lat=lat,
+        lon=lon,
+        depth=depth,
+        strike=strike,
+        dip=dip,
+        rake=rake,
+        magnitude=mag)
+    response = engine.process(source_dc, targets)
+    traces = response.pyrocko_traces()
+    event.lat = source_dc.lat
+    event.lon = source_dc.lon
+    event.depth = source_dc.depth
+    mt = moment_tensor.MomentTensor(strike=source_dc.strike, dip=source_dc.dip, rake=source_dc.rake,
+                                    magnitude=source_dc.magnitude)
+    event.moment_tensor = mt
+    for tr in traces:
+        for st in stations:
+            if st.station == tr.station:
+                dist = (orthodrome.distance_accurate50m(source_dc.lat,
+                                                        source_dc.lon,
+                                                        st.lat,
+                                                        st.lon)+st.elevation)*cake.m2d
+                processed = False
+                while processed is False:
+                    for i, arrival in enumerate(mod.arrivals([dist],
+                                                phases=get_phases_list(),
+                                                zstart=source_dc.depth)):
+                        if processed is False:
+                            tr.chop(arrival.t-pre, arrival.t+post)
+                            processed = True
+                        else:
+                            pass
+
+
+        nsamples = len(tr.ydata)
+        randdata = np.random.normal(size=nsamples)*np.min(tr.ydata)
+        white_noise = trace.Trace(deltat=tr.deltat, tmin=tr.tmin,
+                                  ydata=randdata)
+        if noised is True:
+            tr.add(white_noise)
+
+    return [traces, event, nsamples, source_dc]
+
+
 def generate_test_data_grid(store_id, nevents=50, noised=False,
-                            real_noise_traces=None, strike_min=340.,
-                            strike_max=360., strike_step=1.,
+                            real_noise_traces=None, strike_min=0.,
+                            strike_max=360., strike_step=2.,
                             dip_min=70., dip_max=90., dip_step=1.,
-                            rake_min=-180., rake_max=-140., rake_step=2.,
-                            mag_min=4.8, mag_max=5.1, mag_step=0.1,
-                            depth_step=200., zmin=3000., zmax=6000.,
+                            rake_min=-180., rake_max=-160., rake_step=1.,
+                            mag_min=5.0, mag_max=5.2, mag_step=0.1,
+                            depth_step=200., zmin=4000., zmax=5000.,
                             dimx=0.2, dimy=0.2, center=None, source_type="DC",
                             kappa_min=0, kappa_max=2*pi, kappa_step=0.05,
                             sigma_min=-pi/2, sigma_max=pi/2, sigma_step=0.05,
                             h_min=0, h_max=1, h_step=0.05,
                             v_min=-1/3, v_max=1/3, v_step=0.05,
                             u_min=0, u_max=(3/4)*pi, u_step=0.05,
-                            pre=2., post=2., no_events=False):
+                            pre=2., post=2., no_events=False,
+                            parallel=True):
 
     mod = landau_layered_model()
     engine = LocalEngine(store_superdirs=['gf_stores'])
@@ -602,16 +717,16 @@ def generate_test_data_grid(store_id, nevents=50, noised=False,
                         quantity='displacement',
                         codes=st.nsl() + (cha.name,))
                 targets.append(target)
-    #latmin=35.81
-    #latmax=35.964
-    #lonmin=-117.771
-    #lonmax=-117.61
+  #  latmin=35.81
+  #  latmax=35.964
+  #  lonmin=-117.771
+ #   lonmax=-117.61
     latmin = 35.7076667
     latmax = 35.9976667
     lonmin = -117.9091667
     lonmax = -117.5091667
     center = [np.mean([latmin, latmax]), np.mean([lonmin, lonmax])]
-    dim_step = 0.05
+    dim_step = 0.01
     lats, lons, depths = make_grid(center, dimx, dimy, zmin, zmax, dim_step, depth_step, )
     strikes = np.arange(strike_min, strike_max, strike_step)
     dips = np.arange(dip_min, dip_max, dip_step)
@@ -696,7 +811,6 @@ def generate_test_data_grid(store_id, nevents=50, noised=False,
                                     #    try:
                                             event = scenario.gen_random_tectonic_event(i, magmin=-0.5, magmax=3.)
                                             i = i+1
-                                            print(i)
                                             mt = moment_tensor.MomentTensor(strike=strike, dip=dip, rake=rake,
                                                                             magnitude=mag)
 
@@ -750,60 +864,81 @@ def generate_test_data_grid(store_id, nevents=50, noised=False,
                                     #    except:
                                     #        pass
 
+
     if source_type == "DC":
-        for lat in lats:
-            for lon in lons:
-                for depth in depths:
-                    for strike in strikes:
-                        for dip in dips:
-                            for rake in rakes:
-                                for mag in magnitudes:
-                                    #try:
-                                        event = scenario.gen_random_tectonic_event(i, magmin=-0.5, magmax=3.)
-                                        i = i+1
-                                        source_dc = DCSource(
-                                            lat=lat,
-                                            lon=lon,
-                                            depth=depth,
-                                            strike=strike,
-                                            dip=dip,
-                                            rake=rake,
-                                            magnitude=mag)
-                                        response = engine.process(source_dc, targets)
-                                        traces = response.pyrocko_traces()
-                                        event.lat = source_dc.lat
-                                        event.lon = source_dc.lon
-                                        event.depth = source_dc.depth
-                                        mt = moment_tensor.MomentTensor(strike=source_dc.strike, dip=source_dc.dip, rake=source_dc.rake,
-                                                                        magnitude=source_dc.magnitude)
+        if parallel is True:
+            params = []
+            for lat in lats:
+                for lon in lons:
+                    for depth in depths:
+                        for strike in strikes:
+                            for dip in dips:
+                                for rake in rakes:
+                                        params.append([lat, lon, depth, strike, dip, rake, 5.0])
 
-                                        event.moment_tensor = mt
-                                        sources.append(source_dc)
-                                        events.append(event)
-                                        for tr in traces:
-                                            for st in stations:
-                                                if st.station == tr.station:
-                                                    dist = (orthodrome.distance_accurate50m(source_dc.lat,
-                                                                                         source_dc.lon,
-                                                                                         st.lat,
-                                                                                         st.lon)+st.elevation)#*cake.m2d
-                                                    processed = False
-                                                    depth = source_dc.depth
-                                                    arrival = store.t('begin', (depth, dist))
-                                                    if processed is False:
-                                                        tr.chop(arrival-pre, arrival+post)
-                                                        processed = True
-                                                    else:
-                                                        pass
+            ray.init(num_cpus=num_cpus-1)
+            print("parallel")
+            results = ray.get([get_parallel_dc.remote(i, targets, store_id, noised, real_noise_traces, post, pre, no_events, stations, mod, params[i] ) for i in range(len(params))])
+            for res in results:
+                events.append(res[1])
+                waveforms_events.append(res[0])
+                nsamples = res[2]
+                sources.append(res[3])
+            del results, params
+        else:
+            for lat in lats:
+                for lon in lons:
+                    for depth in depths:
+                        for strike in strikes:
+                            for dip in dips:
+                                for rake in rakes:
+                                    for mag in magnitudes:
+                                        #try:
+                                            event = scenario.gen_random_tectonic_event(i, magmin=-0.5, magmax=3.)
+                                            i = i+1
+                                            source_dc = DCSource(
+                                                lat=lat,
+                                                lon=lon,
+                                                depth=depth,
+                                                strike=strike,
+                                                dip=dip,
+                                                rake=rake,
+                                                magnitude=mag)
+                                            response = engine.process(source_dc, targets)
+                                            traces = response.pyrocko_traces()
+                                            event.lat = source_dc.lat
+                                            event.lon = source_dc.lon
+                                            event.depth = source_dc.depth
+                                            mt = moment_tensor.MomentTensor(strike=source_dc.strike, dip=source_dc.dip, rake=source_dc.rake,
+                                                                            magnitude=source_dc.magnitude)
+
+                                            event.moment_tensor = mt
+                                            sources.append(source_dc)
+                                            events.append(event)
+                                            for tr in traces:
+                                                for st in stations:
+                                                    if st.station == tr.station:
+                                                        dist = (orthodrome.distance_accurate50m(source_dc.lat,
+                                                                                             source_dc.lon,
+                                                                                             st.lat,
+                                                                                             st.lon)+st.elevation)#*cake.m2d
+                                                        processed = False
+                                                        depth = source_dc.depth
+                                                        arrival = store.t('begin', (depth, dist))
+                                                        if processed is False:
+                                                            tr.chop(arrival-pre, arrival+post)
+                                                            processed = True
+                                                        else:
+                                                            pass
 
 
-                                            nsamples = len(tr.ydata)
-                                            randdata = np.random.normal(size=nsamples)*np.min(tr.ydata)
-                                            white_noise = trace.Trace(deltat=tr.deltat, tmin=tr.tmin,
-                                                                      ydata=randdata)
-                                            if noised is True:
-                                                tr.add(white_noise)
-                                        waveforms_events.append(traces)
+                                                nsamples = len(tr.ydata)
+                                                randdata = np.random.normal(size=nsamples)*np.min(tr.ydata)
+                                                white_noise = trace.Trace(deltat=tr.deltat, tmin=tr.tmin,
+                                                                          ydata=randdata)
+                                                if noised is True:
+                                                    tr.add(white_noise)
+                                            waveforms_events.append(traces)
                                     #except:
                                     #    pass
         # same number of non-events
@@ -1000,8 +1135,10 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                 pickle.dump([waveforms_events, waveforms_noise, nsamples, nstations,
                              events], f)
                 f.close()
+            sources = None
     else:
         try:
+            print("loading")
             f = open("data_waveforms_bnn_mechanism", 'rb')
             waveforms_events, waveforms_noise, nsamples, nstations, events, sources, mtqt_ps = pickle.load(f)
             f.close()
@@ -1009,8 +1146,9 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
 
             waveforms_events, waveforms_noise, nsamples, nstations, events, sources, mtqt_ps = generate_test_data_grid("mojave_large_ml", nevents=1200)
             f = open("data_waveforms_bnn_mechanism", 'wb')
+            print("dump")
             pickle.dump([waveforms_events, waveforms_noise, nsamples, nstations,
-                         events, sources], f)
+                         events, sources, mtqt_ps], f)
             f.close()
     pr.disable()
     filename = 'profile_bnn.prof'
@@ -1177,14 +1315,14 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                 history = model.fit(train, y_train, epochs=5, batch_size=400,
                                     callbacks=[checkpointer])
             else:
-                history = model.fit(dat, labels, epochs=6000, batch_size=400,
+                history = model.fit(dat, labels, epochs=600, batch_size=400,
                                     callbacks=[checkpointer])
 
             plot_model(model)
-            layer_outputs = [layer.output for layer in model.layers[:]]
+        #    layer_outputs = [layer.output for layer in model.layers[:]]
             #  Extracts the outputs of the top 12 layers
-            activation_model = models.Model(inputs=model.input, outputs=layer_outputs)
-            plot_acc_loss(history)
+        #    activation_model = models.Model(inputs=model.input, outputs=layer_outputs)
+        #    plot_acc_loss(history)
         else:
             if detector_only is True:
                 model = keras.models.load_model('model_detector')
