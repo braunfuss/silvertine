@@ -26,6 +26,7 @@ import scipy
 from mtpar import cmt2tt, cmt2tt15, tt2cmt, tt152cmt
 from mtpar.basis import change_basis
 import ray
+import copy
 import psutil
 num_cpus = psutil.cpu_count(logical=False)
 
