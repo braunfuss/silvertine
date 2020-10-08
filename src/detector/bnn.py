@@ -28,6 +28,8 @@ from mtpar.basis import change_basis
 import ray
 import copy
 import psutil
+import _pickle as pickle
+
 num_cpus = psutil.cpu_count(logical=False)
 
 
@@ -657,21 +659,33 @@ def get_parallel_dc(i, targets, store_id, noised, real_noise_traces, post, pre, 
                 for tr in traces:
                     for st in stations:
                         if st.station == tr.station:
-                            dist = (orthodrome.distance_accurate50m(source_dc.lat,
-                                                                    source_dc.lon,
-                                                                    st.lat,
-                                                                    st.lon)+st.elevation)*cake.m2d
+                            #dist = (orthodrome.distance_accurate50m(source_dc.lat,
+                            #                                        source_dc.lon,
+                            #                                        st.lat,
+                            #                                        st.lon)+st.elevation)*cake.m2d
                             processed = False
+                            dist = (orthodrome.distance_accurate50m(source_dc.lat,
+                                                                 source_dc.lon,
+                                                                 st.lat,
+                                                                 st.lon)+st.elevation)#*cake.m2d
                             while processed is False:
-                                for i, arrival in enumerate(mod.arrivals([dist],
-                                                            phases=get_phases_list(),
-                                                            zstart=source_dc.depth)):
-                                    if processed is False:
-                                        tr.chop(arrival.t-pre, arrival.t+post)
-                                        processed = True
-                                    else:
-                                        pass
+                    #            for i, arrival in enumerate(mod.arrivals([dist],
+                    #                                        phases=get_phases_list(),
+                    #                                        zstart=source_dc.depth)):
+                    #                if processed is False:
+                    #                    tr.chop(arrival.t-pre, arrival.t+post)
+                    #                    processed = True
+                    #                else:
+                    #                    pass
 
+                                processed = False
+                                depth = source_dc.depth
+                                arrival = store.t('begin', (depth, dist))
+                                if processed is False:
+                                    tr.chop(arrival-pre, arrival+post)
+                                    processed = True
+                                else:
+                                    pass
 
                     nsamples = len(tr.ydata)
                     randdata = np.random.normal(size=nsamples)*np.min(tr.ydata)
@@ -682,16 +696,19 @@ def get_parallel_dc(i, targets, store_id, noised, real_noise_traces, post, pre, 
                 tracess.append(traces)
                 events.append(event)
                 sources.append(source_dc)
-    return [tracess, events, nsamples, sources, traces_uncuts]
+    f = open("grids/grid_%s" % i, 'wb')
+    pickle.dump([tracess, events, sources, nsamples, traces_uncuts], f)
+    f.close()
+    return []
 
 
 def generate_test_data_grid(store_id, nevents=50, noised=False,
                             real_noise_traces=None, strike_min=0.,
                             strike_max=360., strike_step=2.,
-                            dip_min=70., dip_max=90., dip_step=1.,
-                            rake_min=-180., rake_max=-160., rake_step=1.,
+                            dip_min=50., dip_max=90., dip_step=2.,
+                            rake_min=-180., rake_max=-100., rake_step=1.,
                             mag_min=5.0, mag_max=5.2, mag_step=0.1,
-                            depth_step=200., zmin=4000., zmax=5000.,
+                            depth_step=200., zmin=4600., zmax=5000.,
                             dimx=0.2, dimy=0.2, center=None, source_type="DC",
                             kappa_min=0, kappa_max=2*pi, kappa_step=0.05,
                             sigma_min=-pi/2, sigma_max=pi/2, sigma_step=0.05,
@@ -740,7 +757,7 @@ def generate_test_data_grid(store_id, nevents=50, noised=False,
     lonmin = -117.9091667
     lonmax = -117.5091667
     center = [np.mean([latmin, latmax]), np.mean([lonmin, lonmax])]
-    dim_step = 0.01
+    dim_step = 0.2
     lats, lons, depths = make_grid(center, dimx, dimy, zmin, zmax, dim_step, depth_step, )
     strikes = np.arange(strike_min, strike_max, strike_step)
     dips = np.arange(dip_min, dip_max, dip_step)
@@ -892,15 +909,24 @@ def generate_test_data_grid(store_id, nevents=50, noised=False,
 
             ray.init(num_cpus=num_cpus-1)
             npm = len(lats)*len(lons)*len(depths)
-            print("parallel")
+            print(npm)
+            print(npm*len(strikes)*len(dips)*len(rakes))
             results = ray.get([get_parallel_dc.remote(i, targets, store_id, noised, real_noise_traces, post, pre, no_events, stations, mod, params[i], strikes, dips, rakes) for i in range(len(params))])
-            for rests in results:
-                for res in rests:
-                    events.append(res[1])
-                    waveforms_events.append(res[0])
-                    nsamples = res[2]
-                    sources.append(res[3])
-                    waveforms_events.uncut(res[4])
+        #    print(results)
+        #    for rests in results:
+                #print(rests)
+        #        for res in rests:
+        #            print(kill)
+            pathlist = Path('grids').glob('*')
+            for path in sorted(pathlist):
+                f = open(path, 'rb')
+                tracess, eventss, sourcess, nsamples, uncut = pickle.load(f)
+                for i, traces in enumerate(tracess):
+                    events.append(eventss[i])
+                    waveforms_events.append(traces)
+                    nsamples = nsamples
+                    sources.append(sourcess[i])
+                #    waveforms_events_uncut.append(res[4])
             del results, params
         else:
             for lat in lats:
@@ -1104,7 +1130,6 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                  multilabel=True, data_dir=None, train_model=True,
                  detector_only=False, validation_data=None, wanted_start=None,
                  wanted_end=None, mode="detector_only"):
-    import _pickle as pickle
     import cProfile, pstats
     pr = cProfile.Profile()
     pr.enable()
