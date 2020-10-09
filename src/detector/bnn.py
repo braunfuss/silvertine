@@ -208,7 +208,9 @@ def normalize_all(traces, min, max):
 
 def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
                       mechanism=False, sources=None, source_type="DC",
-                      mtqt_ps=None):
+                      mtqt_ps=None, parallel=True, min_depth=None,
+                      max_depth=None, max_lat=None, min_lat=None,
+                      max_lon=None, min_lon=None):
 
     add_spectrum = False
     data_traces = []
@@ -280,11 +282,18 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
         lats = np.asarray(lats)
 
         # normalize to grid coords
-        lats = (lats-np.min(lats))/(np.max(lats)-np.min(lats))
-        lons = np.asarray(lons)
-        lons = (lons-np.min(lons))/(np.max(lons)-np.min(lons))
-        depths = np.asarray(depths)
-        depths = (depths-np.min(depths))/(np.max(depths)-np.min(depths))
+        if parallel is False:
+            lats = (lats-np.min(lats))/(np.max(lats)-np.min(lats))
+            lons = np.asarray(lons)
+            lons = (lons-np.min(lons))/(np.max(lons)-np.min(lons))
+            depths = np.asarray(depths)
+            depths = (depths-np.min(depths))/(np.max(depths)-np.min(depths))
+        else:
+            lats = (lats-min_lat)/(max_lat-min_lat)
+            lons = np.asarray(lons)
+            lons = (lons-min_lon)/(max_lon-min_lon)
+            depths = np.asarray(depths)
+            depths = (depths-min_depth)/(max_depth-min_depth)
 
     if events is not None:
         labels = []
@@ -625,15 +634,18 @@ def get_scn_mechs():
 
 
 @ray.remote
-def get_parallel_dc(i, targets, store_id, noised, real_noise_traces, post, pre, no_events, stations, mod, params, strikes, dips, rakes):
+def get_parallel_dc(i, targets, store_id, noised, real_noise_traces, post, pre, no_events, stations, mod, params, strikes, dips, rakes,
+                    source_type="DC", mechanism=True, multilabel=True, maxvals=None, batch_loading=1):
     engine = LocalEngine(store_superdirs=['gf_stores'])
     store = engine.get_store(store_id)
     lat, lon, depth = params
+    depth_max, depth_min, lat_max, lat_min, lon_max, lon_min = maxvals
     traces_uncuts = []
     tracess = []
     sources = []
     events = []
     mag = 5
+    count = 0
     for strike in strikes:
         for dip in dips:
             for rake in rakes:
@@ -693,22 +705,38 @@ def get_parallel_dc(i, targets, store_id, noised, real_noise_traces, post, pre, 
                                               ydata=randdata)
                     if noised is True:
                         tr.add(white_noise)
-                tracess.append(traces)
-                events.append(event)
-                sources.append(source_dc)
-    f = open("grids/grid_%s" % i, 'wb')
-    pickle.dump([tracess, events, sources, nsamples, traces_uncuts], f)
-    f.close()
+                max_traces = None
+                data_events, labels_events, nstations, nsamples = bnn_detector_data([traces], max_traces, events=[event], multilabel=multilabel, mechanism=mechanism, sources=[source_dc],
+                                                                                    parallel=True, min_depth=depth_min, max_depth=depth_max, max_lat=lat_max, min_lat=lat_min, max_lon=lon_max, min_lon=lon_min)
+
+                if batch_loading == 1:
+                    f = open("grids/grid_%s_SDR%s_%s_%s" % (i, strike, dip, rake), 'wb')
+                    pickle.dump([traces, event, source_dc, nsamples, traces_uncut], f)
+                    f.close()
+                    f = open("grid_ml/grid_%s_SDR%s_%s_%s" % (i, strike, dip, rake), 'wb')
+                    pickle.dump([data_events, labels_events, nstations, nsamples], f)
+                    count = 0
+                else:
+                    if count == batch_loading:
+                        f = open("grids/batch_%s_grid_%s_SDR%s_%s_%s" % (count, i, strike, dip, rake), 'wb')
+                        pickle.dump([traces, event, source_dc, nsamples, traces_uncut], f)
+                        f.close()
+                        f = open("grid_ml/batch_%s_grid_%s_SDR%s_%s_%s" % (count, i, strike, dip, rake), 'wb')
+                        pickle.dump([data_events, labels_events, nstations, nsamples], f)
+                        f.close()
+                        count = 0
+                    else:
+                        count = count+1
     return []
 
 
 def generate_test_data_grid(store_id, nevents=50, noised=False,
                             real_noise_traces=None, strike_min=0.,
-                            strike_max=360., strike_step=2.,
-                            dip_min=50., dip_max=90., dip_step=2.,
-                            rake_min=-180., rake_max=-100., rake_step=1.,
+                            strike_max=360., strike_step=1.,
+                            dip_min=50., dip_max=90., dip_step=1.,
+                            rake_min=-180., rake_max=0., rake_step=1.,
                             mag_min=5.0, mag_max=5.2, mag_step=0.1,
-                            depth_step=200., zmin=4600., zmax=5000.,
+                            depth_step=200., zmin=3600., zmax=15000.,
                             dimx=0.2, dimy=0.2, center=None, source_type="DC",
                             kappa_min=0, kappa_max=2*pi, kappa_step=0.05,
                             sigma_min=-pi/2, sigma_max=pi/2, sigma_step=0.05,
@@ -716,7 +744,7 @@ def generate_test_data_grid(store_id, nevents=50, noised=False,
                             v_min=-1/3, v_max=1/3, v_step=0.05,
                             u_min=0, u_max=(3/4)*pi, u_step=0.05,
                             pre=2., post=2., no_events=False,
-                            parallel=True):
+                            parallel=True, batch_loading=1):
 
     mod = landau_layered_model()
     engine = LocalEngine(store_superdirs=['gf_stores'])
@@ -748,16 +776,16 @@ def generate_test_data_grid(store_id, nevents=50, noised=False,
                         quantity='displacement',
                         codes=st.nsl() + (cha.name,))
                 targets.append(target)
-  #  latmin=35.81
-  #  latmax=35.964
-  #  lonmin=-117.771
- #   lonmax=-117.61
-    latmin = 35.7076667
-    latmax = 35.9976667
-    lonmin = -117.9091667
-    lonmax = -117.5091667
+    latmin=35.81
+    latmax=35.964
+    lonmin=-117.771
+    lonmax=-117.61
+#    latmin = 35.7076667
+#    latmax = 35.9976667
+#    lonmin = -117.9091667
+#    lonmax = -117.5091667
     center = [np.mean([latmin, latmax]), np.mean([lonmin, lonmax])]
-    dim_step = 0.2
+    dim_step = 0.01
     lats, lons, depths = make_grid(center, dimx, dimy, zmin, zmax, dim_step, depth_step, )
     strikes = np.arange(strike_min, strike_max, strike_step)
     dips = np.arange(dip_min, dip_max, dip_step)
@@ -911,21 +939,24 @@ def generate_test_data_grid(store_id, nevents=50, noised=False,
             npm = len(lats)*len(lons)*len(depths)
             print(npm)
             print(npm*len(strikes)*len(dips)*len(rakes))
-            results = ray.get([get_parallel_dc.remote(i, targets, store_id, noised, real_noise_traces, post, pre, no_events, stations, mod, params[i], strikes, dips, rakes) for i in range(len(params))])
+            maxvals = [np.max(depths), np.min(depths), np.max(lats), np.min(lats), np.max(lons), np.min(lons)]
+            results = ray.get([get_parallel_dc.remote(i, targets, store_id, noised, real_noise_traces, post, pre, no_events, stations, mod, params[i], strikes, dips, rakes, maxvals=maxvals, batch_loading=batch_loading) for i in range(len(params))])
         #    print(results)
         #    for rests in results:
                 #print(rests)
         #        for res in rests:
         #            print(kill)
-            pathlist = Path('grids').glob('*')
-            for path in sorted(pathlist):
-                f = open(path, 'rb')
-                tracess, eventss, sourcess, nsamples, uncut = pickle.load(f)
-                for i, traces in enumerate(tracess):
-                    events.append(eventss[i])
-                    waveforms_events.append(traces)
-                    nsamples = nsamples
-                    sources.append(sourcess[i])
+
+        # load data directly:
+    #        pathlist = Path('grids').glob('*')
+    #        for path in sorted(pathlist):
+    #            f = open(path, 'rb')
+    #            tracess, eventss, sourcess, nsamples, uncut = pickle.load(f)
+    #            for i, traces in enumerate(tracess):
+    ##                events.append(eventss[i])
+    #                waveforms_events.append(traces)
+    #                nsamples = nsamples
+    #                sources.append(sourcess[i])
                 #    waveforms_events_uncut.append(res[4])
             del results, params
         else:
@@ -1026,8 +1057,10 @@ def generate_test_data_grid(store_id, nevents=50, noised=False,
 
                 except:
                     pass
-
-    return waveforms_events, waveforms_noise, nsamples, len(stations), events, sources, mtqt_ps
+    if parallel is True:
+        return waveforms_events
+    else:
+        return waveforms_events, waveforms_noise, nsamples, len(stations), events, sources, mtqt_ps
 
 
 def m6_ridgecrest():
@@ -1126,10 +1159,66 @@ def plot_prescission(input, output):
     plt.show()
 
 
+def read_wavepickle(path):
+    f = open(path, 'rb')
+    data_events, labels_events, nstations, nsamples = pickle.load(f)
+    f.close()
+    return data_events, labels_events
+
+
+class WaveformGenerator(keras.utils.Sequence):
+
+    def __init__(self, filenames, batch_size):
+        self.filenames = filenames
+        self.batch_size = batch_size
+
+    def __len__(self):
+        return (np.ceil(len(self.filenames) / float(self.batch_size))).astype(np.int)
+
+    def __getitem__(self, idx) :
+        batch_x = self.filenames[idx * self.batch_size : (idx+1) * self.batch_size]
+        data = []
+        labels = []
+        for filename in batch_x:
+            data_events, labels_events = read_wavepickle(filename)
+            data.append(data_events)
+            labels.append(labels_events)
+        return np.array(data), np.array(labels)
+
+    def getitem(filenames, batch_size, idx) :
+        batch_x = filenames[idx * batch_size : (idx+1) * batch_size]
+        data = []
+        labels = []
+        for filename in batch_x:
+            data_events, labels_events = read_wavepickle(filename)
+            data.append(data_events)
+            labels.append(labels_events)
+        return np.array(data), np.array(labels)
+
+class WaveformGenerator_SingleBatch(keras.utils.Sequence):
+
+    def __init__(self, filenames, labels, batch_size):
+        self.filenames = filenames
+        self.batch_size = batch_size
+
+    def __len__(self):
+        return (np.ceil(len(self.filenames) / float(self.batch_size))).astype(np.int)
+
+    def __getitem__(self, idx) :
+        batch_x = self.image_filenames[idx]
+        f = open(batch_x, 'rb')
+        data_events, labels_events, nstations, nsamples = pickle.load(f)
+        f.close()
+
+        return np.array(data_events), np.array(labels_events)
+
+
 def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                  multilabel=True, data_dir=None, train_model=True,
                  detector_only=False, validation_data=None, wanted_start=None,
-                 wanted_end=None, mode="detector_only"):
+                 wanted_end=None, mode="detector_only", parallel=True,
+                 batch_loading=1):
+
     import cProfile, pstats
     pr = cProfile.Profile()
     pr.enable()
@@ -1179,32 +1268,41 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                 f.close()
             sources = None
     else:
-        try:
-            print("loading")
-            f = open("data_waveforms_bnn_mechanism", 'rb')
-            waveforms_events, waveforms_noise, nsamples, nstations, events, sources, mtqt_ps = pickle.load(f)
-            f.close()
-        except:
+        if parallel is True:
+            if len(os.listdir('grid_ml/')) == 0:
+                batch_loading = 1
+                waveforms_events = generate_test_data_grid("mojave_large_ml", nevents=1200)
+            else:
+                print("Grid already calculated")
 
-            waveforms_events, waveforms_noise, nsamples, nstations, events, sources, mtqt_ps = generate_test_data_grid("mojave_large_ml", nevents=1200)
-            f = open("data_waveforms_bnn_mechanism", 'wb')
-            print("dump")
-            pickle.dump([waveforms_events, waveforms_noise, nsamples, nstations,
-                         events, sources, mtqt_ps], f)
-            f.close()
+        else:
+            try:
+                print("loading")
+                f = open("data_waveforms_bnn_mechanism", 'rb')
+                waveforms_events, waveforms_noise, nsamples, nstations, events, sources, mtqt_ps = pickle.load(f)
+                f.close()
+            except:
+
+                waveforms_events, waveforms_noise, nsamples, nstations, events, sources, mtqt_ps = generate_test_data_grid("mojave_large_ml", nevents=1200)
+                f = open("data_waveforms_bnn_mechanism", 'wb')
+                print("dump")
+                pickle.dump([waveforms_events, waveforms_noise, nsamples, nstations,
+                             events, sources, mtqt_ps], f)
+                f.close()
     pr.disable()
     filename = 'profile_bnn.prof'
     pr.dump_stats(filename)
     if validation_data is None:
         max_traces = 0.
-        for traces in waveforms_events:
-            for tr in traces:
-                if np.max(tr.ydata) > max_traces:
-                    max_traces = np.max(tr.ydata)
+        if parallel is False:
+            for traces in waveforms_events:
+                for tr in traces:
+                    if np.max(tr.ydata) > max_traces:
+                        max_traces = np.max(tr.ydata)
 
-        data_events, labels_events, nstations, nsamples = bnn_detector_data(waveforms_events, max_traces, events=events, multilabel=multilabel, mechanism=mechanism, sources=sources)
-#        print(len(data_events))
-#        print(labels_events)
+            data_events, labels_events, nstations, nsamples = bnn_detector_data(waveforms_events, max_traces, events=events, multilabel=multilabel, mechanism=mechanism, sources=sources)
+    #        print(len(data_events))
+    #        print(labels_events)
         if data_dir is not None:
             data_events_unseen, labels_events_unseen, nstations_unseen, nsamples_unseen = bnn_detector_data(waveforms_unseen, max_traces, events=events_unseen, multilabel=multilabel,
                                                                                                         mechanism=mechanism)
@@ -1217,8 +1315,9 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
             from keras.utils import to_categorical
             y_array = None
         else:
-            x_data = data_events
-            y_data = labels_events
+            if parallel is False:
+                x_data = data_events
+                y_data = labels_events
     #        print(len(x_data))
     #        print(len(y_data))
 
@@ -1246,28 +1345,41 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
 
         x_data = data_events_unseen
         y_data = labels_events_unseen
-    ncomponents = 3
-    nstations = nstations*ncomponents
 
-    if multilabel is False:
-        nlabels = 1
+    if parallel is False:
+        ncomponents = 3
+        nstations = nstations*ncomponents
+
+        if multilabel is False:
+            nlabels = 1
+        else:
+            nlabels = (y_data.shape[1])
+        dat = x_data.copy()
+        labels = y_data.copy()
+        print('shape of x_data: ', x_data.shape)
+        print('shape of y_data: ', y_data.shape)
+        dat = dat[::2]
+        #print(np.shape(dat[0]))
+        #dat[2][0:2400] = np.ones(2400)*-1
+        labels = labels[::2]
+
+
+        headline_data = dat
+        headline_labels = labels
+        additional_labels = labels
+        additional_data = labels
     else:
-        nlabels = (y_data.shape[1])
-    dat = x_data.copy()
-    labels = y_data.copy()
-    print('shape of x_data: ', x_data.shape)
-    print('shape of y_data: ', y_data.shape)
-    dat = dat[::2]
-    #print(np.shape(dat[0]))
-    #dat[2][0:2400] = np.ones(2400)*-1
-    labels = labels[::2]
-
+            retrieved_meta = False
+            pathlist = Path('grid_ml').glob('*')
+            while retrieved_meta is False:
+                for path in sorted(pathlist):
+                    f = open(path, 'rb')
+                    data_events, labels_events, nstations, nsamples = pickle.load(f)
+                    f.close()
+                    retrieved_meta = True
+            nlabels = 9
     np.random.seed(42)  # Set a random seed for reproducibility
 
-    headline_data = dat
-    headline_labels = labels
-    additional_labels = labels
-    additional_data = labels
     from sklearn.model_selection import train_test_split
     from keras.models import Sequential
     from keras.layers import Dense, Activation, Masking
@@ -1275,8 +1387,13 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
 # For a single-input model with 2 classes (binary classi    fication):
     if train_model is True:
         #print(nstations)
+        print()
         model = Sequential()
-        model.add(Activation('relu'))
+        if parallel is True:
+            model.add(Activation('relu', input_shape=np.shape(data_events)))
+        else:
+            model.add(Activation('relu'))
+
 
 #        model.add(Dense(2056, activation='relu', input_dim=nsamples))
 
@@ -1321,6 +1438,7 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
         model.compile(optimizer='rmsprop',
                       loss='binary_crossentropy',
                       metrics=['accuracy'])
+        print("compile")
     #    model.compile(optimizer='rmsprop',
     #                  loss='categorical_crossentropy',
     #                  metrics=['accuracy'])
@@ -1333,18 +1451,19 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
         #              optimizer=sgd,
         #              metrics=['accuracy'])
         # Generate dummy data
-    data = dat
 
     viz_steps = 2
     #pred = model.predict(train)
     bayesian = False
 
     if bayesian is False:
-        train, x_val, y_train, y_val = train_test_split(dat, labels,
-                                                        test_size=0.05,
-                                                        random_state=10)
-        x_val = dat
-        y_val = labels
+        if parallel is False:
+            data = dat
+            train, x_val, y_train, y_val = train_test_split(dat, labels,
+                                                            test_size=0.05,
+                                                            random_state=10)
+            x_val = dat
+            y_val = labels
         # Train the model, iterating on the data in batches of 32 samples
         from keras.callbacks import ModelCheckpoint
         checkpointer = ModelCheckpoint(filepath="best_weights.hdf5",
@@ -1354,11 +1473,43 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
 
         if train_model is True:
             if detector_only is True:
-                history = model.fit(train, y_train, epochs=5, batch_size=400,
-                                    callbacks=[checkpointer])
+                if parallel is False:
+                    history = model.fit(train, y_train, epochs=5, batch_size=400,
+                                        callbacks=[checkpointer])
+                else:
+                    batch_size = 32
+
+                    my_training_batch_generator = WaveformGenerator(X_train_filenames, y_train, batch_size)
+                    my_validation_batch_generator = WaveformGenerator(X_val_filenames, y_val, batch_size)
+                    model.fit_generator(generator=my_training_batch_generator,
+                                       steps_per_epoch = int(3800 // batch_size),
+                                       epochs = 10,
+                                       verbose = 1,
+                                       validation_data = my_validation_batch_generator,
+                                       validation_steps = int(950 // batch_size))
             else:
-                history = model.fit(dat, labels, epochs=600, batch_size=400,
-                                    callbacks=[checkpointer])
+                if parallel is False:
+                    history = model.fit(dat, labels, epochs=600, batch_size=400,
+                                        callbacks=[checkpointer])
+                else:
+                    batch_size = 32
+                    paths = []
+                    pathlist = Path('grid_ml').glob('*')
+                    for path in sorted(pathlist):
+                        paths.append(path)
+                #    model.build()
+                    model.summary()
+                    if batch_loading == 1:
+                        my_training_batch_generator = WaveformGenerator(paths, batch_size)
+                        my_validation_batch_generator = WaveformGenerator(paths, batch_size)
+                    else:
+                        my_training_batch_generator = WaveformGenerator_SingleBatch(paths, batch_size)
+                        my_validation_batch_generator = WaveformGenerator_SingleBatch(paths, batch_size)
+                    model.fit_generator(generator=my_training_batch_generator,
+                                       steps_per_epoch = 10,
+                                       epochs = 10, callbacks=[checkpointer])
+                    #x_val = dat
+                    #y_val = labels
 
             plot_model(model)
         #    layer_outputs = [layer.output for layer in model.layers[:]]
@@ -1375,7 +1526,11 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
         if data_dir is not None or validation_data is not None:
             pred = model.predict(data_events_unseen)
         else:
-            pred = model.predict(x_val)
+            if parallel is False:
+                pred = model.predict(x_val)
+            else:
+                pred = model.predict_generator(generator=my_training_batch_generator)
+
     #    print(np.shape(pred))
     #    print("here", pred)
 
@@ -1427,8 +1582,16 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                                               .format(heldout_log_prob))
 
                 step = step+1
+
+    if parallel is True:
+        idxs = [0, 1, 2, 3]
+        y_val = []
+
+        for idx in idxs:
+            data, val = WaveformGenerator.getitem(paths, batch_size, idx)
+            y_val.append(val)
     print(y_val[0:3], pred[0:3])
-    print(y_val[-3:-1], pred[-3:-1])
+    #print(y_val[-3:-1], pred[-3:-1])
 
     #print(abs(y_val)-abs(pred))
 #    print(np.sum(abs(y_val)-abs(pred)))
