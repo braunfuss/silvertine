@@ -17,7 +17,7 @@ from silvertine.util.silvertine_meta import MTQTSource
 from pyrocko import model, cake, orthodrome
 from silvertine.util.ref_mods import landau_layered_model
 from pyrocko import moment_tensor, util
-from keras.layers import Conv1D, MaxPooling1D, Input
+from keras.layers import Conv1D, MaxPooling1D, Input, Conv2D
 from keras import models
 from PIL import Image
 from pathlib import Path
@@ -25,10 +25,13 @@ from silvertine.util import waveform
 import scipy
 from mtpar import cmt2tt, cmt2tt15, tt2cmt, tt152cmt
 from mtpar.basis import change_basis
+from mtpar.util import PI, DEG
 import ray
+import math
 import copy
 import psutil
 import _pickle as pickle
+from sklearn.utils import shuffle
 
 num_cpus = psutil.cpu_count(logical=False)
 
@@ -44,6 +47,55 @@ except ImportError:
 #tf.disable_eager_execution()
 
 #tf.enable_v2_behavior()
+
+import tensorflow as tf
+
+def _parse_function(proto):
+    # define your tfrecord again. Remember that you saved your image as a string.
+    keys_to_features = {'image': tf.FixedLenFeature([], tf.string),
+                        "label": tf.FixedLenFeature([], tf.int64)}
+
+    # Load one example
+    parsed_features = tf.parse_single_example(proto, keys_to_features)
+
+    # Turn your saved image string into an array
+    parsed_features['image'] = tf.decode_raw(
+        parsed_features['image'], tf.uint8)
+
+    return parsed_features['image'], parsed_features["label"]
+
+
+def create_dataset(filepath):
+
+    # This works with arrays as well
+    dataset = tf.data.TFRecordDataset(filepath)
+
+    # Maps the parser on every filepath in the array. You can set the number of parallel loaders here
+    dataset = dataset.map(_parse_function, num_parallel_calls=8)
+
+    # This dataset will go on forever
+    dataset = dataset.repeat()
+
+    # Set the number of datapoints you want to load and shuffle
+    dataset = dataset.shuffle(SHUFFLE_BUFFER)
+
+    # Set the batchsize
+    dataset = dataset.batch(BATCH_SIZE)
+
+    # Create an iterator
+    iterator = dataset.make_one_shot_iterator()
+
+    # Create your tf representation of the iterator
+    image, label = iterator.get_next()
+
+    # Bring your picture back in shape
+    image = tf.reshape(image, [-1, 256, 256, 1])
+
+    # Create a one hot array for your labels
+    label = tf.one_hot(label, NUM_CLASSES)
+
+    return image, label
+
 pi = np.pi
 deg = 180./pi
 
@@ -210,9 +262,10 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
                       mechanism=False, sources=None, source_type="DC",
                       mtqt_ps=None, parallel=True, min_depth=None,
                       max_depth=None, max_lat=None, min_lat=None,
-                      max_lon=None, min_lon=None):
+                      max_lon=None, min_lon=None, norm=False):
 
     add_spectrum = False
+    con_line = False
     data_traces = []
     maxsamples = 0
     max_traces = None
@@ -234,7 +287,10 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
             if len(tr.ydata) > maxsamples:
                 maxsamples = len(tr.ydata)
     for k, traces in enumerate(waveforms):
-        traces_coll = None
+        if con_line is True:
+            traces_coll = None
+        else:
+            traces_coll = []
     #    traces = normalize_by_std_deviation(traces)
     #    traces = normalize_by_tracemax(traces)
         #traces = normalize(traces)
@@ -243,9 +299,10 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
         #traces = normalize_all(traces, min_traces, max_traces)
 
         for tr in traces:
-            tr.lowpass(4, 5.)
+            tr.lowpass(4, 9.5)
             tr.highpass(4, 0.03)
-            tr.ydata = tr.ydata/np.max(tr.ydata)
+            if norm is True:
+                tr.ydata = tr.ydata/np.max(tr.ydata)
             nsamples = len(tr.ydata)
             data = tr.ydata
 
@@ -263,11 +320,14 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
             #    fdata = fdata_zero
             #    data = np.concatenate((data, fdata),  axis=0)
                 data = fdata
-            if traces_coll is None:
-                traces_coll = tr.ydata
+            if con_line is True:
+                if traces_coll is None:
+                    traces_coll = tr.ydata
+                else:
+                    traces_coll = np.concatenate((traces_coll, data),  axis=0)
             else:
-                traces_coll = np.concatenate((traces_coll, data),  axis=0)
-        nsamples = len(traces_coll)
+                traces_coll.append(tr.ydata)
+        #nsamples = len(traces_coll)
         data_traces.append(traces_coll)
 
     # normalize coordinates
@@ -338,8 +398,8 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
                             if mechanism_and_location is True:
                                 labels.append([mtqt_p[0]/((3/4)*pi),
                                                0.5-(mtqt_p[1]/(1/3))*0.5,
-                                               mtqt_p[2]/(2*pi),
-                                               0.5-(mtqt_p[3]/(pi/2))*0.5,
+                                               mtqt_p[2]/(360),
+                                               0.5-(mtqt_p[3]/(90/2))*0.5,
                                                mtqt_p[4]/1,
                                                lats[i], lons[i], depths[i]])
                             else:
@@ -365,8 +425,6 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
                                                 0.5-((ev.moment_tensor.mne/ev.moment_tensor.moment)/2)*0.5,
                                                 0.5-((ev.moment_tensor.mnd/ev.moment_tensor.moment)/2)*0.5,
                                                 0.5-((ev.moment_tensor.med/ev.moment_tensor.moment)/2)*0.5])
-                    #    print(labels)
-                    #    print(ev)
                     else:
                         labels.append([lats[i], lons[i], depths[i]])
             labels = np.asarray(labels)
@@ -388,7 +446,10 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
             labels = np.ones((len(data_traces), 3), dtype=np.int32)*0
         else:
             labels = np.ones(len(data_traces), dtype=np.int32)*0
+    if con_line is False:
+        data_traces = data_traces[0]
     data_traces = np.asarray(data_traces)
+
     labels = np.asarray(labels)
     return data_traces, labels, len(data_traces), nsamples
 
@@ -448,7 +509,7 @@ def get_parallel_scenario(i, targets, store_id, noised, real_noise_traces, post,
 
 
 def generate_test_data(store_id, nevents=50, noised=True,
-                       real_noise_traces=None, post=2., pre=2.,
+                       real_noise_traces=None, post=2., pre=0.5,
                        no_events=False, parallel=True):
     mod = landau_layered_model()
     engine = LocalEngine(store_superdirs=['gf_stores'])
@@ -635,7 +696,8 @@ def get_scn_mechs():
 
 @ray.remote
 def get_parallel_dc(i, targets, store_id, noised, real_noise_traces, post, pre, no_events, stations, mod, params, strikes, dips, rakes,
-                    source_type="DC", mechanism=True, multilabel=True, maxvals=None, batch_loading=1):
+                    source_type="DC", mechanism=True, multilabel=True, maxvals=None, batch_loading=5000, npm=0,
+                    dump_full=False, seiger1f=True, path_count=0, paths_disks=None):
     engine = LocalEngine(store_superdirs=['gf_stores'])
     store = engine.get_store(store_id)
     lat, lon, depth = params
@@ -644,8 +706,13 @@ def get_parallel_dc(i, targets, store_id, noised, real_noise_traces, post, pre, 
     tracess = []
     sources = []
     events = []
+    data_events = []
+    labels_events = []
     mag = 5
     count = 0
+    npm_rem = npm
+    if seiger1f is True:
+        current_path = paths_disks[path_count]
     for strike in strikes:
         for dip in dips:
             for rake in rakes:
@@ -666,30 +733,18 @@ def get_parallel_dc(i, targets, store_id, noised, real_noise_traces, post, pre, 
                 mt = moment_tensor.MomentTensor(strike=source_dc.strike, dip=source_dc.dip, rake=source_dc.rake,
                                                 magnitude=source_dc.magnitude)
                 event.moment_tensor = mt
-                traces_uncut = copy.deepcopy(traces)
-                traces_uncuts.append(traces_uncut)
+                if dump_full is True:
+                    traces_uncut = copy.deepcopy(traces)
+                    traces_uncuts.append(traces_uncut)
                 for tr in traces:
                     for st in stations:
                         if st.station == tr.station:
-                            #dist = (orthodrome.distance_accurate50m(source_dc.lat,
-                            #                                        source_dc.lon,
-                            #                                        st.lat,
-                            #                                        st.lon)+st.elevation)*cake.m2d
                             processed = False
                             dist = (orthodrome.distance_accurate50m(source_dc.lat,
                                                                  source_dc.lon,
                                                                  st.lat,
                                                                  st.lon)+st.elevation)#*cake.m2d
                             while processed is False:
-                    #            for i, arrival in enumerate(mod.arrivals([dist],
-                    #                                        phases=get_phases_list(),
-                    #                                        zstart=source_dc.depth)):
-                    #                if processed is False:
-                    #                    tr.chop(arrival.t-pre, arrival.t+post)
-                    #                    processed = True
-                    #                else:
-                    #                    pass
-
                                 processed = False
                                 depth = source_dc.depth
                                 arrival = store.t('begin', (depth, dist))
@@ -706,47 +761,218 @@ def get_parallel_dc(i, targets, store_id, noised, real_noise_traces, post, pre, 
                     if noised is True:
                         tr.add(white_noise)
                 max_traces = None
-                data_events, labels_events, nstations, nsamples = bnn_detector_data([traces], max_traces, events=[event], multilabel=multilabel, mechanism=mechanism, sources=[source_dc],
+                data_event, label_event, nstations, nsamples = bnn_detector_data([traces], max_traces, events=[event], multilabel=multilabel, mechanism=mechanism, sources=[source_dc],
                                                                                     parallel=True, min_depth=depth_min, max_depth=depth_max, max_lat=lat_max, min_lat=lat_min, max_lon=lon_max, min_lon=lon_min)
+                data_events.append(data_event)
+                labels_events.append(label_event)
+                events.append(event)
 
                 if batch_loading == 1:
-                    f = open("grids/grid_%s_SDR%s_%s_%s" % (i, strike, dip, rake), 'wb')
-                    pickle.dump([traces, event, source_dc, nsamples, traces_uncut], f)
-                    f.close()
-                    f = open("grid_ml/grid_%s_SDR%s_%s_%s" % (i, strike, dip, rake), 'wb')
-                    pickle.dump([data_events, labels_events, nstations, nsamples], f)
-                    count = 0
-                else:
-                    if count == batch_loading:
-                        f = open("grids/batch_%s_grid_%s_SDR%s_%s_%s" % (count, i, strike, dip, rake), 'wb')
+                    if dump_full is True:
+                        f = open("grids/grid_%s_SDR%s_%s_%s" % (i, strike, dip, rake), 'wb')
                         pickle.dump([traces, event, source_dc, nsamples, traces_uncut], f)
                         f.close()
-                        f = open("grid_ml/batch_%s_grid_%s_SDR%s_%s_%s" % (count, i, strike, dip, rake), 'wb')
-                        pickle.dump([data_events, labels_events, nstations, nsamples], f)
-                        f.close()
+                    f = open("grid_ml/grid_%s_SDR%s_%s_%s" % (i, strike, dip, rake), 'wb')
+                    pickle.dump([data_events, labels_events, nstations, nsamples, events], f)
+                    count = 0
+                    data_events = []
+                    labels_events = []
+                    events = []
+                    traces_uncuts = []
+
+                else:
+                    if count == batch_loading or npm_rem<batch_loading:
+
+                        npm_rem = npm_rem - batch_loading
+                        if dump_full is True:
+                            f = open("grids/batch_%s_grid_%s_SDR%s_%s_%s" % (count, i, strike, dip, rake), 'wb')
+                            pickle.dump([traces, event, source_dc, nsamples, traces_uncut], f)
+                            f.close()
+                        if seiger1f is True:
+                            free = os.statvfs(current_path)[0]*os.statvfs(current_path)[4]
+                            if free < 40000:
+                                current_path = paths_disks[path_count+1]
+                                path_count = path_count + 1
+                            f = open(current_path+"/batch_%s_grid_%s_SDR%s_%s_%s" % (count, i, strike, dip, rake), 'wb')
+                            pickle.dump([data_events, labels_events, nstations, nsamples, events], f)
+                            f.close()
+                        else:
+                            f = open("grid_ml/batch_%s_grid_%s_SDR%s_%s_%s" % (count, i, strike, dip, rake), 'wb')
+                            pickle.dump([data_events, labels_events, nstations, nsamples, events], f)
+                            f.close()
                         count = 0
+                        data_events = []
+                        labels_events = []
+                        events = []
+                        traces_uncuts = []
+                        mtqt_ps = []
+
+                    else:
+                        count = count+1
+    return []
+
+@ray.remote
+def get_parallel_mtqt(i, targets, store_id, noised, real_noise_traces, post, pre, no_events, stations, mod, params, strikes, dips, rakes,
+                    source_type="MTQT", mechanism=True, multilabel=True, maxvals=None, batch_loading=5000, npm=0,
+                    dump_full=False, seiger1f=True, path_count=0, paths_disks=None):
+    if seiger1f is True:
+        engine = LocalEngine(store_superdirs=['/diska/home/steinberg/gf_stores'])
+    else:
+        engine = LocalEngine(store_superdirs=['gf_stores'])
+    store = engine.get_store(store_id)
+    lat, lon, depth = params
+    depth_max, depth_min, lat_max, lat_min, lon_max, lon_min = maxvals
+    traces_uncuts = []
+    tracess = []
+    sources = []
+    mtqt_ps = []
+    mag = -6
+    count = 0
+    npm_rem = npm
+    data_events = []
+    labels_events = []
+    events = []
+    if seiger1f is True:
+        current_path = paths_disks[path_count]
+    for strike in strikes:
+        for dip in dips:
+            for rake in rakes:
+        #    try:
+                event = scenario.gen_random_tectonic_event(i, magmin=-0.5,
+                                                              magmax=3.)
+                mt = moment_tensor.MomentTensor(strike=strike, dip=dip,
+                                                rake=rake,
+                                                magnitude=mag)
+
+                mt_use = mt.m6_up_south_east()
+                mt_input = []
+                for mt_comp in mt_use:
+                    if mt_comp == 0:
+                        mt_comp += 1e-32
+                    else:
+                        mt_comp = mt_comp/mt.moment
+
+                    mt_input.append(mt_comp)
+                rho, v, u, kappa, sigma, h = cmt2tt15(np.array(mt_input))
+                event.moment_tensor = mt
+
+                source_mtqt = MTQTSource(
+                    lon=lon,
+                    lat=lat,
+                    depth=depth,
+                    u=u,
+                    v=v,
+                    kappa=kappa,
+                    sigma=sigma,
+                    h=h,
+                )
+                response = engine.process(source_mtqt, targets)
+                traces = response.pyrocko_traces()
+                event.lat = source_mtqt.lat
+                event.lon = source_mtqt.lon
+                event.depth = source_mtqt.depth
+
+                if dump_full is True:
+                    traces_uncut = copy.deepcopy(traces)
+                    traces_uncuts.append(traces_uncut)
+                for tr in traces:
+                    for st in stations:
+                        if st.station == tr.station:
+                            processed = False
+                            dist = (orthodrome.distance_accurate50m(source_mtqt.lat,
+                                                                 source_mtqt.lon,
+                                                                 st.lat,
+                                                                 st.lon)+st.elevation)#*cake.m2d
+                            while processed is False:
+                                processed = False
+                                depth = source_mtqt.depth
+                                arrival = store.t('begin', (depth, dist))
+                                if processed is False:
+                                    tr.chop(arrival-pre, arrival+post)
+                                    processed = True
+                                else:
+                                    pass
+
+                    nsamples = len(tr.ydata)
+                    randdata = np.random.normal(size=nsamples)*np.min(tr.ydata)
+                    white_noise = trace.Trace(deltat=tr.deltat, tmin=tr.tmin,
+                                              ydata=randdata)
+                    if noised is True:
+                        tr.add(white_noise)
+                max_traces = None
+                mtqt_ps = [[u, v, kappa, sigma, h]]
+
+                data_event, label_event, nstations, nsamples = bnn_detector_data([traces], max_traces, events=[event], multilabel=multilabel, mechanism=mechanism, sources=[source_mtqt],
+                                                                                    parallel=True, min_depth=depth_min, max_depth=depth_max, max_lat=lat_max, min_lat=lat_min, max_lon=lon_max, min_lon=lon_min, source_type="MTQT", mtqt_ps=mtqt_ps)
+                data_events.append(data_event)
+                labels_events.append(label_event)
+                events.append(event)
+                mtqt_ps.append([u, v, kappa, sigma, h])
+
+                if batch_loading == 1:
+                    if dump_full is True:
+                        f = open("grids/grid_%s_SDR%s_%s_%s" % (i, strike, dip, rake), 'wb')
+                        pickle.dump([traces, event, source_dc, nsamples, traces_uncut], f)
+                        f.close()
+                    f = open("grid_ml/grid_%s_SDR%s_%s_%s" % (i, strike, dip, rake), 'wb')
+                    pickle.dump([data_events, labels_events, nstations, nsamples, events], f)
+                    count = 0
+                    data_events = []
+                    labels_events = []
+                    events = []
+                    traces_uncuts = []
+
+                else:
+                    if count == batch_loading or npm_rem<batch_loading:
+
+                        npm_rem = npm_rem - batch_loading
+                        if dump_full is True:
+                            f = open("grids/batch_%s_grid_%s_SDR%s_%s_%s" % (count, i, strike, dip, rake), 'wb')
+                            pickle.dump([traces, event, source_dc, nsamples, traces_uncut], f)
+                            f.close()
+                        if seiger1f is True:
+                            free = os.statvfs(current_path)[0]*os.statvfs(current_path)[4]
+                            if free < 40000:
+                                current_path = paths_disks[path_count+1]
+                                path_count = path_count + 1
+                            f = open(current_path+"/batch_%s_grid_%s_SDR%s_%s_%s" % (count, i, strike, dip, rake), 'wb')
+                            pickle.dump([data_events, labels_events, nstations, nsamples, events], f)
+                            f.close()
+                        else:
+                            f = open("grid_ml/batch_%s_grid_%s_SDR%s_%s_%s" % (count, i, strike, dip, rake), 'wb')
+                            pickle.dump([data_events, labels_events, nstations, nsamples, events], f)
+                            f.close()
+                        count = 0
+                        data_events = []
+                        labels_events = []
+                        events = []
+                        traces_uncuts = []
+                        mtqt_ps = []
+
                     else:
                         count = count+1
     return []
 
 
 def generate_test_data_grid(store_id, nevents=50, noised=False,
-                            real_noise_traces=None, strike_min=0.,
-                            strike_max=360., strike_step=1.,
-                            dip_min=50., dip_max=90., dip_step=1.,
-                            rake_min=-180., rake_max=0., rake_step=1.,
+                            real_noise_traces=None, strike_min=180.,
+                            strike_max=360., strike_step=2.,
+                            dip_min=40., dip_max=90., dip_step=2.,
+                            rake_min=-180., rake_max=-0., rake_step=2.,
                             mag_min=5.0, mag_max=5.2, mag_step=0.1,
-                            depth_step=200., zmin=3600., zmax=15000.,
-                            dimx=0.2, dimy=0.2, center=None, source_type="DC",
+                            depth_step=400., zmin=2600., zmax=12000.,
+                            dimx=0.2, dimy=0.2, center=None, source_type="MTQT2",
                             kappa_min=0, kappa_max=2*pi, kappa_step=0.05,
                             sigma_min=-pi/2, sigma_max=pi/2, sigma_step=0.05,
                             h_min=0, h_max=1, h_step=0.05,
                             v_min=-1/3, v_max=1/3, v_step=0.05,
                             u_min=0, u_max=(3/4)*pi, u_step=0.05,
-                            pre=2., post=2., no_events=False,
-                            parallel=True, batch_loading=1):
+                            pre=0.5, post=2., no_events=False,
+                            parallel=True, batch_loading=5000):
 
     mod = landau_layered_model()
+    paths_disks = ["/data1/steinberg/grid_ml/", "/data2/steinberg/grid_ml/", "/data3/steinberg/grid_ml/", "/diskb/steinberg/grid_ml/", "/dev/shm/steinberg/grid_ml/"]
+
     engine = LocalEngine(store_superdirs=['gf_stores'])
     store = engine.get_store(store_id)
     store.config.earthmodel_1d
@@ -785,7 +1011,7 @@ def generate_test_data_grid(store_id, nevents=50, noised=False,
 #    lonmin = -117.9091667
 #    lonmax = -117.5091667
     center = [np.mean([latmin, latmax]), np.mean([lonmin, lonmax])]
-    dim_step = 0.01
+    dim_step = 0.03
     lats, lons, depths = make_grid(center, dimx, dimy, zmin, zmax, dim_step, depth_step, )
     strikes = np.arange(strike_min, strike_max, strike_step)
     dips = np.arange(dip_min, dip_max, dip_step)
@@ -859,7 +1085,40 @@ def generate_test_data_grid(store_id, nevents=50, noised=False,
 
     mtqt_ps = []
     if source_type == "MTQT2":
-        if i < 10:
+        if parallel is True:
+            params = []
+            for lat in lats:
+                for lon in lons:
+                    for depth in depths:
+    #                    for strike in strikes:
+    #                        for dip in dips:
+    #                            for rake in rakes:
+                                        params.append([lat, lon, depth])
+
+            ray.init(num_cpus=num_cpus-1)
+            npm = len(lats)*len(lons)*len(depths)
+            npm_geom = len(strikes)*len(dips)*len(rakes)
+            maxvals = [np.max(depths), np.min(depths), np.max(lats), np.min(lats), np.max(lons), np.min(lons)]
+            results = ray.get([get_parallel_mtqt.remote(i, targets, store_id, noised, real_noise_traces, post, pre, no_events, stations, mod, params[i], strikes, dips, rakes, maxvals=maxvals, batch_loading=batch_loading, npm=npm_geom, paths_disks=paths_disks) for i in range(len(params))])
+        #    print(results)
+        #    for rests in results:
+                #print(rests)
+        #        for res in rests:
+        #            print(kill)
+
+        # load data directly:
+    #        pathlist = Path('grids').glob('*')
+    #        for path in sorted(pathlist):
+    #            f = open(path, 'rb')
+    #            tracess, eventss, sourcess, nsamples, uncut = pickle.load(f)
+    #            for i, traces in enumerate(tracess):
+    ##                events.append(eventss[i])
+    #                waveforms_events.append(traces)
+    #                nsamples = nsamples
+    #                sources.append(sourcess[i])
+                #    waveforms_events_uncut.append(res[4])
+            del results, params
+        else:
             for lat in lats:
                 for lon in lons:
                     for depth in depths:
@@ -937,27 +1196,10 @@ def generate_test_data_grid(store_id, nevents=50, noised=False,
 
             ray.init(num_cpus=num_cpus-1)
             npm = len(lats)*len(lons)*len(depths)
-            print(npm)
-            print(npm*len(strikes)*len(dips)*len(rakes))
+            npm_geom = len(strikes)*len(dips)*len(rakes)
             maxvals = [np.max(depths), np.min(depths), np.max(lats), np.min(lats), np.max(lons), np.min(lons)]
-            results = ray.get([get_parallel_dc.remote(i, targets, store_id, noised, real_noise_traces, post, pre, no_events, stations, mod, params[i], strikes, dips, rakes, maxvals=maxvals, batch_loading=batch_loading) for i in range(len(params))])
+            results = ray.get([get_parallel_dc.remote(i, targets, store_id, noised, real_noise_traces, post, pre, no_events, stations, mod, params[i], strikes, dips, rakes, maxvals=maxvals, batch_loading=batch_loading, npm=npm_geom, paths_disks=paths_disks) for i in range(len(params))])
         #    print(results)
-        #    for rests in results:
-                #print(rests)
-        #        for res in rests:
-        #            print(kill)
-
-        # load data directly:
-    #        pathlist = Path('grids').glob('*')
-    #        for path in sorted(pathlist):
-    #            f = open(path, 'rb')
-    #            tracess, eventss, sourcess, nsamples, uncut = pickle.load(f)
-    #            for i, traces in enumerate(tracess):
-    ##                events.append(eventss[i])
-    #                waveforms_events.append(traces)
-    #                nsamples = nsamples
-    #                sources.append(sourcess[i])
-                #    waveforms_events_uncut.append(res[4])
             del results, params
         else:
             for lat in lats:
@@ -1071,7 +1313,7 @@ def rgb2gray(rgb):
     return np.dot(rgb[..., :3], [0.2989, 0.5870, 0.1140])
 
 
-def load_data(data_dir, store_id, scenario=False, stations=None, pre=2.,
+def load_data(data_dir, store_id, scenario=False, stations=None, pre=0.5,
               post=2.):
     mod = landau_layered_model()
     engine = LocalEngine(store_superdirs=['/home/asteinbe/gf_stores'])
@@ -1161,7 +1403,7 @@ def plot_prescission(input, output):
 
 def read_wavepickle(path):
     f = open(path, 'rb')
-    data_events, labels_events, nstations, nsamples = pickle.load(f)
+    data_events, labels_events, nstations, nsamples, events = pickle.load(f)
     f.close()
     return data_events, labels_events
 
@@ -1183,6 +1425,9 @@ class WaveformGenerator(keras.utils.Sequence):
             data_events, labels_events = read_wavepickle(filename)
             data.append(data_events)
             labels.append(labels_events)
+        print(np.shape(data_events))
+        print(np.shape(data))
+
         return np.array(data), np.array(labels)
 
     def getitem(filenames, batch_size, idx) :
@@ -1195,29 +1440,53 @@ class WaveformGenerator(keras.utils.Sequence):
             labels.append(labels_events)
         return np.array(data), np.array(labels)
 
+
 class WaveformGenerator_SingleBatch(keras.utils.Sequence):
 
-    def __init__(self, filenames, labels, batch_size):
+    def __init__(self, filenames, batch_size):
         self.filenames = filenames
         self.batch_size = batch_size
 
+    #def __len__(self):
+    #    return (np.ceil(len(self.filenames) / float(self.batch_size))).astype(np.int)
     def __len__(self):
-        return (np.ceil(len(self.filenames) / float(self.batch_size))).astype(np.int)
+        return (np.ceil(len(self.filenames))).astype(np.int)
 
-    def __getitem__(self, idx) :
-        batch_x = self.image_filenames[idx]
+    def __getitem__(self, idx):
+        batch_x = self.filenames[idx]
         f = open(batch_x, 'rb')
-        data_events, labels_events, nstations, nsamples = pickle.load(f)
+        data_events, labels_events, nstations, nsamples, events = pickle.load(f)
+        data = []
+        labels = []
+        f.close()
+        for d, l in zip(data_events, labels_events):
+            data.append(d)
+            labels.append(l)
+        return np.array(data), np.array(labels)
+
+    def getitem(filenames, batch_size, idx):
+        batch_x = filenames[idx]
+        f = open(batch_x, 'rb')
+        data_events, labels_events, nstations, nsamples, events = pickle.load(f)
         f.close()
 
-        return np.array(data_events), np.array(labels_events)
+        return np.array(data_events), np.array(labels_events), events
 
+    def getitem_perturbed(filenames, batch_size, idx):
+        batch_x = filenames[idx]
+        f = open(batch_x, 'rb')
+        data_events, labels_events, nstations, nsamples, events = pickle.load(f)
+        f.close()
+
+
+        return np.array(data_events), np.array(labels_events), events
 
 def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                  multilabel=True, data_dir=None, train_model=True,
                  detector_only=False, validation_data=None, wanted_start=None,
                  wanted_end=None, mode="detector_only", parallel=True,
-                 batch_loading=1):
+                 batch_loading=5000, source_type="DC",
+                 perturb_val=True, con_line=False):
 
     import cProfile, pstats
     pr = cProfile.Profile()
@@ -1270,8 +1539,8 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
     else:
         if parallel is True:
             if len(os.listdir('grid_ml/')) == 0:
-                batch_loading = 1
-                waveforms_events = generate_test_data_grid("mojave_large_ml", nevents=1200)
+                batch_loading = 5000
+                waveforms_events = generate_test_data_grid("mojave_large_ml", nevents=1200, batch_loading=batch_loading, source_type=source_type)
             else:
                 print("Grid already calculated")
 
@@ -1374,10 +1643,13 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
             while retrieved_meta is False:
                 for path in sorted(pathlist):
                     f = open(path, 'rb')
-                    data_events, labels_events, nstations, nsamples = pickle.load(f)
+                    data_events, labels_events, nstations, nsamples, events = pickle.load(f)
                     f.close()
                     retrieved_meta = True
-            nlabels = 9
+            if source_type == "DC":
+                nlabels = 9
+            if source_type == "MTQT" or source_type == "MTQT2":
+                nlabels = 8
     np.random.seed(42)  # Set a random seed for reproducibility
 
     from sklearn.model_selection import train_test_split
@@ -1387,13 +1659,21 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
 # For a single-input model with 2 classes (binary classi    fication):
     if train_model is True:
         #print(nstations)
-        print()
         model = Sequential()
         if parallel is True:
-            model.add(Activation('relu', input_shape=np.shape(data_events)))
+        #    model.add(Activation('relu', input_shape=np.shape(data_events)))
+            print(np.shape(data_events)[1:])
+            print(nlabels)
+            print(nstations)
+            print(nsamples)
+            model.add(Activation('relu', input_shape=np.shape(data_events)[1:]))
+
         else:
             model.add(Activation('relu'))
-
+        if con_line is False:
+            model.add(Conv1D(nsamples, nstations, activation="relu"))
+        #    model.add(Dense(30, activation='relu', input_dim=nsamples))
+#        model.add(layers.Conv2D(32, 3, activation="relu"))
 
 #        model.add(Dense(2056, activation='relu', input_dim=nsamples))
 
@@ -1404,7 +1684,7 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
 #        model.add(Dropout(0.5))
     #    model.add(Dense(64, activation='relu', input_dim=nsamples))
     #    model.add(Dropout(0.5))
-        model.add(Dense(300, activation='relu', input_dim=nsamples))
+    #    model.add(Dense(300, activation='relu'))
     #    model.add(Dense(100, activation='relu', input_dim=nsamples))
     #    model.add(Dense(21, activation='relu', input_dim=nsamples))
 
@@ -1415,7 +1695,7 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
 #        model.add(Dense(38, activation='relu', input_dim=nsamples))
     #    model.add(Dense(3600, activation='relu', input_dim=nsamples))
     #    model.add(Dense(36, activation='relu', input_dim=nsamples))
-    #    model.add(Dense(12, activation='relu', input_dim=nsamples))
+    #    model.add(Conv1D(121,1, activation="relu"))
 
     #    model.add(Dense(nstations, activation='relu', input_dim=nsamples))
     #    model.add(Dense(3600, activation='relu', input_dim=nsamples))
@@ -1480,7 +1760,7 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                     batch_size = 32
 
                     my_training_batch_generator = WaveformGenerator(X_train_filenames, y_train, batch_size)
-                    my_validation_batch_generator = WaveformGenerator(X_val_filenames, y_val, batch_size)
+                    my_validation_batch_generator = WaveformGenerator(X_train_filenames, y_val, batch_size)
                     model.fit_generator(generator=my_training_batch_generator,
                                        steps_per_epoch = int(3800 // batch_size),
                                        epochs = 10,
@@ -1500,14 +1780,25 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                 #    model.build()
                     model.summary()
                     if batch_loading == 1:
+                        batch_size = batch_loading
                         my_training_batch_generator = WaveformGenerator(paths, batch_size)
                         my_validation_batch_generator = WaveformGenerator(paths, batch_size)
                     else:
-                        my_training_batch_generator = WaveformGenerator_SingleBatch(paths, batch_size)
-                        my_validation_batch_generator = WaveformGenerator_SingleBatch(paths, batch_size)
+                        batch_size = batch_loading+1
+                        if perturb_val is True:
+                            from sklearn.utils import shuffle
+                            filenames_shuffled = shuffle(paths)
+                            train_paths, val_paths, y_train, y_val = train_test_split(
+                                filenames_shuffled, np.ones(len(filenames_shuffled)), test_size=0.2, random_state=1)
+                        else:
+                            train_paths = filenames
+                            val_paths = filenames
+                        my_training_batch_generator = WaveformGenerator_SingleBatch(train_paths, batch_size)
+                        my_validation_batch_generator = WaveformGenerator_SingleBatch(val_paths, batch_size)
                     model.fit_generator(generator=my_training_batch_generator,
-                                       steps_per_epoch = 10,
-                                       epochs = 10, callbacks=[checkpointer])
+                                       steps_per_epoch = 50,
+                                      verbose=1,
+                                       epochs = 1000, callbacks=[checkpointer])
                     #x_val = dat
                     #y_val = labels
 
@@ -1529,12 +1820,14 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
             if parallel is False:
                 pred = model.predict(x_val)
             else:
-                pred = model.predict_generator(generator=my_training_batch_generator)
+                pred = model.predict_generator(my_training_batch_generator, 10)
 
-    #    print(np.shape(pred))
-    #    print("here", pred)
+        print(np.shape(pred))
+        print("here", pred)
 
     else:
+        # implement for pickle loading
+        # save data not in pickle but native?
         train, x_val, y_train, y_val = train_test_split(dat,
                                                         labels,
                                                         test_size=0.2,
@@ -1584,15 +1877,22 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                 step = step+1
 
     if parallel is True:
-        idxs = [0, 1, 2, 3]
+        idxs = [0]
         y_val = []
-
         for idx in idxs:
-            data, val = WaveformGenerator.getitem(paths, batch_size, idx)
-            y_val.append(val)
-    print(y_val[0:3], pred[0:3])
+            data, values = WaveformGenerator.getitem(paths, batch_size, idx)
+            for val in values:
+                y_val.append(val[0][0])
+        preds_new = []
+        for p in pred:
+            if source_type == "MTQT" or source_type=="MTQT2":
+                M2 = tt152cmt(rho, v, w, kappa, sigma, h)
+                M2 = change_basis(M2, 1, 2)
+                print(M2)
+            else:
+                preds_new.append(p[0])
+        pred = preds_new
     #print(y_val[-3:-1], pred[-3:-1])
-
     #print(abs(y_val)-abs(pred))
 #    print(np.sum(abs(y_val)-abs(pred)))
     recover_real_value = False
@@ -1602,7 +1902,7 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
             if sdr is False:
                 real_values = []
                 real_ms = []
-                for i, vals in enumerate(y_val[0:2]):
+                for i, vals in enumerate(y_val[0:5]):
                     real_value = [(1.-(2.*vals[0]))*events[i].moment_tensor.moment*2, (1.-(2.*vals[1]))*events[i].moment_tensor.moment*2,
                                         (1.-(2.*vals[2]))*events[i].moment_tensor.moment*2, (1.-(2.*vals[3]))*events[i].moment_tensor.moment*2,
                                         (1.-(2.*vals[4]))*events[i].moment_tensor.moment*2, (1.-(2.*vals[5]))*events[i].moment_tensor.moment*2]
@@ -1619,7 +1919,7 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                 real_values_pred = []
                 diff_values = []
                 pred_ms = []
-                for i, vals in enumerate(pred[0:2]):
+                for i, vals in enumerate(pred[0:5]):
                     real_value = [(1.-(2.*vals[0]))*events[i].moment_tensor.moment*2, (1.-(2.*vals[1]))*events[i].moment_tensor.moment*2,
                                         (1.-(2.*vals[2]))*events[i].moment_tensor.moment*2, (1.-(2.*vals[3]))*events[i].moment_tensor.moment*2,
                                         (1.-(2.*vals[4]))*events[i].moment_tensor.moment*2, (1.-(2.*vals[5]))*events[i].moment_tensor.moment*2]
@@ -1631,6 +1931,7 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                 #    print(real_value)
                     pred_ms.append(m)
                     #diff_values.append([real_values[i][0]-real_values_pred[i][0], real_values[i][1]-real_values_pred[i][1], real_values[i][2]-real_values_pred[i][2]])
+            print(len(pred_ms), len(real_ms))
             for pred_m, real_m in zip(pred_ms, real_ms):
                 from pyrocko import plot
                 from pyrocko.plot import beachball
@@ -1758,6 +2059,7 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                         diff_values.append([real_values[i][0]-real_values_pred[i][0], real_values[i][1]-real_values_pred[i][1], real_values[i][2]-real_values_pred[i][2]])
                 #    print("location", real_values, real_values_pred)
                 #    print(diff_values)
+                    print("here")
                     print(np.max(diff_values), np.min(diff_values))
             if sdr is True:
                 strikes = []
