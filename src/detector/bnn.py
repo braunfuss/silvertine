@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-from pyrocko.gf import LocalEngine, Target, DCSource, ws
+from pyrocko.gf import LocalEngine, Target, DCSource, ws, MTSource
 from pyrocko import trace, io
 from pyrocko.marker import PhaseMarker
 from silvertine.util.waveform import plot_waveforms_raw
@@ -52,6 +52,472 @@ except ImportError:
 #tf.enable_v2_behavior()
 
 import tensorflow as tf
+from matplotlib import pyplot as plt
+from matplotlib.patches import Rectangle, FancyArrow
+from matplotlib.collections import PatchCollection
+from matplotlib.backends.backend_pdf import PdfPages
+import matplotlib.ticker as tick
+
+import numpy as num
+pi = num.pi
+pi4 = pi / 4.
+km = 1000.
+d2r = pi / 180.
+r2d = 180. / pi
+
+
+
+
+def vonmises_fisher(lats, lons, lats0, lons0, sigma=1.):
+    """
+    Von-Mises Fisher distribution function.
+    Parameters
+    ----------
+    lats : float or array_like
+        Spherical-polar latitude [deg][-pi/2 pi/2] to evaluate function at.
+    lons : float or array_like
+        Spherical-polar longitude [deg][-pi pi] to evaluate function at
+    lats0 : float or array_like
+        latitude [deg] at the center of the distribution (estimated values)
+    lons0 : float or array_like
+        longitude [deg] at the center of the distribution (estimated values)
+    sigma : float
+        Width of the distribution.
+    Returns
+    -------
+    float or array_like
+        log-probability of the VonMises-Fisher distribution.
+    Notes
+    -----
+    Wikipedia:
+        https://en.wikipedia.org/wiki/Von_Mises-Fisher_distribution
+        modified from: https://github.com/williamjameshandley/spherical_kde
+    """
+
+    def logsinh(x):
+        """ Compute log(sinh(x)), stably for large x.<
+        Parameters
+        ----------
+        x : float or numpy.array
+            argument to evaluate at, must be positive
+        Returns
+        -------
+        float or numpy.array
+            log(sinh(x))
+        """
+        if num.any(x < 0):
+            raise ValueError("logsinh only valid for positive arguments")
+        return x + num.log(1. - num.exp(-2. * x)) - num.log(2.)
+
+    # transform to [0-pi, 0-2pi]
+    lats_t = 90. + lats
+    lons_t = 180. + lons
+    lats0_t = 90. + lats0
+    lons0_t = 180. + lons0
+
+    x = cartesian_from_polar(
+        phi=num.deg2rad(lons_t), theta=num.deg2rad(lats_t))
+    x0 = cartesian_from_polar(
+        phi=num.deg2rad(lons0_t), theta=num.deg2rad(lats0_t))
+
+    norm = -num.log(4. * num.pi * sigma ** 2) - logsinh(1. / sigma ** 2)
+    return norm + num.tensordot(x, x0, axes=[[0], [0]]) / sigma ** 2
+
+
+def vonmises_std(lons, lats):
+    """
+    Von-Mises sample standard deviation.
+    Parameters
+    ----------
+    phi, theta : array-like
+        Spherical-polar coordinate samples to compute mean from.
+    Returns
+    -------
+        solution for
+        ..math:: 1/tanh(x) - 1/x = R,
+        where
+        ..math:: R = || \sum_i^N x_i || / N
+    Notes
+    -----
+    Wikipedia:
+        https://en.wikipedia.org/wiki/Von_Mises-Fisher_distribution#Estimation_of_parameters
+        but re-parameterised for sigma rather than kappa.
+    modidied from: https://github.com/williamjameshandley/spherical_kde
+    """
+    from scipy.optimize import brentq
+
+    x = cartesian_from_polar(phi=num.deg2rad(lons), theta=num.deg2rad(lats))
+    S = num.sum(x, axis=-1)
+
+    R = S.dot(S) ** 0.5 / x.shape[-1]
+
+    def f(s):
+        return 1. / num.tanh(s) - 1. / s - R
+
+
+    kappa = brentq(f, 1e-8, 1e8)
+    sigma = kappa ** -0.5
+    return sigma
+
+
+
+def cartesian_from_polar(phi, theta):
+    """
+    Embedded 3D unit vector from spherical polar coordinates.
+    Parameters
+    ----------
+    phi, theta : float or numpy.array
+        azimuthal and polar angle in radians.
+        (phi-longitude, theta-latitude)
+    Returns
+    -------
+    nhat : numpy.array
+        unit vector(s) in direction (phi, theta).
+    """
+    x = num.sin(theta) * num.cos(phi)
+    y = num.sin(theta) * num.sin(phi)
+    z = num.cos(theta)
+    return num.array([x, y, z])
+
+
+
+def cartesian_from_polar(phi, theta):
+    """
+    Embedded 3D unit vector from spherical polar coordinates.
+    Parameters
+    ----------
+    phi, theta : float or numpy.array
+        azimuthal and polar angle in radians.
+        (phi-longitude, theta-latitude)
+    Returns
+    -------
+    nhat : numpy.array
+        unit vector(s) in direction (phi, theta).
+    """
+    x = num.sin(theta) * num.cos(phi)
+    y = num.sin(theta) * num.sin(phi)
+    z = num.cos(theta)
+    return num.array([x, y, z])
+
+def kde2plot(x, y, grid=200, ax=None, **kwargs):
+    if ax is None:
+        _, ax = plt.subplots(1, 1, squeeze=True)
+    kde2plot_op(ax, x, y, grid, **kwargs)
+    return ax
+
+
+def spherical_kde_op(
+        lats0, lons0, lats=None, lons=None, grid_size=(200, 200), sigma=None):
+
+    from scipy.special import logsumexp
+
+
+    if sigma is None:
+
+        sigmahat = vonmises_std(lats=lats0, lons=lons0)
+        sigma = 1.06 * sigmahat * lats0.size ** -0.2
+
+    if lats is None and lons is None:
+        lats_vec = num.linspace(-90., 90, grid_size[0])
+        lons_vec = num.linspace(-180., 180, grid_size[1])
+
+        lons, lats = num.meshgrid(lons_vec, lats_vec)
+
+    if lats is not None:
+        assert lats.size == lons.size
+
+    vmf = vonmises_fisher(
+        lats=lats, lons=lons,
+        lats0=lats0, lons0=lons0, sigma=sigma)
+    kde = num.exp(logsumexp(vmf, axis=-1)).reshape(   # , b=self.weights)
+        (grid_size[0], grid_size[1]))
+    return kde, lats, lons
+
+
+def v_to_gamma(v):
+    """
+    Converts from v parameter (Tape2015) to lune longitude [rad]
+    """
+    return (1. / 3.) * num.arcsin(3. * v)
+
+
+def w_to_beta(w, u_mapping=None, beta_mapping=None, n=1000):
+    """
+    Converts from  parameter w (Tape2015) to lune co-latitude
+    """
+    if beta_mapping is None:
+        beta_mapping = num.linspace(0, pi, n)
+
+    if u_mapping is None:
+        u_mapping = (
+            3. / 4. * beta_mapping) - (
+            1. / 2. * num.sin(2. * beta_mapping)) + (
+            1. / 16. * num.sin(4. * beta_mapping))
+    return num.interp(3. * pi / 8. - w, u_mapping, beta_mapping)
+
+
+def w_to_delta(w, n=1000):
+    """
+    Converts from parameter w (Tape2015) to lune latitude
+    """
+    beta = w_to_beta(w)
+    return pi / 2. - beta
+
+
+def get_gmt_config(gmtpy, h=20., w=20.):
+
+    if gmtpy.is_gmt5(version='newest'):
+        gmtconfig = {
+            'MAP_GRID_PEN_PRIMARY': '0.1p',
+            'MAP_GRID_PEN_SECONDARY': '0.1p',
+            'MAP_FRAME_TYPE': 'fancy',
+            'FONT_ANNOT_PRIMARY': '14p,Helvetica,black',
+            'FONT_ANNOT_SECONDARY': '14p,Helvetica,black',
+            'FONT_LABEL': '14p,Helvetica,black',
+            'FORMAT_GEO_MAP': 'D',
+            'GMT_TRIANGULATE': 'Watson',
+            'PS_MEDIA': 'Custom_%ix%i' % (w * gmtpy.cm, h * gmtpy.cm),
+        }
+    else:
+        gmtconfig = {
+            'MAP_FRAME_TYPE': 'fancy',
+            'GRID_PEN_PRIMARY': '0.01p',
+            'ANNOT_FONT_PRIMARY': '1',
+            'ANNOT_FONT_SIZE_PRIMARY': '12p',
+            'PLOT_DEGREE_FORMAT': 'D',
+            'GRID_PEN_SECONDARY': '0.01p',
+            'FONT_LABEL': '14p,Helvetica,black',
+            'PS_MEDIA': 'Custom_%ix%i' % (w * gmtpy.cm, h * gmtpy.cm),
+        }
+    return gmtconfig
+
+def lune_plot(v_tape=None, w_tape=None):
+
+    from pyrocko import gmtpy
+
+    if len(gmtpy.detect_gmt_installations()) < 1:
+        raise gmtpy.GmtPyError(
+            'GMT needs to be installed for lune_plot!')
+
+    fontsize = 14
+    font = '1'
+
+    def draw_lune_arcs(gmt, R, J):
+
+        lons = [30., -30., 30., -30.]
+        lats = [54.7356, 35.2644, -35.2644, -54.7356]
+
+        gmt.psxy(
+            in_columns=(lons, lats), N=True, W='1p,black', R=R, J=J)
+
+    def draw_lune_points(gmt, R, J, labels=True):
+
+        lons = [0., -30., -30., -30., 0., 30., 30., 30., 0.]
+        lats = [-90., -54.7356, 0., 35.2644, 90., 54.7356, 0., -35.2644, 0.]
+        annotations = [
+            '-ISO', '', '+CLVD', '+LVD', '+ISO', '', '-CLVD', '-LVD', 'DC']
+        alignments = ['TC', 'TC', 'RM', 'RM', 'BC', 'BC', 'LM', 'LM', 'TC']
+
+        gmt.psxy(in_columns=(lons, lats), N=True, S='p6p', W='1p,0', R=R, J=J)
+
+        rows = []
+        if labels:
+            farg = ['-F+f+j']
+            for lon, lat, text, align in zip(
+                    lons, lats, annotations, alignments):
+
+                rows.append((
+                    lon, lat,
+                    '%i,%s,%s' % (fontsize, font, 'black'),
+                    align, text))
+
+            gmt.pstext(
+                in_rows=rows,
+                N=True, R=R, J=J, D='j5p', *farg)
+
+    def draw_lune_kde(
+            gmt, v_tape, w_tape, grid_size=(200, 200), R=None, J=None):
+
+        def check_fixed(a, varname):
+            if a.std() == 0:
+                a += num.random.normal(loc=0., scale=0.25, size=a.size)
+
+        print(v_tape)
+        gamma = num.rad2deg(v_to_gamma(v_tape))   # lune longitude [rad]
+        delta = num.rad2deg(w_to_delta(w_tape))   # lune latitude [rad]
+
+        check_fixed(gamma, varname='v')
+        check_fixed(delta, varname='w')
+
+        lats_vec, lats_inc = num.linspace(
+            -90., 90., grid_size[0], retstep=True)
+        lons_vec, lons_inc = num.linspace(
+            -30., 30., grid_size[1], retstep=True)
+        lons, lats = num.meshgrid(lons_vec, lats_vec)
+
+        kde_vals, _, _ = spherical_kde_op(
+            lats0=delta, lons0=gamma,
+            lons=lons, lats=lats, grid_size=grid_size)
+        Tmin = num.min([0., kde_vals.min()])
+        Tmax = num.max([0., kde_vals.max()])
+
+        cptfilepath = '/tmp/tempfile.cpt'
+        gmt.makecpt(
+            C='white,yellow,orange,red,magenta,violet',
+            Z=True, D=True,
+            T='%f/%f' % (Tmin, Tmax),
+            out_filename=cptfilepath, suppress_defaults=True)
+
+        grdfile = gmt.tempfilename()
+        gmt.xyz2grd(
+            G=grdfile, R=R, I='%f/%f' % (lons_inc, lats_inc),
+            in_columns=(lons.ravel(), lats.ravel(), kde_vals.ravel()),  # noqa
+            out_discard=True)
+
+        gmt.grdimage(grdfile, R=R, J=J, C=cptfilepath)
+
+        # gmt.pscontour(
+        #    in_columns=(lons.ravel(), lats.ravel(),  kde_vals.ravel()),
+        #    R=R, J=J, I=True, N=True, A=True, C=cptfilepath)
+        # -Ctmp_$out.cpt -I -N -A- -O -K >> $ps
+
+    h = 20.
+    w = h / 1.9
+
+    gmtconfig = get_gmt_config(gmtpy, h=h, w=w)
+    bin_width = 15  # tick increment
+
+    J = 'H0/%f' % (w - 5.)
+    R = '-30/30/-90/90'
+    B = 'f%ig%i/f%ig%i' % (bin_width, bin_width, bin_width, bin_width)
+    # range_arg="-T${zmin}/${zmax}/${dz}"
+
+    gmt = gmtpy.GMT(config=gmtconfig)
+
+    draw_lune_kde(
+        gmt, v_tape=v_tape, w_tape=w_tape, grid_size=(300, 300), R=R, J=J)
+    gmt.psbasemap(R=R, J=J, B=B)
+    draw_lune_arcs(gmt, R=R, J=J)
+    draw_lune_points(gmt, R=R, J=J)
+    return gmt
+
+
+def lune_plot(v_tape=None, w_tape=None):
+
+    from pyrocko import gmtpy
+
+    if len(gmtpy.detect_gmt_installations()) < 1:
+        raise gmtpy.GmtPyError(
+            'GMT needs to be installed for lune_plot!')
+
+    fontsize = 14
+    font = '1'
+
+    def draw_lune_arcs(gmt, R, J):
+
+        lons = [30., -30., 30., -30.]
+        lats = [54.7356, 35.2644, -35.2644, -54.7356]
+
+        gmt.psxy(
+            in_columns=(lons, lats), N=True, W='1p,black', R=R, J=J)
+
+    def draw_lune_points(gmt, R, J, labels=True):
+
+        lons = [0., -30., -30., -30., 0., 30., 30., 30., 0.]
+        lats = [-90., -54.7356, 0., 35.2644, 90., 54.7356, 0., -35.2644, 0.]
+        annotations = [
+            '-ISO', '', '+CLVD', '+LVD', '+ISO', '', '-CLVD', '-LVD', 'DC']
+        alignments = ['TC', 'TC', 'RM', 'RM', 'BC', 'BC', 'LM', 'LM', 'TC']
+
+        gmt.psxy(in_columns=(lons, lats), N=True, S='p6p', W='1p,0', R=R, J=J)
+
+        rows = []
+        if labels:
+            farg = ['-F+f+j']
+            for lon, lat, text, align in zip(
+                    lons, lats, annotations, alignments):
+
+                rows.append((
+                    lon, lat,
+                    '%i,%s,%s' % (fontsize, font, 'black'),
+                    align, text))
+
+            gmt.pstext(
+                in_rows=rows,
+                N=True, R=R, J=J, D='j5p', *farg)
+
+    def draw_lune_kde(
+            gmt, v_tape, w_tape, grid_size=(200, 200), R=None, J=None):
+
+        def check_fixed(a, varname):
+            if a.std() == 0:
+                logger.info(
+                    'Variable "%s" got fixed to %f, adding some jitter to'
+                    ' make kde estimate possible' % (varname, a[0]))
+                a += num.random.normal(loc=0., scale=0.25, size=a.size)
+
+        from beat.sources import v_to_gamma, w_to_delta
+
+        gamma = num.rad2deg(v_to_gamma(v_tape))   # lune longitude [rad]
+        delta = num.rad2deg(w_to_delta(w_tape))   # lune latitude [rad]
+
+        check_fixed(gamma, varname='v')
+        check_fixed(delta, varname='w')
+
+        lats_vec, lats_inc = num.linspace(
+            -90., 90., grid_size[0], retstep=True)
+        lons_vec, lons_inc = num.linspace(
+            -30., 30., grid_size[1], retstep=True)
+        lons, lats = num.meshgrid(lons_vec, lats_vec)
+
+        kde_vals, _, _ = spherical_kde_op(
+            lats0=delta, lons0=gamma,
+            lons=lons, lats=lats, grid_size=grid_size)
+        Tmin = num.min([0., kde_vals.min()])
+        Tmax = num.max([0., kde_vals.max()])
+
+        cptfilepath = '/tmp/tempfile.cpt'
+        gmt.makecpt(
+            C='white,yellow,orange,red,magenta,violet',
+            Z=True, D=True,
+            T='%f/%f' % (Tmin, Tmax),
+            out_filename=cptfilepath, suppress_defaults=True)
+
+        grdfile = gmt.tempfilename()
+        gmt.xyz2grd(
+            G=grdfile, R=R, I='%f/%f' % (lons_inc, lats_inc),
+            in_columns=(lons.ravel(), lats.ravel(), kde_vals.ravel()),  # noqa
+            out_discard=True)
+
+        gmt.grdimage(grdfile, R=R, J=J, C=cptfilepath)
+
+        # gmt.pscontour(
+        #    in_columns=(lons.ravel(), lats.ravel(),  kde_vals.ravel()),
+        #    R=R, J=J, I=True, N=True, A=True, C=cptfilepath)
+        # -Ctmp_$out.cpt -I -N -A- -O -K >> $ps
+
+    h = 20.
+    w = h / 1.9
+
+    gmtconfig = get_gmt_config(gmtpy, h=h, w=w)
+    bin_width = 15  # tick increment
+
+    J = 'H0/%f' % (w - 5.)
+    R = '-30/30/-90/90'
+    B = 'f%ig%i/f%ig%i' % (bin_width, bin_width, bin_width, bin_width)
+    # range_arg="-T${zmin}/${zmax}/${dz}"
+
+    gmt = gmtpy.GMT(config=gmtconfig)
+
+    draw_lune_kde(
+        gmt, v_tape=v_tape, w_tape=w_tape, grid_size=(300, 300), R=R, J=J)
+    gmt.psbasemap(R=R, J=J, B=B)
+    draw_lune_arcs(gmt, R=R, J=J)
+    draw_lune_points(gmt, R=R, J=J)
+    return gmt
+
+
+
 
 def _parse_function(proto):
     # define your tfrecord again. Remember that you saved your image as a string.
@@ -271,18 +737,19 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
     add_spectrum = False
     data_traces = []
     maxsamples = 0
-    max_traces = None
+    max_traces = 1e-03
     min_traces = None
     max_trace = None
+    max_traces_block = None
     for traces in waveforms:
         for tr in traces:
         #    tr.ydata = np.abs(tr.ydata)
-            if max_traces is None:
-                max_traces = np.max(tr.ydata)
+            if max_traces_block is None:
+                max_traces_block = np.max(tr.ydata)
             else:
-                if max_traces < np.max(tr.ydata):
-                    max_traces = np.max(tr.ydata)
-            #    tr.ydata = tr.ydata/max_traces
+                if max_traces_block < np.max(tr.ydata):
+                    max_traces_block = np.max(tr.ydata)
+                tr.ydata = tr.ydata/max_traces
             if min_traces is None:
                 min_traces = np.min(tr.ydata)
             else:
@@ -308,7 +775,9 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
             #tr.lowpass(4, 20.2)
             tr.highpass(4, 0.4)
             if norm is True:
-                tr.ydata = tr.ydata/np.max(tr.ydata)
+                tr.ydata = tr.ydata/max_traces_block
+            #    tr.ydata = tr.ydata/np.max(tr.ydata)
+
             nsamples = len(tr.ydata)
             data = tr.ydata
 
@@ -336,7 +805,7 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
                 traces_coll.append(tr.ydata)
         #nsamples = len(traces_coll)
         data_traces.append(traces_coll)
-
+        #trd.snuffle(traces)
     # normalize coordinates
     if multilabel is True and events is not None:
         lons = []
@@ -404,16 +873,34 @@ def bnn_detector_data(waveforms, max_traces, events=True, multilabel=False,
                             mtqt_p = mtqt_ps[i]
                             if mechanism_and_location is True:
                                 labels.append([mtqt_p[0]/max_rho,
-                                               mtqt_p[1]/((3/4)*pi),
-                                               0.5-(mtqt_p[2]/(1/3))*0.5,
+                                               0.5-(mtqt_p[1]/(1/3))*0.5,
+                                               0.5-(mtqt_p[1]/((3/8)*pi))*0.5,
                                                mtqt_p[3]/(360),
                                                0.5-(mtqt_p[4]/(90))*0.5,
                                                mtqt_p[5]/1,
                                                lats[i], lons[i], depths[i]])
+                                #event.moment_tensor = mt
+                                # p = mtqt_p
+                                # rho, v, w, kappa, sigma, h = p[0], p[1], p[2], p[3], p[4], p[5]
+                                # rho = rho*max_rho
+                                # v = (1/3)-(((1/3)*2)*v)
+                                # w = ((3/8)*pi)-((((3/8)*pi)*2)*w)
+                                # kappa = kappa*360.
+                                # sigma = 90-((180)*sigma)
+                                # h = h
+                                #
+                                # M2 = tt152cmt(rho, v, w, kappa, sigma, h)
+                                #
+                                # M2 = change_basis(M2, 1, 2)
+                                # mt = moment_tensor.MomentTensor(mnn=M2[0], mee=M2[1], mdd=M2[2], mne=M2[3], mnd=M2[4], med=M2[5])
+                                # print(rho, v, w, kappa, sigma, h, mt)
+                                # print(kill)
+
+
                             else:
                                 labels.append([mtqt_p[0]/max_rho,
-                                               mtqt_p[1]/((3/4)*pi),
-                                               0.5-(mtqt_p[2]/(1/3))*0.5,
+                                               0.5-(mtqt_p[1]/(1/3))*0.5,
+                                               0.5-(mtqt_p[1]/((3/8)*pi))*0.5,
                                                mtqt_p[3]/(360),
                                                0.5-(mtqt_p[4]/(90))*0.5,
                                                mtqt_p[5]/1])
@@ -711,7 +1198,8 @@ def get_scn_mechs():
         mt = moment_tensor.MomentTensor(strike=float(i[16]), dip=float(i[17]), rake=float(i[18]),
                                         magnitude=float(i[5]))
         event = model.event.Event(lat=float(i[7]), lon=float(i[8]), depth=float(i[9]),
-                                  moment_tensor=mt, magnitude=float(i[5]))
+                                  moment_tensor=mt, magnitude=float(i[5]),
+                                  time=util.str_to_time(i[1][0:4]+"-"+i[1][5:7]+"-"+i[1][8:]+" "+i[2]))
         events.append(event)
     return events
 
@@ -719,13 +1207,13 @@ def get_scn_mechs():
 @ray.remote
 def get_parallel_dc(i, targets, store_id, noised, real_noise_traces, post, pre, no_events, stations, mod, params, strikes, dips, rakes,
                     source_type="DC", mechanism=True, multilabel=True, maxvals=None, batch_loading=500, npm=0,
-                    dump_full=False, seiger1f=True, path_count=0, paths_disks=None, con_line=True):
+                    dump_full=False, seiger1f=False, path_count=0, paths_disks=None, con_line=True):
     engine = LocalEngine(store_superdirs=['gf_stores'])
     store = engine.get_store(store_id)
     lat, lon, depth = params
     depth_max, depth_min, lat_max, lat_min, lon_max, lon_min = maxvals
     traces_uncuts = []
-    tracess = []
+    traces = []
     sources = []
     events = []
     data_events = []
@@ -738,6 +1226,7 @@ def get_parallel_dc(i, targets, store_id, noised, real_noise_traces, post, pre, 
     for strike in strikes:
         for dip in dips:
             for rake in rakes:
+                traces = []
                 event = scenario.gen_random_tectonic_event(i, magmin=-0.5, magmax=3.)
                 source_dc = DCSource(
                     lat=lat,
@@ -748,7 +1237,7 @@ def get_parallel_dc(i, targets, store_id, noised, real_noise_traces, post, pre, 
                     rake=rake,
                     magnitude=mag)
                 response = engine.process(source_dc, targets)
-                traces = response.pyrocko_traces()
+                traces_syn = response.pyrocko_traces()
                 event.lat = source_dc.lat
                 event.lon = source_dc.lon
                 event.depth = source_dc.depth
@@ -758,7 +1247,7 @@ def get_parallel_dc(i, targets, store_id, noised, real_noise_traces, post, pre, 
                 if dump_full is True:
                     traces_uncut = copy.deepcopy(traces)
                     traces_uncuts.append(traces_uncut)
-                for tr in traces:
+                for tr in traces_syn:
                     for st in stations:
                         if st.station == tr.station:
                             processed = False
@@ -771,7 +1260,17 @@ def get_parallel_dc(i, targets, store_id, noised, real_noise_traces, post, pre, 
                                 depth = source_dc.depth
                                 arrival = store.t('begin', (depth, dist))
                                 if processed is False:
+                                    data_zeros = np.zeros(int(30*(1/tr.deltat)))
+                                    t1 = trace.Trace(
+                                        station=tr.station, channel=tr.channel, deltat=tr.deltat, tmin=event.time, ydata=data_zeros)
                                     tr.chop(arrival-pre, arrival+post)
+                                    tr.shift(tr.tmin+event.time)
+
+                                    t1.add(tr)
+                                    traces.append(t1)
+                                #    io.save(t1, "kills")
+                                    #tr.resample(1./2.)
+                                    #tr.chop(event.time+1,event.time+30)
                                     processed = True
                                 else:
                                     pass
@@ -836,7 +1335,7 @@ def get_parallel_dc(i, targets, store_id, noised, real_noise_traces, post, pre, 
 @ray.remote
 def get_parallel_mtqt(i, targets, store_id, noised, real_noise_traces, post, pre, no_events, stations, mod, params, strikes, dips, rakes,
                     source_type="MTQT", mechanism=True, multilabel=True, maxvals=None, batch_loading=500, npm=0,
-                    dump_full=False, seiger1f=False, path_count=0, paths_disks=None, con_line=True, max_rho=0.):
+                    dump_full=False, seiger1f=True, path_count=0, paths_disks=None, con_line=True, max_rho=0.):
     if seiger1f is True:
         engine = LocalEngine(store_superdirs=['/diska/home/steinberg/gf_stores'])
     else:
@@ -875,8 +1374,7 @@ def get_parallel_mtqt(i, targets, store_id, noised, real_noise_traces, post, pre
                 #        mt_comp = mt_comp/mt.moment
 
                     mt_input.append(mt_comp)
-                rho, v, u, kappa, sigma, h = cmt2tt15(np.array(mt_input))
-
+                rho, v, w, kappa, sigma, h = cmt2tt15(np.array(mt_input))
                 try:
                     kappa = kappa[0]
                     sigma = sigma[0]
@@ -885,28 +1383,52 @@ def get_parallel_mtqt(i, targets, store_id, noised, real_noise_traces, post, pre
                     kappa = kappa
                     sigma = sigma
                     h = h
-                event.moment_tensor = mt
-                source_mtqt = MTQTSource(
-                    lon=lon,
-                    lat=lat,
-                    depth=depth,
-                    u=u,
-                    v=v,
-                    kappa=kappa,
-                    sigma=sigma,
-                    h=h,
-                    magnitude=mt.magnitude
-                )
+
+                source_mtqt = MTSource(
+                     lat=lat,
+                     lon=lon,
+                     depth=depth,
+                     mnn=mt.mnn,
+                     mee=mt.mee,
+                     mdd=mt.mdd,
+                     mne=mt.mne,
+                     mnd=mt.mnd,
+                     med=mt.med)
+
+                # source_mtqt = DCSource(
+                #      lat=lat,
+                #      lon=lon,
+                #      depth=depth,
+                #      strike=strike,
+                #      dip=dip,
+                #      rake=rake,
+                #     magnitude=mt.magnitude
+                #      )
+
+               #  source_mtqt = MTQTSource(
+               #     lon=lon,
+               #     lat=lat,
+               #     depth=depth,
+               #     u=u,
+               #     v=v,
+               #     kappa=kappa,
+               #     sigma=sigma,
+               #     h=h,
+               #     magnitude=mt.magnitude
+               # )#
+
                 response = engine.process(source_mtqt, targets)
-                traces = response.pyrocko_traces()
+                traces_synthetic = response.pyrocko_traces()
                 event.lat = source_mtqt.lat
                 event.lon = source_mtqt.lon
                 event.depth = source_mtqt.depth
+                event.moment_tensor = mt
 
                 if dump_full is True:
                     traces_uncut = copy.deepcopy(traces)
                     traces_uncuts.append(traces_uncut)
-                for tr in traces:
+                traces = []
+                for tr in traces_synthetic:
                     for st in stations:
                         if st.station == tr.station:
                             processed = False
@@ -919,7 +1441,15 @@ def get_parallel_mtqt(i, targets, store_id, noised, real_noise_traces, post, pre
                                 depth = source_mtqt.depth
                                 arrival = store.t('begin', (depth, dist))
                                 if processed is False:
+                                    data_zeros = np.zeros(int(30*(1/tr.deltat)))
+                                    t1 = trace.Trace(
+                                        station=tr.station, channel=tr.channel, deltat=tr.deltat, tmin=event.time, ydata=data_zeros)
                                     tr.chop(arrival-pre, arrival+post)
+                                    tr.shift(tr.tmin+event.time)
+
+                                    t1.add(tr)
+                                    traces.append(t1)
+
                                     processed = True
                                 else:
                                     pass
@@ -930,15 +1460,17 @@ def get_parallel_mtqt(i, targets, store_id, noised, real_noise_traces, post, pre
                                               ydata=randdata)
                     if noised is True:
                         tr.add(white_noise)
-                max_traces = None
-                mtqt_ps = [[rho, u, v, kappa, sigma, h]]
+            #    max_traces = 1e-3
+                max_traces = 1e-03
+
+                mtqt_ps = [[rho, v, w, kappa, sigma, h]]
 
                 data_event, label_event, nstations, nsamples = bnn_detector_data([traces], max_traces, events=[event], multilabel=multilabel, mechanism=mechanism, sources=[source_mtqt],
                                                                                     parallel=True, min_depth=depth_min, max_depth=depth_max, max_lat=lat_max, min_lat=lat_min, max_lon=lon_max, min_lon=lon_min, source_type=source_type, mtqt_ps=mtqt_ps, con_line=con_line, max_rho=max_rho)
                 data_events.append(data_event)
                 labels_events.append(label_event)
                 events.append(event)
-                mtqt_ps.append([rho, u, v, kappa, sigma, h])
+                mtqt_ps.append([rho, v, w, kappa, sigma, h])
                 if batch_loading == 1:
                     if dump_full is True:
                         f = open("grids/grid_%s_SDR%s_%s_%s" % (i, strike, dip, rake), 'wb')
@@ -953,7 +1485,7 @@ def get_parallel_mtqt(i, targets, store_id, noised, real_noise_traces, post, pre
                     traces_uncuts = []
 
                 else:
-                    if count == batch_loading:
+                    if count == batch_loading or npm_rem<batch_loading:
 
                         npm_rem = npm_rem - batch_loading
                         if dump_full is True:
@@ -962,7 +1494,7 @@ def get_parallel_mtqt(i, targets, store_id, noised, real_noise_traces, post, pre
                             f.close()
                         if seiger1f is True:
                             free = os.statvfs(current_path)[0]*os.statvfs(current_path)[4]
-                            if free < 40000:
+                            if free < 80000:
                                 current_path = paths_disks[path_count+1]
                                 path_count = path_count + 1
                             f = open(current_path+"/batch_%s_grid_%s_SDR%s_%s_%s" % (count, i, strike, dip, rake), 'wb')
@@ -979,15 +1511,6 @@ def get_parallel_mtqt(i, targets, store_id, noised, real_noise_traces, post, pre
                         traces_uncuts = []
                         mtqt_ps = []
 
-                    elif npm_rem<batch_loading:
-                        count = 0
-                        data_events = []
-                        labels_events = []
-                        events = []
-                        traces_uncuts = []
-                        mtqt_ps = []
-
-
 
                     else:
                         count = count+1
@@ -995,13 +1518,13 @@ def get_parallel_mtqt(i, targets, store_id, noised, real_noise_traces, post, pre
 
 
 def generate_test_data_grid(store_id, nevents=50, noised=False,
-                            real_noise_traces=None, strike_min=180.,
-                            strike_max=360., strike_step=2,
-                            dip_min=60., dip_max=80., dip_step=2.,
-                            rake_min=-170., rake_max=-130., rake_step=2.,
+                            real_noise_traces=None, strike_min=320.,
+                            strike_max=360., strike_step=10,
+                            dip_min=70., dip_max=78., dip_step=2.,
+                            rake_min=-162., rake_max=-152., rake_step=4.,
                             mag_min=4.4, mag_max=4.5, mag_step=0.1,
                             depth_step=200., zmin=7000., zmax=7400.,
-                            dimx=0.02, dimy=0.02, center=None, source_type="MTQT2",
+                            dimx=0.04, dimy=0.04, center=None, source_type="MTQT2",
                             kappa_min=0, kappa_max=2*pi, kappa_step=0.05,
                             sigma_min=-pi/2, sigma_max=pi/2, sigma_step=0.05,
                             h_min=0, h_max=1, h_step=0.05,
@@ -1014,8 +1537,8 @@ def generate_test_data_grid(store_id, nevents=50, noised=False,
     mod = landau_layered_model()
     paths_disks = ["/data1/steinberg/grid_ml/", "/data2/steinberg/grid_ml/", "/data3/steinberg/grid_ml/", "/diskb/steinberg/grid_ml/", "/dev/shm/steinberg/grid_ml/"]
     if source_type == "MTQT2":
-        rake_min = rake_min+0.01
-        rake_max = rake_max-0.01
+        rake_min = rake_min+0.0001
+        rake_max = rake_max-0.0001
 
     engine = LocalEngine(store_superdirs=['gf_stores'])
     store = engine.get_store(store_id)
@@ -1028,7 +1551,7 @@ def generate_test_data_grid(store_id, nevents=50, noised=False,
     waveforms_noise = []
     sources = []
     #change stations
-    stations = model.load_stations("ridgecrest/stations_dist.txt")
+    stations = model.load_stations("ridgecrest/data/events/stations.pf")
     targets = []
     events = []
     mean_lat = []
@@ -1074,18 +1597,40 @@ def generate_test_data_grid(store_id, nevents=50, noised=False,
         depths = []
         events = []
         params = []
+        strikes = []
+        rakes = []
+        dips = []
+        magnitudes = []
     if use_coords_from_input is True:
         data_dir = "ridgecrest/data/events/"
         pathlist = Path(data_dir).glob('ev*/')
+        print(data_dir)
         for path in sorted(pathlist):
 
             path = str(path)
             events.append(model.load_events(path+"/event.txt")[0])
-
+        times = []
         for event_scn in events:
+            print(event_scn)
+
             lats.append(event_scn.lat)
             lons.append(event_scn.lon)
             depths.append(event_scn.depth)
+            times.append(event_scn.time)
+    #        strikes.append(event_scn.moment_tensor.strike1)
+    #        dips.append(event_scn.moment_tensor.dip1)
+    #        rakes.append(event_scn.moment_tensor.rake1)
+    #        magnitudes.append(event_scn.magnitude)
+        events_scn = get_scn_mechs()
+        for event_scn in events_scn:
+
+            if event_scn.time in times:
+            #if event_scn.magnitude > 4.1:
+                strikes.append(event_scn.moment_tensor.strike1)
+                dips.append(event_scn.moment_tensor.dip1)
+                rakes.append(event_scn.moment_tensor.rake1)
+                magnitudes.append(event_scn.magnitude)
+
             params.append([event_scn.lat, event_scn.lon, event_scn.depth])
 
     if use_coords_from_scn is True:
@@ -1095,16 +1640,22 @@ def generate_test_data_grid(store_id, nevents=50, noised=False,
             lons.append(event_scn.lon)
             depths.append(event_scn.depth)
             params.append([event_scn.lat, event_scn.lon, event_scn.depth])
+            strikes.append(event_scn.moment_tensor.strike1)
+            dips.append(event_scn.moment_tensor.dip1)
+            rakes.append(event_scn.moment_tensor.rake1)
+            magnitudes.append(event_scn.magnitude)
+    if use_coords_from_input is False:
 
-    strikes = np.arange(strike_min, strike_max, strike_step)
-    dips = np.arange(dip_min, dip_max, dip_step)
-    rakes = np.arange(rake_min, rake_max, rake_step)
+        strikes = np.arange(strike_min, strike_max, strike_step)
+        dips = np.arange(dip_min, dip_max, dip_step)
+        rakes = np.arange(rake_min, rake_max, rake_step)
+        magnitudes = np.arange(mag_min, mag_max, mag_step)
+
     kappas = np.arange(kappa_min, kappa_max, kappa_step)
     sigmas = np.arange(sigma_min, sigma_max, sigma_step)
     vs = np.arange(v_min, v_max, v_step)
     us = np.arange(u_min, u_max, u_step)
     hs = np.arange(h_min, h_max, h_step)
-    magnitudes = np.arange(mag_min, mag_max, mag_step)
 
     i = 0
     # loop over all mechanisms needed to desribe each grid point
@@ -1181,6 +1732,7 @@ def generate_test_data_grid(store_id, nevents=50, noised=False,
 
             ray.init(num_cpus=num_cpus-1)
             npm = len(lats)*len(lons)*len(depths)
+
             npm_geom = len(strikes)*len(dips)*len(rakes)
             maxvals = [np.max(depths), np.min(depths), np.max(lats), np.min(lats), np.max(lons), np.min(lons)]
             f = open("maxvals", 'wb')
@@ -1407,8 +1959,8 @@ def rgb2gray(rgb):
     return np.dot(rgb[..., :3], [0.2989, 0.5870, 0.1140])
 
 
-def load_data(data_dir, store_id, scenario=False, stations=None, pre=2,
-              post=1.5, gf_freq=None):
+def load_data(data_dir, store_id, scenario=False, stations=None, pre=0.5,
+              post=3, gf_freq=None):
     mod = landau_layered_model()
     engine = LocalEngine(store_superdirs=['/home/asteinbe/gf_stores'])
     store = engine.get_store(store_id)
@@ -1446,8 +1998,9 @@ def load_data(data_dir, store_id, scenario=False, stations=None, pre=2,
                     targets.append(target)
             well_event = False
             traces = []
-            for tr in traces_loaded:
-                for st in stations:
+            tracess = []
+            for st in stations:
+                for tr in traces_loaded:
                     if st.station == tr.station:
                         if len(tr.ydata) > 420:
                             traces.append(tr)
@@ -1462,9 +2015,9 @@ def load_data(data_dir, store_id, scenario=False, stations=None, pre=2,
                 else:
                     well_event = True
             if len(event.tags) == 0 or well_event is True:
-                for tr in traces:
-                    nsamples = len(tr.ydata)
-                    for st in stations:
+                for st in stations:
+                    for tr in traces:
+                        nsamples = len(tr.ydata)
                         if st.station == tr.station:
                             dists = (orthodrome.distance_accurate50m(event.lat,
                                                                      event.lon,
@@ -1483,10 +2036,17 @@ def load_data(data_dir, store_id, scenario=False, stations=None, pre=2,
                                 #    try:
                                         if gf_freq is not None:
                                             tr.resample(1./gf_freq)
+
                                         try:
 
+                                        #    tr.chop(event.time+arrival.t-pre, event.time+arrival.t+post)
+                                        #    tr.chop(event.time+arrival.t-pre, event.time+arrival.t+post)
+                                            data_zeros = np.zeros(int(30*(1/tr.deltat)))
+                                            t1 = trace.Trace(
+                                                station=tr.station, channel=tr.channel, deltat=tr.deltat, tmin=event.time, ydata=data_zeros)
                                             tr.chop(event.time+arrival.t-pre, event.time+arrival.t+post)
-
+                                            t1.add(tr)
+                                            tracess.append(t1)
                                             processed = True
 
                                         except:
@@ -1497,11 +2057,11 @@ def load_data(data_dir, store_id, scenario=False, stations=None, pre=2,
                                 else:
                                     pass
                     nsamples = len(tr.ydata)
-                traces_event.append(traces)
+                traces_event.append(tracess)
             nsamples = len(tr.ydata)
             events.append(event)
-            waveforms.append(traces)
-        except pyrocko.io.io_common.FileLoadError:
+            waveforms.append(tracess)
+        except:
             pass
     return waveforms, nsamples, len(stations), events
 
@@ -1643,11 +2203,13 @@ def my2dGenerator(filenames):
             data = []
             labels = []
             f.close()
+            s = 0
             for d, l in zip(data_events, labels_events):
                 #labels.append(l)
                 d = np.asarray(d)
                 d = d.reshape((1,)+d.shape+(1,))
                 #data.append(d)
+                s = s+1
                 yield np.array(d), np.array(l)
 
 
@@ -1859,7 +2421,7 @@ def plot_mechanisms_on_map(events, stations, center):
     m = Map(
         lat=center[0],
         lon=center[1],
-        radius=50000.,
+        radius=150000.,
         width=30., height=30.,
         show_grid=False,
         show_topo=True,
@@ -1934,11 +2496,90 @@ def plot_mechanisms_on_map(events, stations, center):
 
     m.save('automap_area.png')
 
+
+
+def plot_mechanisms_on_map_fuzzy(events_list, stations, center):
+    from pyrocko.plot.automap import Map
+    from pyrocko.example import get_example_data
+    from pyrocko import model, gmtpy
+    from pyrocko import moment_tensor as pmt
+
+    gmtpy.check_have_gmt()
+
+    # Generate the basic map
+    m = Map(
+        lat=center[0],
+        lon=center[1],
+        radius=50000.,
+        width=30., height=30.,
+        show_grid=False,
+        show_topo=True,
+        color_dry=(238, 236, 230),
+        topo_cpt_wet='light_sea_uniform',
+        topo_cpt_dry='light_land_uniform',
+        illuminate=True,
+        illuminate_factor_ocean=0.15,
+        show_rivers=False,
+        show_plates=True)
+
+    # Draw some larger cities covered by the map area
+    m.draw_cities()
+
+    # Generate with latitute, longitude and labels of the stations
+    lats = [s.lat for s in stations]
+    lons = [s.lon for s in stations]
+    labels = ['.'.join(s.nsl()) for s in stations]
+
+    # Stations as black triangles. Genuine GMT commands can be parsed by the maps'
+    # gmt attribute. Last argument of the psxy function call pipes the maps'
+    # pojection system.
+    m.gmt.psxy(in_columns=(lons, lats), S='t20p', G='black', *m.jxyr)
+
+    # Station labels
+    for i in range(len(stations)):
+        m.add_label(lats[i], lons[i], labels[i])
+
+    beachball_symbol = 'd'
+    factor_symbl_size = 5.0
+    for events in events_list:
+        for ev in events:
+                mts.append(mtm.MomentTensor.from_values(
+                (ev.moment_tensor.strike1, ev.moment_tensor.dip1, ev.moment_tensor.rake1)))
+
+        mag = ev.magnitude
+
+        devi = ev.moment_tensor.deviatoric()
+        beachball_size = mag*factor_symbl_size
+        mt = devi.m_up_south_east()
+        mt = mt / ev.moment_tensor.scalar_moment() \
+            * pmt.magnitude_to_moment(5.0)
+        m6 = pmt.to6(mt)
+        data = (ev.lon, ev.lat, 10) + tuple(m6) + (1, 0, 0)
+
+        if m.gmt.is_gmt5():
+            kwargs = dict(
+                M=True,
+                S='%s%g' % (beachball_symbol[0], (beachball_size) / gmtpy.cm))
+        else:
+            kwargs = dict(
+                S='%s%g' % (beachball_symbol[0],
+                            (beachball_size)*2 / gmtpy.cm))
+
+        m.gmt.psmeca(
+            in_rows=[data],
+            G=gmtpy.color('chocolate1'),
+            E='white',
+            W='1p,%s' % gmtpy.color('chocolate3'),
+            *m.jxyr,
+            **kwargs)
+
+    m.save('automap__fuzzy_area.png')
+
 def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                  multilabel=True, data_dir=None, train_model=True,
                  detector_only=False, validation_data=None, wanted_start=None,
                  wanted_end=None, mode="detector_only", parallel=True,
-                 batch_loading=50, source_type="DC",
+                 batch_loading=50, source_type="MTQT2",
                  perturb_val=True, con_line=False, to_line=False,
                  store_id="mojave_large_ml",
                  mechanism_and_location=True,
@@ -1996,7 +2637,7 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
     else:
         if parallel is True:
             if len(os.listdir('grid_ml/')) == 0:
-                batch_loading = 50
+                batch_loading = 500
                 waveforms_events = generate_test_data_grid(store_id, nevents=1200, batch_loading=batch_loading, source_type=source_type, con_line=con_line, parallel=parallel)
             else:
                 print("Grid already calculated")
@@ -2201,20 +2842,31 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
             #model.add(Conv2D(filters=10, kernel_size=(300,300), activation="relu"))
             #model.add(Conv2D(filters=20, kernel_size=(30,30), activation="relu"))
             else:
-            #    model.add(Conv2D(filters=64, kernel_size=(3,3), activation="relu"))
+                model.add(Conv2D(filters=64, kernel_size=(3,3), activation="relu"))
             #    model.add(MaxPooling2D(41,1))
-            #    model.add(Conv2D(filters=32, kernel_size=(3,3), activation="relu"))
-                model.add(Conv2D(filters=16, kernel_size=(3,3), activation="relu", name='block1_conv1'))
+                model.add(Dropout(0.3))
+                model.add(MaxPooling2D(pool_size=2))
+
+                model.add(Conv2D(filters=32, kernel_size=(3,3), activation="relu"))
+        #        model.add(Conv2D(filters=64, kernel_size=(3,3), activation="relu", name='block1_conv1'))
+                model.add(MaxPooling2D(pool_size=2))
+                model.add(Dropout(0.3))
+
+                model.add(Conv2D(filters=8, kernel_size=(3,3), activation="relu", name='block1_conv1'))
+            #    model.add(MaxPooling2D(pool_size=2))
+                model.add(Dropout(0.3))
+
     #        model.add(Conv2D(filters=32, kernel_size=(3,3), activation="relu"))
 
         #    model.add(MaxPooling2D(20,20))
         #    model.add(LSTM(2))
 
             #model.add(Conv2D(filters=1, kernel_size=(1,3), activation="relu"))
-                model.add(Flatten())
-            #    model.add(Dense(256, activation='relu'))
 
-            #    model.add(Dense(40, activation='relu'))
+                model.add(Flatten())
+                model.add(Dense(nstations, activation='relu'))
+
+                model.add(Dense(nlabels*10, activation='relu'))
         else:
         #    model.add(Dense(512, activation='relu', input_dim=nsamples))
 
@@ -2417,9 +3069,9 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                             my_validation_batch_generator = WaveformImageGenerator(paths, batch_size)
                             my_training_batch_generator = WaveformImageGenerator(paths, batch_size)
                     model.fit_generator(generator=my_training_batch_generator,
-                                       steps_per_epoch = 50,
+                                       steps_per_epoch = 100,
                                       verbose=1,
-                                       epochs = 200, callbacks=[checkpointer])
+                                       epochs = 10, callbacks=[checkpointer])
                     #x_val = dat
                     #y_val = labels
 
@@ -2598,23 +3250,37 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
         max_rho, v, u, kappa, sigma, h = cmt2tt15(np.array(mt_use_max))
         pred_ms = []
         real_ms = []
+
+    #    import keract
+    #    model = tf.keras.models.load_model('model_mechanism')
+        ##data_events = np.asarray(data_events)
+    #    input = data_events.reshape((data_events.shape[0],)+data_events.shape[1:])
+    #    input = data_events[0]
+    #    input = input.reshape((1,)+input.shape)
+
+    #    activations = keract.get_activations(model, input)
+    #    keract.display_heatmaps(activations, input, save=True)
         if conv1d is False:
             pred = [pred]
         if source_type == "MTQT" or source_type=="MTQT2":
-            for p in pred:
-                if conv1d is False:
-                    p = p[0]
 
+            for p in pred:
+            #    if conv1d is False:
+            #        p = p[0]
+                p = p[0]
+                print(p)
                 rho, v, w, kappa, sigma, h = p[0], p[1], p[2], p[3], p[4], p[5]
                 rho = rho*max_rho
-                v = v*((3/4)*pi)
-                w = (1/3)-(((1/3)*2)*w)
+                v = (1/3)-(((1/3)*2)*v)
+                w = ((3/8)*pi)-((((3/8)*pi)*2)*w)
                 kappa = kappa*360.
                 sigma = 90-((180)*sigma)
                 h = h
 
                 M2 = tt152cmt(rho, v, w, kappa, sigma, h)
+
                 M2 = change_basis(M2, 1, 2)
+
                 mt = moment_tensor.MomentTensor(mnn=M2[0], mee=M2[1], mdd=M2[2], mne=M2[3], mnd=M2[4], med=M2[5])
                 pred_ms.append(mt)
 
@@ -2629,8 +3295,8 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                 if source_type == "MTQT" or source_type=="MTQT2":
                     rho, v, w, kappa, sigma, h = p[0], p[1], p[2], p[3], p[4], p[5]
                     rho = rho*max_rho
-                    v = v*((3/4)*pi)
-                    w = (1/3)-(((1/3)*2)*w)
+                    v = (1/3)-(((1/3)*2)*v)
+                    w = ((3/8)*pi)-((((3/8)*pi)*2)*w)
                     kappa = kappa*360.
                     sigma = 90-((180)*sigma)
                     h = h
@@ -2638,9 +3304,6 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                     M2 = change_basis(M2, 1, 2)
                     mt = moment_tensor.MomentTensor(mnn=M2[0], mee=M2[1], mdd=M2[2], mne=M2[3], mnd=M2[4], med=M2[5])
 
-                    #print(mt)
-                    #print(events[0])
-                    #print(kill)
                     real_ms.append(mt)
                     M2 = M2.tolist()
                     if mechanism_and_location is True:
@@ -2661,6 +3324,7 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                 axes.set_xlim(-2., 4.)
                 axes.set_ylim(-2., 2.)
                 axes.set_axis_off()
+
                 plot.beachball.plot_beachball_mpl(
                             real_m,
                             axes,
@@ -2790,18 +3454,24 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                         else:
 
                             p = vals[0]
+                            print(model)
+                            import keract
+
+                            activations = keract.get_activations(model, data_events)
+                            keract.display_heatmaps(activations, data_events[i], save=True)
 
                             rho, v, w, kappa, sigma, h = p[0], p[1], p[2], p[3], p[4], p[5]
                             #rho = rho*max_rho
-                            v = v*((3/4)*pi)
-                            w = (1/3)-(((1/3)*2)*w)
+                            v = (1/3)-(((1/3)*2)*v)
+                            w = ((3/8)*pi)-((((3/8)*pi)*2)*w)
                             kappa = kappa*360.
                             sigma = 90-((180)*sigma)
                             h = h
-
+                            print(p)
                             M2 = tt152cmt(rho, v, w, kappa, sigma, h)
                             M2 = change_basis(M2, 1, 2)
-                            m = moment_tensor.MomentTensor(mnn=-M2[0], mee=-M2[1], mdd=-M2[2], mne=-M2[3], mnd=-M2[4], med=-M2[5])
+                            print(M2)
+                            m = moment_tensor.MomentTensor(mnn=M2[0], mee=M2[1], mdd=M2[2], mne=M2[3], mnd=M2[4], med=M2[5])
                             print(m)
                             from pyrocko import plot
                             from pyrocko.plot import beachball
@@ -2823,6 +3493,8 @@ def bnn_detector(waveforms_events=None, waveforms_noise=None, load=True,
                             f = open("maxvals", 'rb')
                             depths_max, depths_min, lats_max, lats_min, lons_max, lons_min = pickle.load(f)
                             f.close()
+
+
                             lat = (-p[6]*lats_min)+(p[6]*lats_max)+lats_min
                             lon = (-p[7]*lons_min)+(p[7]*lons_max)+lons_min
                             depth = (-p[8]*depths_min)+(p[8]*depths_max)+depths_min
