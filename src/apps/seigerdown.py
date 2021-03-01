@@ -1079,4 +1079,5 @@ deoverlap='crossfade_cos')
     model.dump_events([event], fn_event)
 
     logger.info('prepared waveforms from %i stations' % len(stations))
-    subprocess.run(['jackseis', '%s/traces_disp_%s_%s.mseed' % (folder, tmin, tmax), '--output=%s' % folder + '/%(wmin_year)s/%(network)s/%(station)s/%(channel)s.D/%(network)s.%(station)s..%(channel)s.D.%(wmin)s' , '--force'])
+    # for seiscomp format:
+    # subprocess.run(['jackseis', '%s/traces_disp_%s_%s.mseed' % (folder, tmin, tmax), '--output=%s' % folder + '/%(wmin_year)s/%(network)s/%(station)s/%(channel)s.D/%(network)s.%(station)s..%(channel)s.D.%(wmin)s' , '--force'])
