@@ -312,7 +312,7 @@ if __name__ == '__main__':
         '--sites',
         dest='sites',
         metavar='SITE1,SITE2,...',
-        default='bgr, http://192.168.11.220:8080',
+        default='bgr',
     #    default='bgr, http://192.168.11.220:8080',
         help='sites to query (available: %s, default: "%%default"'
         % ', '.join(g_sites_available))
@@ -1079,4 +1079,5 @@ deoverlap='crossfade_cos')
     model.dump_events([event], fn_event)
 
     logger.info('prepared waveforms from %i stations' % len(stations))
-    subprocess.run(['jackseis', '%s/traces_disp_%s_%s.mseed' % (folder, tmin, tmax), '--output=%s' % folder + '/%(wmin_year)s/%(network)s/%(station)s/%(channel)s.D/%(network)s.%(station)s..%(channel)s.D.%(wmin)s' , '--force'])
+    # for seiscomp format:
+    # subprocess.run(['jackseis', '%s/traces_disp_%s_%s.mseed' % (folder, tmin, tmax), '--output=%s' % folder + '/%(wmin_year)s/%(network)s/%(station)s/%(channel)s.D/%(network)s.%(station)s..%(channel)s.D.%(wmin)s' , '--force'])
