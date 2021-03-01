@@ -312,7 +312,7 @@ if __name__ == '__main__':
         '--sites',
         dest='sites',
         metavar='SITE1,SITE2,...',
-        default='bgr, http://192.168.11.220:8080',
+        default='bgr',
     #    default='bgr, http://192.168.11.220:8080',
         help='sites to query (available: %s, default: "%%default"'
         % ', '.join(g_sites_available))
