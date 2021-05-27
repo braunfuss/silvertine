@@ -91,7 +91,6 @@ def locsat2pyrocko(fname):
         if idx != -1:
             idx = line.find(":")
             phase = line[idx+1:]
-            print(phase)
         idx = line.find("Component              :")
         if idx != -1:
             idx = line.find(":")

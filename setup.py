@@ -111,6 +111,7 @@ setup(
         'silvertine.mechanism',
         'silvertine.monitoring',
         'silvertine.beam_depth',
+        'silvertine.seismic_handler',
     ],
     entry_points={
         'console_scripts': [
