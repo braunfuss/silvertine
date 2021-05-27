@@ -3,9 +3,17 @@ from pyrocko.guts import Object, String, Float, List
 from collections import defaultdict
 from pyrocko.gui.pile_viewer import PhaseMarker, EventMarker
 from pyrocko import util, model
-zero_level_km = 0
 import numpy as num
 import subprocess
+from pyrocko.io import quakeml
+from pyrocko.example import get_example_data
+zero_level_km = 0
+
+catalog = 'example-catalog.xml'
+
+# read quakeml events
+qml = quakeml.QuakeML.load_xml(filename=catalog)
+
 
 def nsl_str(nsl):
     return '.'.join(nsl)

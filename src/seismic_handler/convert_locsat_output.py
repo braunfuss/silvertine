@@ -56,25 +56,32 @@ def convert_phase(phase):
     return cake_phase
 
 
-def convertlocsat2pyrocko(fname):
+def locsat2pyrocko(fname):
     f = open(fname, "r")
     file = f.readlines()
     events = []
     events_data = []
+    events_list = []
     phase_markers = []
+    events = []
+    events_data = []
+    phase_markers_all_events = []
     for line in file:
         phase = None
+        depth = None
         idx = line.find("Event ID               :")
         if idx != -1:
             idx = line.find(":")
-
             event_id = line[idx+1:]
             if event_id in events:
                 idx_event = events.index(event_id)
                 event_data = events_data[idx_event]
+                phase_markers = phase_markers_all_events[idx_event]
             else:
-                events.append(event_id)
                 event_data = []
+                phase_markers = []
+                events.append(event_id)
+
         idx = line.find("Station code           :")
         if idx != -1:
             idx = line.find(":")
@@ -83,8 +90,8 @@ def convertlocsat2pyrocko(fname):
         idx = line.find("Phase name             :")
         if idx != -1:
             idx = line.find(":")
-
             phase = line[idx+1:]
+            print(phase)
         idx = line.find("Component              :")
         if idx != -1:
             idx = line.find(":")
@@ -104,21 +111,43 @@ def convertlocsat2pyrocko(fname):
             month = time_full[idxs+1:idxs+4]
             month = monthToNum(month)
             year = time_full[idxs+5:idxs+9]
-            t = year+"-"+str(month)+"-"+str(day)+" "+ str(time)
+            t = year+"-"+str(month)+"-"+str(day)+" " + str(time)
             t = stt(t)
-            if phase is not None:
-                phase_markers.append(PhaseMarker(["0", station],
-                                                 tmin=t,
-                                                 tmax=t,
-                                                 phasename=phase,
-                                                 event_hash=ev_id))
 
         idx = line.find("Latitude               :")
         if idx != -1:
             idx = line.find("+")
-            lat = line[idx+1:]
+            lat = float(line[idx+1:])
         idx = line.find("Longitude              :")
         if idx != -1:
             idx = line.find("+")
-            long = line[idx+1:]
-            events_data.append([lat, long])
+            lon = float(line[idx+1:])
+            events_data.append([lat, lon])
+
+        idx = line.find("Depth (km)             :")
+        if idx != -1:
+            idx = line.find(":")
+            depth = float(line[idx+1:])*1000.
+
+        if phase is not None:
+            phase_markers.append(PhaseMarker(["0", station],
+                                             tmin=t,
+                                             tmax=t,
+                                             phasename=phase,
+                                             event_hash=event_id))
+        if depth is not None:
+            try:
+                event = model.event.Event(lat=lat, lon=lon, time=t, depth=depth,
+                                          tags=str(event_id))
+                events_list.append(event)
+            except:
+                pass
+        if event_id in events:
+            idx_event = events.index(event_id)
+            if len(phase_markers_all_events) > 0:
+                phase_markers_all_events[idx_event] = phase_markers
+            else:
+                phase_markers_all_events.append(phase_markers)
+        else:
+            phase_markers_all_events.append(phase_markers)
+    return events, phase_markers_all_events
