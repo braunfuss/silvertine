@@ -65,6 +65,7 @@ subcommand_descriptions = {
     'export': 'export results',
     'tag': 'add user-defined label to run directories',
     'report': 'create result report',
+    'shmconv': 'Seismic handler compat',
     'diff': 'compare two configs or other normalized silvertine YAML files',
     'qc-polarization': 'check sensor orientations with polarization analysis',
     'upgrade-config': 'upgrade config file to the latest version of silvertine',
@@ -87,6 +88,7 @@ subcommand_usages = {
     'optimize': 'optimize [options] <projectdir>',
     'monitor': 'monitor [options] <projectdir>',
     'events': 'events <configfile>',
+    'shmconv': 'task file',
     'beam': 'beams [options] <projectdir>',
     'beam_process': 'beam_process [options] <projectdir>',
     'check': 'check <configfile> <eventnames> ... [options]',
@@ -154,6 +156,7 @@ Subcommands:
     events          %(events)s
     check           %(check)s
     go              %(go)s
+    shmconv         %(shmconv)s
     forward         %(forward)s
     harvest         %(harvest)s
     cluster         %(cluster)s
@@ -390,6 +393,22 @@ def magnitude_range(option, opt_str, value, parser):
     setattr(parser.values, option.dest, mag_range)
 
 
+def command_shmconv(args):
+    def setup(parser):
+        parser.add_option(
+            '--ttt', dest='ttt', type=str, default=False,
+            help='Convert ttt')
+
+    parser, options, args = cl_parse('shmconv', args, setup)
+    fname = args[0]
+
+    if options.ttt is not False:
+        options.ttt = True
+    else:
+        from silvertine import seismic_handler
+        events, phase_markers = seismic_handler.convert_locsat_output.locsat2pyrocko(fname)
+
+
 def command_locate(args):
 
     def setup(parser):
@@ -435,6 +454,7 @@ def command_locate(args):
         parser.add_option(
             '--hybrid', dest='hybrid', type=str, default=False,
             help='associate_waveforms')
+
     parser, options, args = cl_parse('locate', args, setup)
 
     from silvertine.locate import locate1D
@@ -937,7 +957,12 @@ def command_scenario(args):
         parser.add_option(
             '--station_dropout', dest='station_dropout', type=str, default=False,
             help='t_station_dropout')
-
+        parser.add_option(
+            '--scenario_type', dest='scenario_type', type=str, default="full",
+            help='Type of scenario to be generated')
+        parser.add_option(
+            '--event_list', dest='event_list', type=str, default=False,
+            help='Use pre-determined event list as basis')
 
     parser, options, args = cl_parse('scenario', args, setup)
 
@@ -958,7 +983,8 @@ def command_scenario(args):
         lonmin=options.lonmin, lonmax=options.lonmax, depmin=options.depmin,
         depmax=options.depmax, stations_file=options.stations_file,
         shakemap=options.shakemap,
-        gf_store_superdirs=options.gf_store_superdirs)
+        gf_store_superdirs=options.gf_store_superdirs,
+        scenario_type=options.scenario_type, event_list=options.event_list)
 
 
 def command_post_shakemap(args):

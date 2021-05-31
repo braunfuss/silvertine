@@ -163,12 +163,10 @@ def rand_source(event, SourceType="MT", pressure=None, volume=None):
             moment=mt.moment)
 
     if SourceType == "VLVD":
-        if volume is None:
+        if volume is None or volume == 0:
             volume = num.random.uniform(0.001, 10000)
             pressure = pressure
-        else:
-            volume = num.random.uniform(volume*0.0001, volume*1000.)
-            volume = num.random.uniform(0.01, 1000)
+
         source = VLVDSource(
             lat=event.lat,
             lon=event.lon,
@@ -202,7 +200,7 @@ def rand_source(event, SourceType="MT", pressure=None, volume=None):
             dip=mt.dip1,
             pp=num.random.uniform(1, 1), # here change in pa
             time=event.time,
-            length=num.random.uniform(1,20)*km) # scaling!)
+            length=num.random.uniform(1, 20)*km) # scaling!)
 
     if SourceType == "Rectangular":
         length = num.random.uniform(0.0001, 0.2)*km
@@ -498,11 +496,112 @@ def fwd_shakemap_post(projdir, wanted_start=0, wanted_end=None,
     #        pass
 
 
+def get_source():
+    choice = 1
+    return source, event
+
+
+def get_source_seiger(generate_scenario_type, magmin, magmax, depmin, depmax,
+                      latmin, lonmin, latmax, lonmax, simple_induced,
+                      use_pressure=False, event=None, store_id=None):
+    if generate_scenario_type is "catalog":
+        source, event = rand_source(event, SourceType='MT')
+    if generate_scenario_type is "full":
+        choice = num.random.choice(4, 1)
+    elif generate_scenario_type == "background":
+        choice = 0
+    elif generate_scenario_type == "landau":
+        choice = 1
+    elif generate_scenario_type == "insheim":
+        choice = 1
+    elif generate_scenario_type == "quarry":
+        choice = 3
+    elif generate_scenario_type == "wantzenau":
+        choice = 4
+    if choice == 0 or choice == 2:
+        event = gen_random_tectonic_event(scenario, magmin=magmin,
+                                          magmax=magmax,
+                                          depmin=depmin,
+                                          depmax=depmax,
+                                          latmin=latmin,
+                                          latmax=latmax,
+                                          lonmin=lonmin,
+                                          lonmax=lonmax)
+
+        source, event = rand_source(event, SourceType='MT')
+
+    if choice == 1:
+        if generate_scenario_type == "insheim":
+            well_choice = 1
+        elif generate_scenario_type == "landau":
+            well_choice = 0
+        else:
+            well_choice = num.random.choice(2, 1)
+        if well_choice == 0:
+            well = "landau"
+        else:
+            well = "insheim"
+        event = gen_induced_event(scenario, magmin=magmin,
+                                  magmax=magmax, depmin=depmin,
+                                  depmax=depmax, latmin=latmin,
+                                  latmax=latmax, lonmin=lonmin,
+                                  lonmax=lonmax, well=well,
+                                  simple_induced=simple_induced)
+        if use_pressure is True:
+            pressure = 0.
+            vol = 0.
+            for itimes, time in enumerate(times_kuper):
+                if event.time > time-3600. and event.time <= time:
+                    pressure = pressure + pressure_kuper[itimes]
+                    vol = vol + rate_kuper[itimes]
+        else:
+            pressure = None
+            vol = None
+        source, event = rand_source(event, SourceType='VLVD', pressure=pressure, volume=vol)
+        event.tags.append("clvd_moment:"+str(source.clvd_moment))
+        event.tags.append("azimuth:"+str(source.azimuth))
+        event.tags.append("dip:"+str(source.azimuth))
+        event.tags.append("volume_change:"+str(source.volume_change))
+
+    if choice == 3:
+        # kirchlinteln event type
+        quarry_choice = num.random.choice(3, 1)
+        if quarry_choice == 0:
+            event = gen_random_tectonic_event(scenario, magmin=0,
+                                              magmax=2.5, depmin=0.01,
+                                              depmax=0.2, latmin=49.2,
+                                              latmax=49.24, lonmin=8.0,
+                                              lonmax=8.08)
+
+        if quarry_choice == 1:
+            event = gen_random_tectonic_event(scenario, magmin=0,
+                                              magmax=2.5, depmin=0.01,
+                                              depmax=0.2, latmin=49.155,
+                                              latmax=49.175, lonmin=7.97,
+                                              lonmax=8.036)
+
+        if quarry_choice == 2:
+            event = gen_random_tectonic_event(scenario, magmin=0,
+                                              magmax=2.5, depmin=0.01,
+                                              depmax=0.2, latmin=49.178,
+                                              latmax=49.185, lonmin=8.01,
+                                              lonmax=8.035)
+        event.tags = ["quarry"]
+        store_id = "urg_100hz"
+        store_id = "insheim_100hz"
+
+        source, event = rand_source(event, SourceType='explosion')
+
+    return source, event, store_id
+
+
 def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,
                 magmax, depmin, depmax, latmin, latmax, lonmin, lonmax,
                 stations_file, gf_store_superdirs, shakemap=True,
                 add_noise=True, t_station_dropout=False,
-                simple_induced=True, seiger=True):
+                simple_induced=True, seiger=True,
+                generate_scenario_type="full", event_list=None,
+                respones="responses_bgr.xml"):
 
     # random station dropout
     if seiger is True:
@@ -510,86 +609,34 @@ def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,
         mean_pressure = num.mean(pressure_kuper)
         mean_temp = num.mean(temp_kuper)
         mean_rate = num.mean(rate_kuper)
+
     if gf_store_superdirs is None:
         engine = gf.LocalEngine(use_config=True)
     else:
         engine = gf.LocalEngine(store_superdirs=[gf_store_superdirs])
     if t_station_dropout is True:
         from pyrocko.io import stationxml
-        station_xml = stationxml.load_xml(filename='responses_bgr.xml')
+        station_xml = stationxml.load_xml(filename=responses)
+
     for scenario in range(scenarios):
         generated_scenario = False
         while generated_scenario is False:
             try:
-                choice = num.random.choice(20, 1)
-                if choice == 0 or choice == 2:
-                    event = gen_random_tectonic_event(scenario, magmin=magmin,
-                                                      magmax=magmax, depmin=depmin,
-                                                      depmax=depmax, latmin=latmin,
-                                                      latmax=latmax, lonmin=lonmin,
-                                                      lonmax=lonmax)
-                    store_id = "insheim_100hz"
+                if seiger is True:
+                    if generate_scenario_type is "catalog":
+                        choice = num.random.choice(len(event_list), 1)
+                        base_event = event_list[choice]
 
-                    source, event = rand_source(event, SourceType='MT')
-
-                if choice == 1 or choice >3:
-                    well_choice = num.random.choice(2, 1)
-                    if well_choice == 0:
-                        well = "landau"
-                        store_id = "landau_100hz"
-                    else:
-                        well = "insheim"
-                        store_id = "insheim_100hz"
-                    event = gen_induced_event(scenario, magmin=magmin,
-                                              magmax=magmax, depmin=depmin,
-                                              depmax=depmax, latmin=latmin,
-                                              latmax=latmax, lonmin=lonmin,
-                                              lonmax=lonmax, well=well,
-                                              simple_induced=simple_induced)
-                    if seiger is True:
-                        pressure = 0.
-                        vol = 0.
-                        for itimes, time in enumerate(times_kuper):
-                            if event.time > time-3600. and event.time <= time:
-                                pressure = pressure + pressure_kuper[itimes]
-                                vol = vol + rate_kuper[itimes]
-                    else:
-                        pressure = None
-                        vol = None
-                    source, event = rand_source(event, SourceType='VLVD', pressure=pressure, volume=vol)
-                    event.tags.append("clvd_moment:"+str(source.clvd_moment))
-                    event.tags.append("azimuth:"+str(source.azimuth))
-                    event.tags.append("dip:"+str(source.azimuth))
-                    event.tags.append("volume_change:"+str(source.volume_change))
-
-                if choice == 3:
-                    # kirchlinteln event type
-                    quarry_choice = num.random.choice(3, 1)
-                    if quarry_choice == 0:
-                        event = gen_random_tectonic_event(scenario, magmin=0,
-                                                          magmax=2.5, depmin=0.01,
-                                                          depmax=0.2, latmin=49.2,
-                                                          latmax=49.24, lonmin=8.0,
-                                                          lonmax=8.08)
-
-                    if quarry_choice == 1:
-                        event = gen_random_tectonic_event(scenario, magmin=0,
-                                                          magmax=2.5, depmin=0.01,
-                                                          depmax=0.2, latmin=49.155,
-                                                          latmax=49.175, lonmin=7.97,
-                                                          lonmax=8.036)
-
-                    if quarry_choice == 2:
-                        event = gen_random_tectonic_event(scenario, magmin=0,
-                                                          magmax=2.5, depmin=0.01,
-                                                          depmax=0.2, latmin=49.178,
-                                                          latmax=49.185, lonmin=8.01,
-                                                          lonmax=8.035)
-                    event.tags = ["quarry"]
-                    store_id = "urg_100hz"
-                    store_id = "insheim_100hz"
-
-                    source, event = rand_source(event, SourceType='explosion')
+                    source, event = get_source_seiger(generate_scenario_type,
+                                                      magmin, magmax, depmin,
+                                                      depmax, latmin, lonmin,
+                                                      latmax, lonmax,
+                                                      simple_induced,
+                                                      use_pressure=use_pressure,
+                                                      event=base_event,
+                                                      store_id=store_id)
+                else:
+                    source, event = get_source()
 
                 savedir = projdir + '/scenario_' + str(scenario) + '/'
                 if not os.path.exists(savedir):
@@ -641,7 +688,8 @@ def gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,
                     event.tags = ["no_event"]
                 if add_noise is True and choice != 2:
                     add_white_noise(synthetic_traces)
-                noise_events = gen_noise_events(targets, synthetic_traces, engine)
+                noise_events = gen_noise_events(targets, synthetic_traces,
+                                                engine)
 
                 events = [event]
                 save(synthetic_traces, events, stations, savedir,
@@ -680,9 +728,11 @@ def silvertineScenario(projdir, scenarios=10, modelled_channel_codes='ENZ',
                        latmin=49.0586, latmax=49.25,
                        lonmin=8.0578, lonmax=8.2,
                        stations_file=None, ratio_events=1,
-                       shakemap=True, gf_store_superdirs=None):
+                       shakemap=True, gf_store_superdirs=None,
+                       scenario_type="full", event_list=None):
 
     gen_dataset(scenarios, projdir, store_id, modelled_channel_codes, magmin,
                 magmax, depmin, depmax, latmin, latmax, lonmin, lonmax,
                 stations_file, gf_store_superdirs=gf_store_superdirs,
-                shakemap=shakemap)
+                shakemap=shakemap, generate_scenario_type=scenario_type,
+                event_list=event_list)
