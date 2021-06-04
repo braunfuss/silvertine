@@ -512,8 +512,8 @@ def command_detect(args):
             '--show', dest='show', type=str, default=False,
             help='Display progress of localisation for each event in browser')
         parser.add_option(
-            '--bnn', dest='bnn', type=str, default=True,
-            help='Use BNN')
+            '--mode', dest='mode', type=str, default="transformer",
+            help='Mode to to use')
         parser.add_option(
             '--load', dest='load', type=str, default=False,
             help='Load data')
@@ -523,9 +523,6 @@ def command_detect(args):
         parser.add_option(
             '--detector_only', dest='detector_only', type=str, default=False,
             help='Detector only mode.')
-        parser.add_option(
-            '--mode', dest='mode', type=str, default="location_mode",
-            help='mechanism_mode, detector_only mode, or location_mode choice.')
         parser.add_option(
             '--data_dir', dest='data_dir', type=str, default=None,
             help='data_dir')
@@ -538,6 +535,38 @@ def command_detect(args):
         parser.add_option(
             '--end', dest='wanted_end', type=str, default=None,
             help='end')
+        parser.add_option('--config', help='Load a configuration file')
+        parser.add_option('--configs',
+                help='load a comma separated list of configs and process them')
+        parser.add_option('--train', action='store_true')
+        parser.add_option('--evaluate', action='store_true',
+                help='Predict from input of `evaluation_data_generator` in config.')
+        parser.add_option('--evaluate-errors', action='store_true',
+                help='Predict errors input of `evaluation_data_generator` in config.')
+        parser.add_option('--annotate', action='store_true',
+                help='Add labels in error evaluation plots.')
+        parser.add_option('--predict', action='store_true',
+                help='Predict from input of `predict_data_generator` in config.')
+        parser.add_option('--detect', action='store_true',
+                help='Detect earthquakes')
+        parser.add_option('--optimize', metavar='FILENAME',
+                help='use optimizer defined in FILENAME')
+        parser.add_option('--write-tfrecord', metavar='FILENAME',
+            help='write data_generator out to FILENAME')
+        parser.add_option('--from-tfrecord', metavar='FILENAME',
+            help='read tfrecord')
+        parser.add_option('--new-config')
+        parser.add_option('--clear', help='delete remaints of former runs',
+                action='store_true')
+        parser.add_option('--show-data', type=int, metavar='N',
+            help='show N data examples. Call with `--debug` to get plot figures with additional information.')
+        parser.add_option('--nskip', type=int,
+            help='For plotting. Examples to skip.')
+        parser.add_option('--ngpu', help='number of GPUs to use')
+        parser.add_option('--gpu-no', help='GPU number to use', type=int)
+        parser.add_option('--debug', help='enable logging level DEBUG', action='store_true')
+        parser.add_option('--tfdebug', help='break into tensorflow debugger', action='store_true')
+        parser.add_option('--force', action='store_true')
 
     parser, options, args = cl_parse('detect', args, setup)
     if options.load is not False:
@@ -548,9 +577,23 @@ def command_detect(args):
         options.detector_only = True
     if options.mode is "detector_only":
         options.detector_only = True
+    if options.detector_only is not False:
+        options.detector_only = True
 
     from silvertine import detector
-    if options.bnn is True:
+    if options.mode == "detect" or "locate":
+        detector.locator.locator.main()
+
+    if options.mode == "transformer":
+
+        detector.picker.main(args[0], tmin="2021-05-22 12:30:03.00",
+                 tmax="2021-05-22 14:05:03.00", minlat=49.0, maxlat=49.979,
+                 minlon=7.9223,
+                 maxlon=8.9723,
+                 channels=["EH"+"[ZNE]"],
+                 client_list=["BGR"])
+
+    if options.mode == "BNN":
         detector.bnn.bnn_detector(load=options.load, train_model=options.train_model,
                                   detector_only=options.detector_only,
                                   data_dir=options.data_dir,
@@ -812,90 +855,90 @@ def command_beam_process(args):
 
     parser = argparse.ArgumentParser('What was the depth, again?',
                                      add_help=False)
-    parser.add_argument('--log', required=False, default='INFO')
+    parser.add_option('--log', required=False, default='INFO')
 
     sp = parser.add_subparsers(dest='cmd')
 
     process_parser = sp.add_parser('beam_process', help='Create images')
-    process_parser.add_argument('projects', help='default "all available"',
+    process_parser.add_option('projects', help='default "all available"',
                                 nargs='*', default=".")
-    process_parser.add_argument('--array-id', dest='array_id',
+    process_parser.add_option('--array-id', dest='array_id',
                                 help='array-id to process',
                                 required=False,
                                 default=False)
-    process_parser.add_argument('--settings',
+    process_parser.add_option('--settings',
                                 help='settings file',
                                 default=False,
                                 required=False)
-    process_parser.add_argument('--cc_align',
+    process_parser.add_option('--cc_align',
                                 help='dummy argument at the moment',
                                 required=False)
-    process_parser.add_argument('--store-superdirs',
+    process_parser.add_option('--store-superdirs',
                         help='super directory where to look for stores',
                         dest='store_superdirs', nargs='*', default=['stores'],
                         required=False)
-    process_parser.add_argument('--store',
+    process_parser.add_option('--store',
                         help='name of store id',
                         dest='store_id',
                         required=False)
-    process_parser.add_argument('--depth',
+    process_parser.add_option('--depth',
                         help='assumed source depth [km]',
                         required=False)
-    process_parser.add_argument('--depths',
+    process_parser.add_option('--depths',
                         help='testing depths in km. zstart:zstop:delta, default 0:15:1',
                         default='0:15:1', required=False)
-    process_parser.add_argument('--quantity',
+    process_parser.add_option('--quantity',
                         help='velocity|displacement',
                         choices=['velocity', 'displacement', 'restituted'],
                         required=False)
-    process_parser.add_argument('--filter',
+    process_parser.add_option('--filter',
                         help='4th order butterw. default: "0.7:4.5"',
                         required=False)
-    process_parser.add_argument('--correction', required=False,
+    process_parser.add_option('--correction', required=False,
                         help='a global correction in time [s]')
-    process_parser.add_argument('--gain', required=False,
+    process_parser.add_option('--gain', required=False,
                         help='gain factor', default=1.,
                                 type=float)
-    process_parser.add_argument('--zoom', required=False,
+    process_parser.add_option('--zoom', required=False,
                                 help='time window to look at. default -7:15',
                                 default='-7:15')
 
-    process_parser.add_argument('--normalize',
+    process_parser.add_option('--normalize',
                         help='normalize traces to 1',
                         action='store_true',
                         required=False)
-    process_parser.add_argument('--skip-true',
+    process_parser.add_option('--skip-true',
                         help='if true, do not plot recorded and the assigned synthetic trace on top of each other',
                         dest='skip_true',
                         action='store_true',
                         required=False)
-    process_parser.add_argument('--show',
+    process_parser.add_option('--show',
                         help='show matplotlib plots after each step',
                         action='store_true',
                         required=False)
-    process_parser.add_argument('--force-nearest-neighbor',
+    process_parser.add_option('--force-nearest-neighbor',
                         help='handles OOB',
                         dest='force_nearest_neighbor',
                         default=False,
                         action='store_true',
                         required=False)
-    process_parser.add_argument('--auto-caption',
+    process_parser.add_option('--auto-caption',
                         help='Add a caption to figure with basic info',
                         dest='auto_caption',
                         default=False,
                         action='store_true',
                         required=False)
-    process_parser.add_argument('--out-filename',
+    process_parser.add_option('--out-filename',
                         help='file to store image',
                         dest='save_as',
                         required=False)
-    process_parser.add_argument('--print-parameters', dest='print_parameters',
+    process_parser.add_option('--print-parameters', dest='print_parameters',
                         help='creates a text field giving the used parameters',
                         required=False)
-    process_parser.add_argument('--title', dest='title',
+    process_parser.add_option('--title', dest='title',
                         help='template for title.',
                         required=False)
-    process_parser.add_argument('--overwrite-settings', dest='overwrite_settings',
+    process_parser.add_option('--overwrite-settings', dest='overwrite_settings',
                         help='overwrite former settings files', default=False,
                         action='store_true', required=False)
     args = parser.parse_args()
