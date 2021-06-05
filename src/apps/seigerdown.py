@@ -21,6 +21,7 @@ from pyrocko import trace, util, io, cake, catalog, automap, pile, model
 from pyrocko import orthodrome, weeding
 from pyrocko.client import fdsn
 from pyrocko.io import resp, enhanced_sacpz as epz, stationxml
+import subprocess
 
 km = 1000.
 
@@ -204,7 +205,8 @@ SS>" \\
                                <sampling_rate_hz> <eventname>
 '''.strip()
 
-if __name__ == '__main__':
+
+def main():
     parser = OptionParser(
         usage=usage,
         description=description)
@@ -321,7 +323,7 @@ if __name__ == '__main__':
         '--band-codes',
         dest='priority_band_code',
         metavar='V,L,M,B,H,S,E,...',
-        default='V,L,M,B,H,S,E',
+        default='V,L,M,B,H,E',
         help='select and prioritize band codes (default: %default)')
 
     parser.add_option(
@@ -1081,3 +1083,6 @@ deoverlap='crossfade_cos')
     logger.info('prepared waveforms from %i stations' % len(stations))
     # for seiscomp format:
     # subprocess.run(['jackseis', '%s/traces_disp_%s_%s.mseed' % (folder, tmin, tmax), '--output=%s' % folder + '/%(wmin_year)s/%(network)s/%(station)s/%(channel)s.D/%(network)s.%(station)s..%(channel)s.D.%(wmin)s' , '--force'])
+
+if __name__ == '__main__':
+    main()
