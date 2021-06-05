@@ -138,6 +138,7 @@ setup(
             'data/snippets/*.md',
             'data/examples/*/*.*',
             'data/examples/*/*/*.*',
+            'detector/model/*h5',
             'data/examples/*/*/silvertineown',
             ]},
 
