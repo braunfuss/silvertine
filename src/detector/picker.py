@@ -93,10 +93,108 @@ def associate(path, tmin, tmax, minlat=49.1379, maxlat=49.1879, minlon=8.1223,
     run_associator(input_dir=out_basepath,
                    start_time=tmin,
                    end_time=tmax,
-                   moving_window = 15,
-                   pair_n = 2,
+                   moving_window=15,
+                   pair_n=2,
                    output_dir=out_dir,
                    consider_combination=False)
+
+
+def reject_blacklisted(tr, blacklist):
+    '''returns `False` if nslc codes of `tr` match any of the blacklisting
+    patters. Otherwise returns `True`'''
+    return not util.match_nslc(blacklist, tr.nslc_id)
+
+
+def iter_chunked(tinc, path, pile, tmin="2021-05-26 06:20:03.800",
+                 tmax="2016-02-12 06:20:03.800", minlat=49.1379,
+                 maxlat=49.1879,
+                 minlon=8.1223,
+                 maxlon=8.1723,
+                 channels=["EH"+"[ZNE]"], client_list=["BGR"],
+                 download=True, seiger=True, selection=None,
+                 path=None, path_waveforms=None,
+                 stream=False
+                 reject_blacklisted=None, tpad=0,
+                 tstart=None, tstop=None):
+
+    tstart = util.stt(tstart) if tstart else None
+    tstop = util.stt(tstop) if tstop else None
+    for trs in data_pile.chopper(tinc=tinc, tmin=tstart, tmax=tstop, tpad=tpad,
+                                 keep_current_files_open=False,
+                                 want_incomplete=False):
+
+        date_min = get_time_format_eq(tr.tmin)
+        date_max = get_time_format_eq(tr.tmax)
+        for tr in trs:
+            io.save(tr, "%sdownloads/%s/%s.%s..%s__%s__%s.mseed" % (path,
+                                                                    tr.station,
+                                                                    tr.network,
+                                                                    tr.station,
+                                                                    tr.channel,
+                                                                    date_min,
+                                                                    date_max))
+
+        process(path, tmin=tmin, tmax=tmax, minlat=minlat, maxlat=maxlat,
+                minlon=minlon, maxlon=maxlon, channels=channels,
+                client_list=client_list, download=download, seiger=seiger,
+                selection=selection, path=path, path_waveforms=path_waveforms,
+                stream=stream)
+        for tr in trs:
+            subprocess.run(['rm -r %s*' % ("%sdownloads/%s/%s.%s..%s__%s__%s.mseed" % (path, tr.station, tr.network, tr.station, tr.channel, date_min, date_max)], shell=True)
+
+
+def load_eqt_folder(data_paths, tinc, path, tmin="2021-05-26 06:20:03.800",
+                    tmax="2016-02-12 06:20:03.800", minlat=49.1379,
+                    maxlat=49.1879,
+                    minlon=8.1223,
+                    maxlon=8.1723,
+                    channels=["EH"+"[ZNE]"], client_list=["BGR"],
+                    download=True, seiger=True, selection=None,
+                    path=None, path_waveforms=None,
+                    stream=False,
+                    data_format='detect', deltat_want=100,
+                    tstart=None, tstop=None):
+
+    data_pile = pile.make_pile(data_paths, fileformat=data_format)
+    iter_chunked(tinc, path, pile, tmin=tmin, tmax=tmax, minlat=minlat,
+                 maxlat=maxlat,
+                 minlon=minlon, maxlon=maxlon, channels=channels,
+                 client_list=client_list, download=download, seiger=seiger,
+                 selection=selection, path=path, path_waveforms=path_waveforms,
+                 stream=stream
+                 reject_blacklisted=None, tpad=0,
+                 tstart=None, tstop=None)
+
+
+def process(path, tmin="2021-05-26 06:20:03.800",
+            tmax="2016-02-12 06:20:03.800", minlat=49.1379, maxlat=49.1879,
+            minlon=8.1223,
+            maxlon=8.1723,
+            channels=["EH"+"[ZNE]"], client_list=["BGR"],
+            download=True, seiger=True, selection=None,
+            path=None, path_waveforms=None,
+            stream=False):
+
+    make_station_json(path, tmin=tmin,
+                      tmax=tmax,
+                      minlat=minlat, maxlat=maxlat, minlon=minlon,
+                      maxlon=maxlon,
+                      channels=channels, client_list=client_list)
+
+    preprocess(path, tmin=tmin,
+               tmax=tmax,
+               minlat=minlat, maxlat=maxlat, minlon=minlon,
+               maxlon=maxlon)
+
+    predict(path, tmin=tmin,
+            tmax=tmax,
+            minlat=minlat, maxlat=maxlat, minlon=minlon,
+            maxlon=maxlon)
+
+    associate(path, tmin=tmin,
+              tmax=tmax,
+              minlat=minlat, maxlat=maxlat, minlon=minlon,
+              maxlon=maxlon)
 
 
 def main(path, tmin="2021-05-26 06:20:03.800",
@@ -104,28 +202,19 @@ def main(path, tmin="2021-05-26 06:20:03.800",
          minlon=8.1223,
          maxlon=8.1723,
          channels=["EH"+"[ZNE]"], client_list=["BGR"],
-         download=True, seiger=True, selection=None):
+         download=True, seiger=True, selection=None,
+         path=None, path_waveforms=None,
+         stream=False):
 
     if download is True:
-        download_raw.download_raw(path, tmin, tmax, seiger=seiger, selection=selection,
-                     provider=client_list, clean=True)
-
-    make_station_json(path, tmin=tmin,
-                          tmax=tmax,
-                          minlat=minlat, maxlat=maxlat, minlon=minlon,
-                          maxlon=maxlon,
-                          channels=channels, client_list=client_list)
-
-    preprocess(path, tmin=tmin,
-                          tmax=tmax,
-                          minlat=minlat, maxlat=maxlat, minlon=minlon,
-                          maxlon=maxlon)
-
-    predict(path, tmin=tmin,
-                          tmax=tmax,
-                          minlat=minlat, maxlat=maxlat, minlon=minlon,
-                          maxlon=maxlon)
-    associate(path, tmin=tmin,
-                          tmax=tmax,
-                          minlat=minlat, maxlat=maxlat, minlon=minlon,
-                          maxlon=maxlon)
+        download_raw.download_raw(path, tmin, tmax, seiger=seiger,
+                                  selection=selection,
+                                  provider=client_list, clean=True)
+    if path_waveforms is not None:
+        load_eqt_folder(path_waveforms) # pile/chop/mvname check if mvname folder is empty
+    else:
+        process(path, tmin=tmin, tmax=tmax, minlat=minlat, maxlat=maxlat,
+                minlon=minlon, maxlon=maxlon, channels=channels,
+                client_list=client_list, download=download, seiger=seiger,
+                selection=selection, path=path, path_waveforms=path_waveforms,
+                stream=stream)
