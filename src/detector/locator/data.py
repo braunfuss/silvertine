@@ -819,6 +819,7 @@ class SeismosizerData(DataGenerator):
     def extract_labels(self, source):
         if not self.labeled:
             return UNLABELED
+
         return (source.north_shift, source.east_shift, source.depth)
 
     def iter_examples_and_labels(self):

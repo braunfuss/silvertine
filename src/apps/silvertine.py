@@ -524,6 +524,12 @@ def command_detect(args):
             '--detector_only', dest='detector_only', type=str, default=False,
             help='Detector only mode.')
         parser.add_option(
+            '--download', dest='download', type=str, default=False,
+            help='Download data.')
+        parser.add_option(
+            '--path', dest='path', type=str, default=None,
+            help='path')
+        parser.add_option(
             '--data_dir', dest='data_dir', type=str, default=None,
             help='data_dir')
         parser.add_option(
@@ -581,17 +587,21 @@ def command_detect(args):
         options.detector_only = True
 
     from silvertine import detector
-    if options.mode == "detect" or "locate":
-        detector.locator.locator.main()
 
     if options.mode == "transformer":
-
-        detector.picker.main(args[0], tmin="2021-05-22 12:30:03.00",
+        if options.download is not False:
+            options.download = True
+        detector.picker.main(options.path, tmin="2021-05-22 12:30:03.00",
                  tmax="2021-05-22 14:05:03.00", minlat=49.0, maxlat=49.979,
                  minlon=7.9223,
                  maxlon=8.9723,
                  channels=["EH"+"[ZNE]"],
-                 client_list=["BGR"])
+                 client_list=["BGR"],
+                 path_waveforms=options.data_dir,
+                 download=options.download)
+
+    if options.mode == "detect" or options.mode == "locate":
+        detector.locator.locator.main()
 
     if options.mode == "BNN":
         detector.bnn.bnn_detector(load=options.load, train_model=options.train_model,

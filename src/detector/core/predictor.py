@@ -17,8 +17,9 @@ from tensorflow.keras.models import load_model
 from tensorflow.keras.optimizers import Adam
 import tensorflow as tf
 import matplotlib
-matplotlib.use('agg')
+from matplotlib import rc
 import matplotlib.pyplot as plt
+matplotlib.use('Agg')
 import numpy as np
 import pandas as pd
 import math
@@ -38,6 +39,9 @@ import sys
 import warnings
 from scipy import signal
 from matplotlib.lines import Line2D
+from datetime import datetime
+import subprocess
+
 warnings.filterwarnings("ignore")
 from tensorflow.python.util import deprecation
 deprecation._PRINT_DEPRECATION_WARNINGS = False
@@ -71,6 +75,7 @@ def predictor(input_dir=None,
               number_of_cpus=5,
               use_multiprocessing=True,
               keepPS=True,
+              model=None,
               spLimit=60):
 
 
@@ -171,6 +176,7 @@ def predictor(input_dir=None,
     "input_hdf5": None,
     "input_csv": None,
     "input_model": input_model,
+    "model": None,
     "output_dir": output_dir,
     "output_probabilities": output_probabilities,
     "detection_threshold": detection_threshold,
@@ -224,20 +230,21 @@ def predictor(input_dir=None,
 
 
     print('============================================================================')
-    print('Running EqTransformer ', str(EQT_VERSION))
 
-    print(' *** Loading the model ...', flush=True)
-    model = load_model(args['input_model'],
-                       custom_objects={'SeqSelfAttention': SeqSelfAttention,
-                                       'FeedForward': FeedForward,
-                                       'LayerNormalization': LayerNormalization,
-                                       'f1': f1
-                                        })
-    model.compile(loss = args['loss_types'],
-                  loss_weights =  args['loss_weights'],
-                  optimizer = Adam(lr = 0.001),
-                  metrics = [f1])
-    print('*** Loading is complete!', flush=True)
+    if model is None:
+        print(' *** Loading the model ...', flush=True)
+
+        model = load_model(args['input_model'],
+                           custom_objects={'SeqSelfAttention': SeqSelfAttention,
+                                           'FeedForward': FeedForward,
+                                           'LayerNormalization': LayerNormalization,
+                                           'f1': f1
+                                            })
+        model.compile(loss = args['loss_types'],
+                      loss_weights =  args['loss_weights'],
+                      optimizer = Adam(lr = 0.001),
+                      metrics = [f1])
+        print('*** Loading is complete!', flush=True)
 
     if isinstance(args['output_dir'], str):
         out_dir = os.path.join(os.getcwd(), str(args['output_dir']))
@@ -326,8 +333,7 @@ def predictor(input_dir=None,
                     dataset = fl.get('data/'+str(ID))
                     pred_set.update( {str(ID) : dataset})
 
-                plt_n, detection_memory= _gen_writer(new_list, args, prob_dic, pred_set, HDF_PROB, predict_writer, save_figs, csvPr_gen, plt_n, detection_memory, keepPS, spLimit)
-
+            plt_n, detection_memory = _gen_writer(new_list, args, prob_dic, pred_set, HDF_PROB, predict_writer, save_figs, csvPr_gen, plt_n, detection_memory, keepPS, spLimit)
             end_Predicting = time.time()
             delta = (end_Predicting - start_Predicting)
             hour = int(delta / 3600)
@@ -341,6 +347,7 @@ def predictor(input_dir=None,
             print(f'\n', flush=True)
             print(' *** Finished the prediction in: {} hours and {} minutes and {} seconds.'.format(hour, minute, round(seconds, 2)), flush=True)
             print(' *** Detected: '+str(len(dd))+' events.', flush=True)
+
             print(' *** Wrote the results into --> " ' + str(save_dir)+' "', flush=True)
 
             with open(os.path.join(save_dir,'X_report.txt'), 'a') as the_file:
@@ -370,6 +377,7 @@ def predictor(input_dir=None,
                 the_file.write('gpu_limit: '+str(args['gpu_limit'])+'\n')
                 the_file.write('keepPS: '+str(args['keepPS'])+'\n')
                 the_file.write('spLimit: '+str(args['spLimit'])+' seconds\n')
+
     else:
         NN_in = len(args['output_dir'])
         for iidir in range(NN_in):
@@ -674,21 +682,20 @@ def _gen_writer(new_list, args, prob_dic, pred_set, HDF_PROB, predict_writer, sa
                                             prob_dic['DD_std'][ts], prob_dic['PP_std'][ts], prob_dic['SS_std'][ts])
         if keepPS:
             if (len(matches) >= 1) and (matches[list(matches)[0]][3] and matches[list(matches)[0]][6]):
-                if (matches[list(matches)[0]][6] - matches[list(matches)[0]][3]) < spLimit*100:
-                    snr = [_get_snr(dat, matches[list(matches)[0]][3], window = 100), _get_snr(dat, matches[list(matches)[0]][6], window = 100)]
-                    pre_write = len(detection_memory)
-                    detection_memory=_output_writter_prediction(dataset, predict_writer, csvPr_gen, matches, snr, detection_memory)
-                    post_write = len(detection_memory)
-                    if plt_n < args['number_of_plots'] and post_write > pre_write:
-                        _plotter_prediction(dat, evi, args, save_figs,
-                                              prob_dic['DD_mean'][ts],
-                                              prob_dic['PP_mean'][ts],
-                                              prob_dic['SS_mean'][ts],
-                                              prob_dic['DD_std'][ts],
-                                              prob_dic['PP_std'][ts],
-                                              prob_dic['SS_std'][ts],
-                                              matches)
-                        plt_n += 1 ;
+                snr = [_get_snr(dat, matches[list(matches)[0]][3], window = 100), _get_snr(dat, matches[list(matches)[0]][6], window = 100)]
+                pre_write = len(detection_memory)
+                detection_memory=_output_writter_prediction(dataset, predict_writer, csvPr_gen, matches, snr, detection_memory)
+                post_write = len(detection_memory)
+                if plt_n < args['number_of_plots'] and post_write > pre_write:
+                    _plotter_prediction(dat, evi, args, save_figs,
+                                          prob_dic['DD_mean'][ts],
+                                          prob_dic['PP_mean'][ts],
+                                          prob_dic['SS_mean'][ts],
+                                          prob_dic['DD_std'][ts],
+                                          prob_dic['PP_std'][ts],
+                                          prob_dic['SS_std'][ts],
+                                          matches)
+                    plt_n += 1 ;
         else:
             if (len(matches) >= 1) and ((matches[list(matches)[0]][3] or matches[list(matches)[0]][6])):
                 snr = [_get_snr(dat, matches[list(matches)[0]][3], window = 100), _get_snr(dat, matches[list(matches)[0]][6], window = 100)]
@@ -1050,7 +1057,7 @@ def _plotter_prediction(data, evi, args, save_figs, yh1, yh2, yh3, yh1_std, yh2_
             upperD = yh1+yh1_std
             plt.fill_between(x, lowerD, upperD, alpha=0.5, edgecolor='#3F7F4C', facecolor='#7EFF99')
 
-            plt.plot(x, yh2, '--', color='b', alpha = 0.5, linewidth=2, label='P_arrival')
+            plt.plot(x, yh2, '--', color='b', alpha = 0.5, linewidth=2, label='Parrival')
             lowerP = yh2-yh2_std
             upperP = yh2+yh2_std
             plt.fill_between(x, lowerP, upperP, alpha=0.5, edgecolor='#1B2ACC', facecolor='#089FFF')
@@ -1080,8 +1087,8 @@ def _plotter_prediction(data, evi, args, save_figs, yh1, yh2, yh3, yh1_std, yh2_
 
         else:
             plt.plot(x, yh1, '--', color='g', alpha = 0.5, linewidth=2, label='Earthquake')
-            plt.plot(x, yh2, '--', color='b', alpha = 0.5, linewidth=2, label='P_arrival')
-            plt.plot(x, yh3, '--', color='r', alpha = 0.5, linewidth=2, label='S_arrival')
+            plt.plot(x, yh2, '--', color='b', alpha = 0.5, linewidth=2, label='Parrival')
+            plt.plot(x, yh3, '--', color='r', alpha = 0.5, linewidth=2, label='Sarrival')
             plt.tight_layout()
             plt.ylim((-0.1, 1.1))
             plt.xlim(0, 6000)
@@ -1095,7 +1102,7 @@ def _plotter_prediction(data, evi, args, save_figs, yh1, yh2, yh3, yh1_std, yh2_
         custom_lines = [Line2D([0], [0], linestyle='--', color='g', lw=2),
                         Line2D([0], [0], linestyle='--', color='b', lw=2),
                         Line2D([0], [0], linestyle='--', color='r', lw=2)]
-        plt.legend(custom_lines, ['Earthquake', 'P_arrival', 'S_arrival'], fancybox=True, shadow=True)
+        plt.legend(custom_lines, ['Earthquake', 'Parrival', 'Sarrival'], fancybox=True, shadow=True)
         plt.axis('off')
 
         font = {'family': 'serif',
@@ -1116,6 +1123,7 @@ def _plotter_prediction(data, evi, args, save_figs, yh1, yh2, yh3, yh1_std, yh2_
     else:
 
         ########################################## ploting only in time domain
+        print("plotting")
         fig = plt.figure(constrained_layout=True)
         widths = [1]
         heights = [1.6, 1.6, 1.6, 2.5]
@@ -1134,7 +1142,7 @@ def _plotter_prediction(data, evi, args, save_figs, yh1, yh2, yh3, yh1_std, yh2_
 
         plt.rcParams["figure.figsize"] = (8,6)
         legend_properties = {'weight':'bold'}
-        plt.title('Trace Name: '+str(evi))
+        plt.title('Trace Name: ')
 
         pl = sl = None
         if len(spt) > 0 and np.count_nonzero(data[:, 0]) > 10:
@@ -1238,12 +1246,12 @@ def _plotter_prediction(data, evi, args, save_figs, yh1, yh2, yh3, yh1_std, yh2_
             upperD = yh1+yh1_std
             plt.fill_between(x, lowerD, upperD, alpha=0.5, edgecolor='#3F7F4C', facecolor='#7EFF99')
 
-            plt.plot(x, yh2, '--', color='b', alpha = 0.5, linewidth=1.5, label='P_arrival')
+            plt.plot(x, yh2, '--', color='b', alpha = 0.5, linewidth=1.5, label='Parrival')
             lowerP = yh2-yh2_std
             upperP = yh2+yh2_std
             plt.fill_between(x, lowerP, upperP, alpha=0.5, edgecolor='#1B2ACC', facecolor='#089FFF')
 
-            plt.plot(x, yh3, '--', color='r', alpha = 0.5, linewidth=1.5, label='S_arrival')
+            plt.plot(x, yh3, '--', color='r', alpha = 0.5, linewidth=1.5, label='Sarrival')
             lowerS = yh3-yh3_std
             upperS = yh3+yh3_std
             plt.fill_between(x, lowerS, upperS, edgecolor='#CC4F1B', facecolor='#FF9848')
@@ -1272,9 +1280,10 @@ def _plotter_prediction(data, evi, args, save_figs, yh1, yh2, yh3, yh1_std, yh2_
                 plt.text(7000, 0.1, str(EQT_VERSION), fontdict=font)
 
         else:
+            print("pas1")
             plt.plot(x, yh1, '--', color='g', alpha = 0.5, linewidth=1.5, label='Earthquake')
-            plt.plot(x, yh2, '--', color='b', alpha = 0.5, linewidth=1.5, label='P_arrival')
-            plt.plot(x, yh3, '--', color='r', alpha = 0.5, linewidth=1.5, label='S_arrival')
+            plt.plot(x, yh2, '--', color='b', alpha = 0.5, linewidth=1.5, label='Parrival')
+            plt.plot(x, yh3, '--', color='r', alpha = 0.5, linewidth=1.5, label='Sarrival')
 
             plt.tight_layout()
             plt.ylim((-0.1, 1.1))
@@ -1299,8 +1308,10 @@ def _plotter_prediction(data, evi, args, save_figs, yh1, yh2, yh3, yh1_std, yh2_
             if EQT_VERSION:
                 plt.text(7000, 0.1, str(EQT_VERSION), fontdict=font)
 
-        fig.tight_layout()
-        fig.savefig(os.path.join(save_figs, str(evi)+'.png'))
+        #fig.tight_layout()
+        print("pas")
+        fig.savefig(os.path.join(save_figs, str(evi)[0:6]+'.png'))
+        print("saved")
         plt.close(fig)
         plt.clf()
 
