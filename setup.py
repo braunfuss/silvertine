@@ -109,6 +109,7 @@ setup(
         'silvertine.util',
         'silvertine.plot',
         'silvertine.report',
+        'silvertine.seiger_lassie',
         'silvertine.shakemap',
         'silvertine.mechanism',
         'silvertine.monitoring',
@@ -120,6 +121,8 @@ setup(
         'console_scripts': [
             'silvertine = silvertine.apps.silvertine:main',
             'seigerdown = silvertine.apps.seigerdown:main',
+            'seiger-lassie = silvertine.apps.seiger_lassie:main',
+
         ]
     },
     package_dir={'silvertine': 'src'},

@@ -14,9 +14,10 @@ def make_station_json(path, tmin="2016-02-12 06:20:03.800",
                       maxlon=8.1723,
                       channels=["EH"+"[ZNE]"], client_list=["BGR"]):
     # CHANLIST =["HH[ZNE]", "HH[Z21]", "BH[ZNE]", "EH[ZNE]", "SH[ZNE]", "HN[ZNE]", "HN[Z21]", "DP[ZNE]"]
-
+    if tmin is None:
+        tmin = util.stt("2021-01-22 14:05:03.00")
+        tmax = util.stt("2021-12-22 14:05:03.00")
     json_basepath = os.path.join(path, "json/station_list.json")
-
     makeStationList(json_path=json_basepath,
                     client_list=client_list,
                     min_lat=minlon,
@@ -116,8 +117,8 @@ def reject_blacklisted(tr, blacklist):
     return not util.match_nslc(blacklist, tr.nslc_id)
 
 
-def iter_chunked(tinc, path, data_pile, tmin="2021-05-26 06:20:03.800",
-                 tmax="2016-02-12 06:20:03.800", minlat=49.1379,
+def iter_chunked(tinc, path, data_pile, tmin=None,
+                 tmax=None, minlat=49.1379,
                  maxlat=49.1879,
                  minlon=8.1223,
                  maxlon=8.1723,
@@ -126,10 +127,11 @@ def iter_chunked(tinc, path, data_pile, tmin="2021-05-26 06:20:03.800",
                  path_waveforms=None,
                  stream=False,
                  reject_blacklisted=None, tpad=0,
-                 tstart=None, tstop=None):
+                 tstart=None, tstop=None, tinc=None,
+                 hf=10, lf=2):
 
-    tstart = util.stt(tstart) if tstart else None
-    tstop = util.stt(tstop) if tstop else None
+    tstart = util.stt(tmin) if tmin else None
+    tstop = util.stt(tmax) if tmax else None
     model_path = os.path.dirname(os.path.abspath(__file__))+"/model/EqT_model.h5"
     from tensorflow.keras.models import load_model
     from tensorflow.keras.optimizers import Adam
@@ -142,31 +144,33 @@ def iter_chunked(tinc, path, data_pile, tmin="2021-05-26 06:20:03.800",
                                        'LayerNormalization': LayerNormalization,
                                        'f1': f1
                                         })
-    model.compile(loss = ['binary_crossentropy', 'binary_crossentropy', 'binary_crossentropy'],
-                  loss_weights = [0.02, 0.40, 0.58],
-                  optimizer = Adam(lr = 0.001),
-                  metrics = [f1])
-    for i, trs in enumerate(data_pile.chopper(tinc=120, tmin=util.stt("2021-05-26 13:47:00.00"), tmax=tstop, tpad=tpad,
-                                 keep_current_files_open=False,
-                                 want_incomplete=True)):
-        tmin = None
-        tmax = None
+    model.compile(loss=['binary_crossentropy', 'binary_crossentropy',
+                        'binary_crossentropy'],
+                  loss_weights=[0.02, 0.40, 0.58],
+                  optimizer=Adam(lr=0.001),
+                  metrics=[f1])
+    for i, trs in enumerate(data_pile.chopper(tinc=tinc, tmin=tstart,
+                                              tmax=tstop, tpad=tpad,
+                                              keep_current_files_open=False,
+                                              want_incomplete=True)):
+        tminc = None
+        tmaxc = None
         for tr in trs:
-            if tmin is None:
-                tmin = tr.tmin
-                tmax = tr.tmax
+            if tminc is None:
+                tminc = tr.tmin
+                tmaxc = tr.tmax
             else:
-                if tmin < tr.tmin:
-                    tmin = tr.tmin
-                if tmax > tr.tmax:
-                    tmax = tr.tmax
+                if tminc < tr.tmin:
+                    tminc = tr.tmin
+                if tmaxc > tr.tmax:
+                    tmaxc = tr.tmax
         for tr in trs:
-            tr.highpass(4, 2)   # 4th order, 0.02 Hz
-            tr.lowpass(4, 10)   # 4th order, 0.02 Hz
+            tr.highpass(4, lf)
+            tr.lowpass(4, hf)
 
-            tr.chop(tmin, tmax)
-            date_min = download_raw.get_time_format_eq(tmin)
-            date_max = download_raw.get_time_format_eq(tmax)
+            tr.chop(tminc, tmaxc)
+            date_min = download_raw.get_time_format_eq(tminc)
+            date_max = download_raw.get_time_format_eq(tmaxc)
             io.save(tr, "%s/downloads/%s/%s.%s..%s__%s__%s.mseed" % (path,
                                                                     tr.station,
                                                                     tr.network,
@@ -175,7 +179,7 @@ def iter_chunked(tinc, path, data_pile, tmin="2021-05-26 06:20:03.800",
                                                                     date_min,
                                                                     date_max))
 
-        process(path, tmin=tmin, tmax=tmax, minlat=minlat, maxlat=maxlat,
+        process(path, tmin=tminc, tmax=tmaxc, minlat=minlat, maxlat=maxlat,
                 minlon=minlon, maxlon=maxlon, channels=channels,
                 client_list=client_list, download=download, seiger=seiger,
                 selection=selection, path_waveforms=path_waveforms,
@@ -194,7 +198,8 @@ def load_eqt_folder(data_paths, tinc, path, tmin="2021-05-26 06:20:03.800",
                     path_waveforms=None,
                     stream=False,
                     data_format='detect', deltat_want=100,
-                    tstart=None, tstop=None):
+                    tstart=None, tstop=None, hf=8, lf=2,
+                    tinc=None):
 
     data_pile = pile.make_pile(data_paths, fileformat=data_format)
     iter_chunked(tinc, path, data_pile, tmin=tmin, tmax=tmax, minlat=minlat,
@@ -204,7 +209,8 @@ def load_eqt_folder(data_paths, tinc, path, tmin="2021-05-26 06:20:03.800",
                  selection=selection, path_waveforms=path_waveforms,
                  stream=stream,
                  reject_blacklisted=None, tpad=0,
-                 tstart=None, tstop=None)
+                 tstart=None, tstop=None, hf=hf,
+                 lf=lf, tinc=tinc)
 
 
 def process(path, tmin="2021-05-26 06:20:03.800",
@@ -236,14 +242,16 @@ def process(path, tmin="2021-05-26 06:20:03.800",
               minlat=minlat, maxlat=maxlat, minlon=minlon,
               maxlon=maxlon, iter=iter)
 
-    print(kill)
+
 def main(path, tmin="2021-05-26 06:20:03.800",
          tmax="2016-02-12 06:20:03.800", minlat=49.1379, maxlat=49.1879,
          minlon=8.1223,
          maxlon=8.1723,
-         channels=["EH"+"[ZNE]"], client_list=["BGR"],
+         channels=["EH"+"[ZNE]"], client_list=["BGR",
+                                               "http://ws.gpi.kit.edu/"],
          download=True, seiger=True, selection=None,
-         stream=False, path_waveforms=None, tinc=None):
+         stream=False, path_waveforms=None, tinc=None,
+         lf=2, hf=10):
 
     if download is True:
         download_raw.download_raw(path, tmin, tmax, seiger=seiger,
@@ -256,7 +264,7 @@ def main(path, tmin="2021-05-26 06:20:03.800",
                         client_list=client_list, download=download,
                         seiger=seiger,
                         selection=selection,
-                        stream=stream)
+                        stream=stream, hf=hf, lf=lf, tinc=tinc)
     else:
         process(path, tmin=tmin, tmax=tmax, minlat=minlat, maxlat=maxlat,
                 minlon=minlon, maxlon=maxlon, channels=channels,

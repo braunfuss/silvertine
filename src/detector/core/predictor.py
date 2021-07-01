@@ -54,6 +54,7 @@ try:
 except Exception:
     EQT_VERSION = "0.1.61"
 
+
 def predictor(input_dir=None,
               input_model=None,
               output_dir=None,
@@ -69,11 +70,11 @@ def predictor(input_dir=None,
               loss_types=['binary_crossentropy', 'binary_crossentropy', 'binary_crossentropy'],
               input_dimention=(6000, 3),
               normalization_mode='std',
-              batch_size=500,
+              batch_size=12,
               gpuid=None,
               gpu_limit=None,
-              number_of_cpus=5,
-              use_multiprocessing=True,
+              number_of_cpus=1,
+              use_multiprocessing=False,
               keepPS=True,
               model=None,
               spLimit=60):
@@ -326,14 +327,19 @@ def predictor(input_dir=None,
                     pbar_test.update()
 
                 new_list = next(list_generator)
-                prob_dic=_gen_predictor(new_list, args, model)
+                prob_dic =_gen_predictor(new_list, args, model)
 
                 pred_set={}
                 for ID in new_list:
                     dataset = fl.get('data/'+str(ID))
-                    pred_set.update( {str(ID) : dataset})
+                    pred_set.update({str(ID) : dataset})
 
-            plt_n, detection_memory = _gen_writer(new_list, args, prob_dic, pred_set, HDF_PROB, predict_writer, save_figs, csvPr_gen, plt_n, detection_memory, keepPS, spLimit)
+            plt_n, detection_memory = _gen_writer(new_list, args, prob_dic,
+                                                  pred_set, HDF_PROB,
+                                                  predict_writer, save_figs,
+                                                  csvPr_gen, plt_n,
+                                                  detection_memory, keepPS,
+                                                  spLimit)
             end_Predicting = time.time()
             delta = (end_Predicting - start_Predicting)
             hour = int(delta / 3600)
@@ -451,6 +457,7 @@ def predictor(input_dir=None,
                                              ])
                 csvPr_gen.flush()
                 print(f'========= Started working on {st}, {ct+1} out of {len(station_list)} ...', flush=True)
+                print("dass")
 
                 start_Predicting = time.time()
                 detection_memory = []
@@ -460,15 +467,18 @@ def predictor(input_dir=None,
                 prediction_list = df.trace_name.tolist()
                 fl = h5py.File(args['input_hdf5'], 'r')
                 list_generator=generate_arrays_from_file(prediction_list, args['batch_size'])
+                print("das")
 
                 pbar_test = tqdm(total= int(np.ceil(len(prediction_list)/args['batch_size'])), ncols=100, file=sys.stdout)
                 for bn in range(int(np.ceil(len(prediction_list) / args['batch_size']))):
+                    print(nostdout())
                     with nostdout():
                         pbar_test.update()
+                    print("dasdas")
 
                     new_list = next(list_generator)
                     prob_dic=_gen_predictor(new_list, args, model)
-
+                    print("nsas")
                     pred_set={}
                     for ID in new_list:
                         dataset = fl.get('data/'+str(ID))

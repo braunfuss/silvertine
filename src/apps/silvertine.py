@@ -591,14 +591,15 @@ def command_detect(args):
     if options.mode == "transformer":
         if options.download is not False:
             options.download = True
-        detector.picker.main(options.path, tmin="2021-05-22 12:30:03.00",
-                 tmax="2021-05-22 14:05:03.00", minlat=49.0, maxlat=49.979,
-                 minlon=7.9223,
-                 maxlon=8.9723,
-                 channels=["EH"+"[ZNE]"],
-                 client_list=["BGR"],
-                 path_waveforms=options.data_dir,
-                 download=options.download)
+        detector.picker.main(options.path, tmin=None,
+                             tmax=None, minlat=49.0,
+                             maxlat=49.979,
+                             minlon=7.9223,
+                             maxlon=8.9723,
+                             channels=["EH"+"[ZNE]"],
+                             client_list=["http://192.168.11.220:8080", "http://ws.gpi.kit.edu/"],
+                             path_waveforms=options.data_dir,
+                             download=options.download)
 
     if options.mode == "detect" or options.mode == "locate":
         detector.locator.locator.main()
