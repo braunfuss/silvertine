@@ -12,23 +12,29 @@ def make_station_json(path, tmin="2016-02-12 06:20:03.800",
                       tmax="2016-02-12 06:30:03.800",
                       minlat=49.1379, maxlat=49.1879, minlon=8.1223,
                       maxlon=8.1723,
-                      channels=["EH"+"[ZNE]"], client_list=["BGR"]):
+                      channels=["EH"+"[ZNE]"], client_list=["BGR"],
+                      seiger=True):
     # CHANLIST =["HH[ZNE]", "HH[Z21]", "BH[ZNE]", "EH[ZNE]", "SH[ZNE]", "HN[ZNE]", "HN[Z21]", "DP[ZNE]"]
     if tmin is None:
         tmin = util.stt("2021-01-22 14:05:03.00")
         tmax = util.stt("2021-12-22 14:05:03.00")
     json_basepath = os.path.join(path, "json/station_list.json")
-    makeStationList(json_path=json_basepath,
-                    client_list=client_list,
-                    min_lat=minlon,
-                    max_lat=maxlat,
-                    min_lon=minlon,
-                    max_lon=maxlon,
-                    start_time=tmin,
-                    end_time=tmax,
-                    channel_list=channels,
-                    filter_network=[],
-                    filter_station=[])
+    if seiger is False:
+        makeStationList(json_path=json_basepath,
+                        client_list=client_list,
+                        min_lat=minlon,
+                        max_lat=maxlat,
+                        min_lon=minlon,
+                        max_lon=maxlon,
+                        start_time=tmin,
+                        end_time=tmax,
+                        channel_list=channels,
+                        filter_network=[],
+                        filter_station=[])
+    else:
+        json_path = os.path.dirname(os.path.abspath(__file__))+"/json/station_list.json"
+        util.ensuredir(os.path.join(path, "json"))
+        os.system("cp  %s %s" % (json_path, json_basepath))
 
     json_basepath = os.path.join(os.getcwd(), "json/station_list.json")
 
@@ -44,7 +50,7 @@ def preprocess(path, tmin="2016-02-12 06:20:03.800",
     preprocessor(preproc_dir=pre_proc_basepath,
                  mseed_dir=downloads_basepath,
                  stations_json=json_basepath,
-                 overlap=0.3,
+                 overlap=0.0,
                  n_processor=2)
 
 
@@ -56,7 +62,8 @@ def predict(path, tmin="2016-02-12 06:20:03.800",
     if iter is None:
         out_basepath = os.path.join(path, 'detections')
     else:
-        out_basepath = os.path.join(path, 'detections_%s' % iter)
+        out_basepath = os.path.join(path, 'detections_%s_%s' % (tmin, tmax))
+
 
     if model_path is None:
         model_path = os.path.dirname(os.path.abspath(__file__))+"/model/EqT_model.h5"
@@ -93,7 +100,7 @@ def associate(path, tmin, tmax, minlat=49.1379, maxlat=49.1879, minlon=8.1223,
         out_basepath = os.path.join(path, 'detections')
         out_dir = os.path.join(path, 'asociation')
     else:
-        out_basepath = os.path.join(path, 'detections_%s' % iter)
+        out_basepath = os.path.join(path, 'detections_%s_%s' % (tmin, tmax))
         out_dir = os.path.join(path, 'asociation_%s' % iter)
 
     try:
@@ -105,7 +112,7 @@ def associate(path, tmin, tmax, minlat=49.1379, maxlat=49.1879, minlon=8.1223,
     run_associator(input_dir=out_basepath,
                    start_time=util.tts(tmin),
                    end_time=util.tts(tmax),
-                   moving_window=15,
+                   moving_window=30,
                    pair_n=2,
                    output_dir=out_dir,
                    consider_combination=False)
@@ -127,11 +134,13 @@ def iter_chunked(tinc, path, data_pile, tmin=None,
                  path_waveforms=None,
                  stream=False,
                  reject_blacklisted=None, tpad=0,
-                 tstart=None, tstop=None, tinc=None,
+                 tstart=None, tstop=None,
                  hf=10, lf=2):
-
-    tstart = util.stt(tmin) if tmin else None
-    tstop = util.stt(tmax) if tmax else None
+    try:
+        tstart = util.stt(tmin) if tmin else None
+        tstop = util.stt(tmax) if tmax else None
+    except:
+        pass
     model_path = os.path.dirname(os.path.abspath(__file__))+"/model/EqT_model.h5"
     from tensorflow.keras.models import load_model
     from tensorflow.keras.optimizers import Adam
@@ -151,7 +160,7 @@ def iter_chunked(tinc, path, data_pile, tmin=None,
                   metrics=[f1])
     for i, trs in enumerate(data_pile.chopper(tinc=tinc, tmin=tstart,
                                               tmax=tstop, tpad=tpad,
-                                              keep_current_files_open=False,
+                                            #  keep_current_files_open=False,
                                               want_incomplete=True)):
         tminc = None
         tmaxc = None
@@ -197,11 +206,10 @@ def load_eqt_folder(data_paths, tinc, path, tmin="2021-05-26 06:20:03.800",
                     download=True, seiger=True, selection=None,
                     path_waveforms=None,
                     stream=False,
-                    data_format='detect', deltat_want=100,
-                    tstart=None, tstop=None, hf=8, lf=2,
-                    tinc=None):
+                    data_format='mseed', deltat_want=100,
+                    tstart=None, tstop=None, hf=8, lf=2):
 
-    data_pile = pile.make_pile(data_paths, fileformat=data_format)
+    data_pile = pile.make_pile(data_paths, fileformat=data_format, show_progress=False)
     iter_chunked(tinc, path, data_pile, tmin=tmin, tmax=tmax, minlat=minlat,
                  maxlat=maxlat,
                  minlon=minlon, maxlon=maxlon, channels=channels,
@@ -210,7 +218,7 @@ def load_eqt_folder(data_paths, tinc, path, tmin="2021-05-26 06:20:03.800",
                  stream=stream,
                  reject_blacklisted=None, tpad=0,
                  tstart=None, tstop=None, hf=hf,
-                 lf=lf, tinc=tinc)
+                 lf=lf)
 
 
 def process(path, tmin="2021-05-26 06:20:03.800",
@@ -226,8 +234,8 @@ def process(path, tmin="2021-05-26 06:20:03.800",
                       tmax=tmax,
                       minlat=minlat, maxlat=maxlat, minlon=minlon,
                       maxlon=maxlon,
-                      channels=channels, client_list=client_list)
-
+                      channels=channels, client_list=client_list,
+                      seiger=seiger)
     preprocess(path, tmin=tmin,
                tmax=tmax,
                minlat=minlat, maxlat=maxlat, minlon=minlon,
@@ -249,14 +257,48 @@ def main(path, tmin="2021-05-26 06:20:03.800",
          maxlon=8.1723,
          channels=["EH"+"[ZNE]"], client_list=["BGR",
                                                "http://ws.gpi.kit.edu/"],
-         download=True, seiger=True, selection=None,
+         download=True, seiger=True, selection=None, clean=False,
          stream=False, path_waveforms=None, tinc=None,
-         lf=2, hf=10):
+         lf=5, hf=40):
 
     if download is True:
-        download_raw.download_raw(path, tmin, tmax, seiger=seiger,
-                                  selection=selection,
-                                  provider=client_list, clean=True)
+        if tinc is None:
+            download_raw.download_raw(path, tmin, tmax, seiger=seiger,
+                                      selection=selection,
+                                      providers=client_list, clean=True)
+        else:
+            tmin = util.stt(tmin)
+            tmax = util.stt(tmax)
+            iter = 0
+            vorhalten = True
+            tinc = float(tinc)
+            while vorhalten is True:
+                twin_start = tmin + iter*tinc
+                twin_end = tmin + tinc + iter*tinc
+                download_raw.download_raw(path, twin_start, twin_end, seiger=seiger,
+                             selection=selection,
+                             providers=client_list, clean=clean)
+                load_eqt_folder(path, tinc, path, tmin=twin_start, tmax=twin_end,
+                                minlat=minlat, maxlat=maxlat,
+                                minlon=minlon, maxlon=maxlon, channels=channels,
+                                client_list=client_list, download=download,
+                                seiger=seiger,
+                                selection=selection,
+                                stream=stream, hf=hf, lf=lf)
+
+            #    process(path, tmin=tmin, tmax=tmax, minlat=minlat, maxlat=maxlat,
+            #            minlon=minlon, maxlon=maxlon, channels=channels,
+            #            client_list=client_list, download=download, seiger=seiger,
+            #            selection=selection, path_waveforms=path_waveforms,
+            #            stream=stream)
+                subprocess.run(['rm -r %s*' % (path+'/downloads*')], shell=True)
+
+
+                iter =+ 1
+
+                if twin_start > tmax:
+                    vorhalten = False
+
     if path_waveforms is not None:
         load_eqt_folder(path_waveforms, tinc, path, tmin=tmin, tmax=tmax,
                         minlat=minlat, maxlat=maxlat,
@@ -264,7 +306,7 @@ def main(path, tmin="2021-05-26 06:20:03.800",
                         client_list=client_list, download=download,
                         seiger=seiger,
                         selection=selection,
-                        stream=stream, hf=hf, lf=lf, tinc=tinc)
+                        stream=stream, hf=hf, lf=lf)
     else:
         process(path, tmin=tmin, tmax=tmax, minlat=minlat, maxlat=maxlat,
                 minlon=minlon, maxlon=maxlon, channels=channels,

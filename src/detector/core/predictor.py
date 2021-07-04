@@ -1133,7 +1133,6 @@ def _plotter_prediction(data, evi, args, save_figs, yh1, yh2, yh3, yh1_std, yh2_
     else:
 
         ########################################## ploting only in time domain
-        print("plotting")
         fig = plt.figure(constrained_layout=True)
         widths = [1]
         heights = [1.6, 1.6, 1.6, 2.5]
@@ -1290,7 +1289,6 @@ def _plotter_prediction(data, evi, args, save_figs, yh1, yh2, yh3, yh1_std, yh2_
                 plt.text(7000, 0.1, str(EQT_VERSION), fontdict=font)
 
         else:
-            print("pas1")
             plt.plot(x, yh1, '--', color='g', alpha = 0.5, linewidth=1.5, label='Earthquake')
             plt.plot(x, yh2, '--', color='b', alpha = 0.5, linewidth=1.5, label='Parrival')
             plt.plot(x, yh3, '--', color='r', alpha = 0.5, linewidth=1.5, label='Sarrival')
@@ -1319,19 +1317,12 @@ def _plotter_prediction(data, evi, args, save_figs, yh1, yh2, yh3, yh1_std, yh2_
                 plt.text(7000, 0.1, str(EQT_VERSION), fontdict=font)
 
         #fig.tight_layout()
-        print("pas")
         fig.savefig(os.path.join(save_figs, str(evi)[0:6]+'.png'))
-        print("saved")
         plt.close(fig)
         plt.clf()
 
 
-
-
-
-
-
-def _get_snr(data, pat, window = 200):
+def _get_snr(data, pat, window=200):
 
     """
 
