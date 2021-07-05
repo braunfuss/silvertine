@@ -80,7 +80,7 @@ def predict(path, tmin="2016-02-12 06:20:03.800",
               detection_threshold=0.0003,
               P_threshold=0.0003,
               S_threshold=0.0003,
-              number_of_plots=10,
+              number_of_plots=0,
               plot_mode='time',
               batch_size=500,
               number_of_cpus=6,
@@ -101,7 +101,7 @@ def associate(path, tmin, tmax, minlat=49.1379, maxlat=49.1879, minlon=8.1223,
         out_dir = os.path.join(path, 'asociation')
     else:
         out_basepath = os.path.join(path, 'detections_%s_%s' % (tmin, tmax))
-        out_dir = os.path.join(path, 'asociation_%s' % iter)
+        out_dir = os.path.join(path, 'asociation_%s_%s' % (tmin, tmax))
 
     try:
         shutil.rmtree(out_dir)
@@ -265,19 +265,21 @@ def main(path, tmin="2021-05-26 06:20:03.800",
         if tinc is None:
             download_raw.download_raw(path, tmin, tmax, seiger=seiger,
                                       selection=selection,
-                                      providers=client_list, clean=True)
+                                      providers=client_list, clean=True,
+                                      detector=True)
         else:
             tmin = util.stt(tmin)
             tmax = util.stt(tmax)
             iter = 0
             vorhalten = True
             tinc = float(tinc)
-            while vorhalten is True:
+            for i in range(int(int(tmax-tmin)/int(tinc))):
                 twin_start = tmin + iter*tinc
                 twin_end = tmin + tinc + iter*tinc
                 download_raw.download_raw(path, twin_start, twin_end, seiger=seiger,
                              selection=selection,
-                             providers=client_list, clean=clean)
+                             providers=client_list, clean=clean,
+                             detector=True)
                 load_eqt_folder(path, tinc, path, tmin=twin_start, tmax=twin_end,
                                 minlat=minlat, maxlat=maxlat,
                                 minlon=minlon, maxlon=maxlon, channels=channels,
@@ -296,8 +298,8 @@ def main(path, tmin="2021-05-26 06:20:03.800",
 
                 iter =+ 1
 
-                if twin_start > tmax:
-                    vorhalten = False
+            #    if twin_start > tmax:
+            #        vorhalten = False
 
     if path_waveforms is not None:
         load_eqt_folder(path_waveforms, tinc, path, tmin=tmin, tmax=tmax,

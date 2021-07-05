@@ -96,7 +96,7 @@ class Config(HasPaths):
         help='whether to divide image function by number of contributors')
 
     detector_threshold = Float.T(
-        default=200.,
+        default=70.,
         help='threshold on detector function')
 
     detector_tpeaksearch = Float.T(
@@ -104,7 +104,7 @@ class Config(HasPaths):
         help='search time span for peak detection')
 
     fill_incomplete_with_zeros = Bool.T(
-        default=False,
+        default=True,
         help='fill incomplete trace time windows with zeros '
              '(and let edge effects ruin your day)')
 

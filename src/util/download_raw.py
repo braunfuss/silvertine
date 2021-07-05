@@ -62,17 +62,19 @@ def supply(watch_folder, tmin, tmax, seiger=True, selection=None, duration=3,
 
 
 def download_raw(path, tmint, tmaxt, seiger=True, selection=None,
-                 providers=["http://192.168.11.220:8080", "http://ws.gpi.kit.edu"], clean=True):
+                 providers=["http://192.168.11.220:8080", "http://ws.gpi.kit.edu"],
+                 clean=True,
+                 detector=False, common_f=80, tinc=None):
     try:
         tmin = util.stt(tmint)
         tmax = util.stt(tmaxt)
     except:
         tmin = tmint
         tmax = tmaxt
-    util.ensuredir(path+"downloads")
+    util.ensuredir(path+"/downloads")
     for provider in providers:
-        if clean is True:
-            subprocess.run(['rm -r %s*' % (path+'downloads/')], shell=True)
+        if clean is True and detector is True:
+            subprocess.run(['rm -r %s*' % (path+'/downloads/')], shell=True)
         if seiger is True:
             selection = get_seiger_stations(tmin, tmax)
 
@@ -88,19 +90,31 @@ def download_raw(path, tmint, tmaxt, seiger=True, selection=None,
             file.write(request_waveform.read())
 
         traces = io.load(download_basepath)
-        print("down")
-        print(provider)
-        for tr in traces:
-            tr.chop(tmin, tmax)
-            date_min = get_time_format_eq(tr.tmin)
-            date_max = get_time_format_eq(tr.tmax)
-            io.save(tr, "%sdownloads/%s/%s.%s..%s__%s__%s.mseed" % (path,
-                                                                    tr.station,
-                                                                    tr.network,
-                                                                    tr.station,
-                                                                    tr.channel,
-                                                                    date_min,
-                                                                    date_max))
+
+        if detector is True:
+            for tr in traces:
+                tr.chop(tmin, tmax)
+                date_min = get_time_format_eq(tr.tmin)
+                date_max = get_time_format_eq(tr.tmax)
+                io.save(tr, "%sdownloads/%s/%s.%s..%s__%s__%s.mseed" % (path,
+                                                                        tr.station,
+                                                                        tr.network,
+                                                                        tr.station,
+                                                                        tr.channel,
+                                                                        date_min,
+                                                                        date_max))
+        else:
+            if common_f is not None:
+                for tr in traces:
+                    if tr.deltat != common_f:
+                        tr.downsample_to(common_f)
+            util.ensuredir("%s/downloads/" % path)
+            window_start = traces[0].tmin
+            timestring = util.time_to_str(window_start, format='%Y-%m')
+            io.save(traces, "%s/%s/%s_%s_%s.mseed" % (path, timestring,
+                                                         provider,
+                                                         tmin,
+                                                         tmax))
     if clean is True:
         for provider in providers:
             if provider == "http://192.168.11.220:8080":

@@ -59,6 +59,8 @@ subcommand_descriptions = {
     'go': 'run silvertine optimisation',
     'forward': 'run forward modelling',
     'harvest': 'manually run harvesting',
+    'supply': 'deliver waveforms',
+    'download_raw': 'download waveforms',
     'cluster': 'run cluster analysis on result ensemble',
     'plot': 'plot optimisation result',
     'movie': 'visualize optimiser evolution',
@@ -88,6 +90,8 @@ subcommand_usages = {
     'optimize': 'optimize [options] <projectdir>',
     'monitor': 'monitor [options] <projectdir>',
     'events': 'events <configfile>',
+    'supply': 'tmin tmax',
+    'download_raw': 'tmin tmax',
     'shmconv': 'task file',
     'beam': 'beams [options] <projectdir>',
     'beam_process': 'beam_process [options] <projectdir>',
@@ -151,6 +155,8 @@ Subcommands:
     optimize      %(optimize)s
     monitor        %(monitor)s
     beam        %(beam)s
+    supply        %(supply)s
+    download_raw        %(download_raw)s
     beam_process        %(beam_process)s
     init            %(init)s
     events          %(events)s
@@ -504,6 +510,79 @@ def process_event_data(args):
 
     subprocess.run(['python3', 'seiger_down.py', "--window='%s,%s'" % (tmin, tmax), '49.1', '8.1', '50.' ,'0.001' ,'50.', 'event_%s' % (time), '--force'])
 
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
+def command_supply(args):
+
+    def setup(parser):
+        parser.add_option(
+            '--tmin', dest='tmin', type=str, default=None,
+            help='begin')
+        parser.add_option(
+            '--tmax', dest='tmax', type=str, default=None,
+            help='end')
+
+    parser, options, args = cl_parse('supply', args, setup)
+
+    project_dir = args[0]
+    from silvertine.util import download_raw
+    download_raw.supply(watch_folder=project_dir, tmin=options.tmin,
+                        tmax=options.tmax)
+
+
+def command_download_raw(args):
+
+    def setup(parser):
+        parser.add_option(
+            '--tmin', dest='tmin', type=str, default=None,
+            help='begin')
+        parser.add_option(
+            '--tmax', dest='tmax', type=str, default=None,
+            help='end')
+        parser.add_option(
+            '--freq', dest='freq', type=float, default=None,
+            help='end')
+        parser.add_option(
+            '--tinc', dest='tinc', type=float, default=None,
+            help='end')
+        parser.add_option(
+            '--detector', dest='detector', type=str, default=False,
+            help='end')
+    parser, options, args = cl_parse('download_raw', args, setup)
+
+    project_dir = args[0]
+    from silvertine.util import download_raw
+    detector = str2bool(options.detector)
+    if detector is True:
+        clean = False
+    else:
+        clean = True
+    if options.tinc is not None:
+        tinc = float(options.tinc)
+        iter = 0
+        for i in range(int(int(util.stt(options.tmax)-util.stt(options.tmin))/int(tinc))):
+            twin_start = util.stt(options.tmin) + iter*tinc
+            twin_end = util.stt(options.tmin) + tinc + iter*tinc
+            download_raw.download_raw(path=project_dir, tmint=twin_start,
+                                      tmaxt=twin_end, common_f=options.freq,
+                                      tinc=options.tinc, detector=detector,
+                                      clean=clean)
+
+            iter =+ 1
+    else:
+        download_raw.download_raw(path=project_dir, tmint=options.tmin,
+                                  tmaxt=options.tmax, common_f=options.freq,
+                                  detector=detector, clean=clean)
+
 
 def command_detect(args):
 
@@ -527,6 +606,9 @@ def command_detect(args):
             '--download', dest='download', type=str, default=False,
             help='Download data.')
         parser.add_option(
+            '--tinc', dest='tinc', type=float, default=None,
+            help='Increment.')
+        parser.add_option(
             '--path', dest='path', type=str, default=None,
             help='path')
         parser.add_option(
@@ -540,6 +622,12 @@ def command_detect(args):
             help='start')
         parser.add_option(
             '--end', dest='wanted_end', type=str, default=None,
+            help='end')
+        parser.add_option(
+            '--tmin', dest='tmin', type=str, default=None,
+            help='begin')
+        parser.add_option(
+            '--tmax', dest='tmax', type=str, default=None,
             help='end')
         parser.add_option('--config', help='Load a configuration file')
         parser.add_option('--configs',
@@ -591,15 +679,16 @@ def command_detect(args):
     if options.mode == "transformer":
         if options.download is not False:
             options.download = True
-        detector.picker.main(options.path, tmin=None,
-                             tmax=None, minlat=49.0,
+        detector.picker.main(options.path, tmin=options.tmin,
+                             tmax=options.tmax, minlat=49.0,
                              maxlat=49.979,
                              minlon=7.9223,
                              maxlon=8.9723,
                              channels=["EH"+"[ZNE]"],
-                             client_list=["http://192.168.11.220:8080", "http://ws.gpi.kit.edu/"],
+                             client_list=["http://192.168.11.220:8080", "http://ws.gpi.kit.edu"],
                              path_waveforms=options.data_dir,
-                             download=options.download)
+                             download=options.download,
+                             tinc=options.tinc)
 
     if options.mode == "detect" or options.mode == "locate":
         detector.locator.locator.main()
