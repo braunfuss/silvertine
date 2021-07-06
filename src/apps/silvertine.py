@@ -576,7 +576,6 @@ def command_download_raw(args):
                                       tmaxt=twin_end, common_f=options.freq,
                                       tinc=options.tinc, detector=detector,
                                       clean=clean)
-
             iter =+ 1
     else:
         download_raw.download_raw(path=project_dir, tmint=options.tmin,

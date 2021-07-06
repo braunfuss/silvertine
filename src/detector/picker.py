@@ -91,7 +91,8 @@ def predict(path, tmin="2016-02-12 06:20:03.800",
 
 def associate(path, tmin, tmax, minlat=49.1379, maxlat=49.1879, minlon=8.1223,
               maxlon=8.1723,
-              channels=["EH"+"[ZNE]"], client_list=["BGR"], iter=None):
+              channels=["EH"+"[ZNE]"], client_list=["BGR"], iter=None,
+              pair_n, moving_window=30):
 
     import shutil
     import os
@@ -112,8 +113,8 @@ def associate(path, tmin, tmax, minlat=49.1379, maxlat=49.1879, minlon=8.1223,
     run_associator(input_dir=out_basepath,
                    start_time=util.tts(tmin),
                    end_time=util.tts(tmax),
-                   moving_window=30,
-                   pair_n=2,
+                   moving_window=moving_window,
+                   pair_n=pair_n,
                    output_dir=out_dir,
                    consider_combination=False)
 

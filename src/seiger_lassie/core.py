@@ -537,19 +537,21 @@ def search(
 
                         if config.ifc_count_normalization:
                             frames_p *= 1.0 / len(ifcs)
-
-                    plot.plot_detection(
-                        grid, receivers, frames_p, tmin_frames_p,
-                        deltat_cf, imax, iframe_p, xpeak, ypeak,
-                        zpeak,
-                        tr_stackmax, tpeaks, apeaks,
-                        config.detector_threshold,
-                        wmin, wmax,
-                        pdata, trs, fmin, fmax, idetection,
-                        tpeaksearch,
-                        movie=show_movie,
-                        show=show_detections,
-                        save_filename=fn)
+                    try:
+                        plot.plot_detection(
+                            grid, receivers, frames_p, tmin_frames_p,
+                            deltat_cf, imax, iframe_p, xpeak, ypeak,
+                            zpeak,
+                            tr_stackmax, tpeaks, apeaks,
+                            config.detector_threshold,
+                            wmin, wmax,
+                            pdata, trs, fmin, fmax, idetection,
+                            tpeaksearch,
+                            movie=show_movie,
+                            show=show_detections,
+                            save_filename=fn)
+                    except:
+                        pass
 
                     del frames_p
 
