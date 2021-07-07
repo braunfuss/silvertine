@@ -569,7 +569,11 @@ def command_download_raw(args):
     if options.tinc is not None:
         tinc = float(options.tinc)
         iter = 0
-        for i in range(int(int(util.stt(options.tmax)-util.stt(options.tmin))/int(tinc))):
+        if int(int(util.stt(options.tmax)-util.stt(options.tmin))/int(tinc)) == 0:
+            nwindow = 1
+        else:
+            nwindow = int(int(util.stt(options.tmax)-util.stt(options.tmin))/int(tinc))
+        for i in range(nwindow):
             twin_start = util.stt(options.tmin) + iter*tinc
             twin_end = util.stt(options.tmin) + tinc + iter*tinc
             download_raw.download_raw(path=project_dir, tmint=twin_start,
@@ -660,7 +664,15 @@ def command_detect(args):
         parser.add_option('--debug', help='enable logging level DEBUG', action='store_true')
         parser.add_option('--tfdebug', help='break into tensorflow debugger', action='store_true')
         parser.add_option('--force', action='store_true')
-
+        parser.add_option(
+            '--freq', dest='freq', type=float, default=None,
+            help='end')
+        parser.add_option(
+            '--hf', dest='hf', type=float, default=50,
+            help='end')
+        parser.add_option(
+            '--lf', dest='lf', type=float, default=1,
+            help='end')
     parser, options, args = cl_parse('detect', args, setup)
     if options.load is not False:
         options.load = True
@@ -687,7 +699,8 @@ def command_detect(args):
                              client_list=["http://192.168.11.220:8080", "http://ws.gpi.kit.edu"],
                              path_waveforms=options.data_dir,
                              download=options.download,
-                             tinc=options.tinc)
+                             tinc=options.tinc, freq=options.freq,
+                             hf=options.hf, lf=options.lf)
 
     if options.mode == "detect" or options.mode == "locate":
         detector.locator.locator.main()

@@ -3,6 +3,7 @@ from pyrocko import util, io, trace, model
 import subprocess
 import os
 import time as timemod
+import numpy as num
 fdsn.g_timeout = 60.
 
 
@@ -90,7 +91,11 @@ def download_raw(path, tmint, tmaxt, seiger=True, selection=None,
             file.write(request_waveform.read())
 
         traces = io.load(download_basepath)
-
+        if common_f is not None:
+            for tr in traces:
+                if tr.deltat != common_f:
+                    tr.downsample_to(1/common_f)
+                    tr.ydata = tr.ydata.astype(num.int32)
         if detector is True:
             for tr in traces:
                 tr.chop(tmin, tmax)
@@ -104,10 +109,6 @@ def download_raw(path, tmint, tmaxt, seiger=True, selection=None,
                                                                         date_min,
                                                                         date_max))
         else:
-            if common_f is not None:
-                for tr in traces:
-                    if tr.deltat != common_f:
-                        tr.downsample_to(common_f)
             util.ensuredir("%s/downloads/" % path)
             window_start = traces[0].tmin
             timestring = util.time_to_str(window_start, format='%Y-%m')

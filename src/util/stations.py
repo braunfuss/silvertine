@@ -1,3 +1,6 @@
+from pyrock import orthodrome
+
+
 def find_station(name, tmin=None, tmax=None):
     if tmin and tmax is None:
         tmin = util.stt('2013-10-23 21:06:54.400')
@@ -19,3 +22,5 @@ def find_station(name, tmin=None, tmax=None):
             return st.lat, st.lon
         except:
             return False
+
+def to_refrence_igem(lat, lon):

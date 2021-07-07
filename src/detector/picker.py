@@ -3,6 +3,7 @@ import os
 from silvertine.detector.utils.downloader import makeStationList
 from silvertine.detector.utils.hdf5_maker import preprocessor
 from silvertine.detector.core.predictor import predictor
+import multiprocessing
 from silvertine.util import download_raw
 from pyrocko import pile, io, util
 import subprocess
@@ -51,13 +52,14 @@ def preprocess(path, tmin="2016-02-12 06:20:03.800",
                  mseed_dir=downloads_basepath,
                  stations_json=json_basepath,
                  overlap=0.0,
-                 n_processor=2)
+                 n_processor=1)
 
 
 def predict(path, tmin="2016-02-12 06:20:03.800",
             tmax="2016-02-12 06:20:03.800", minlat=49.1379, maxlat=49.1879,
             minlon=8.1223,
-            maxlon=8.1723, model_path=None, model=None, iter=None):
+            maxlon=8.1723, model_path=None, model=None, iter=None,
+            catalog=True):
 
     if iter is None:
         out_basepath = os.path.join(path, 'detections')
@@ -69,30 +71,30 @@ def predict(path, tmin="2016-02-12 06:20:03.800",
         model_path = os.path.dirname(os.path.abspath(__file__))+"/model/EqT_model.h5"
     downloads_basepath = os.path.join(path, "downloads")
     downloads_processed_path = os.path.join(path, "downloads_processed_hdfs")
-
-    predictor(input_dir=downloads_processed_path,
-              input_model=model_path,
-              output_dir=out_basepath,
-              estimate_uncertainty=False,
-              output_probabilities=False,
-              number_of_sampling=1,
-              loss_weights=[0.03, 0.40, 0.58],
-              detection_threshold=0.0003,
-              P_threshold=0.0003,
-              S_threshold=0.0003,
-              number_of_plots=0,
-              plot_mode='time',
-              batch_size=500,
-              number_of_cpus=6,
-              keepPS=False,
-              model=model,
-              spLimit=3)
+    if catalog is True:
+        predictor(input_dir=downloads_processed_path,
+                  input_model=model_path,
+                  output_dir=out_basepath,
+                  estimate_uncertainty=False,
+                  output_probabilities=False,
+                  number_of_sampling=1,
+                  loss_weights=[0.03, 0.40, 0.58],
+                  detection_threshold=0.0002,
+                  P_threshold=0.0002,
+                  S_threshold=0.0002,
+                  number_of_plots=300,
+                  plot_mode='time',
+                  batch_size=1000,
+                  number_of_cpus=6,
+                  keepPS=False,
+                  model=model,
+                  spLimit=3)
 
 
 def associate(path, tmin, tmax, minlat=49.1379, maxlat=49.1879, minlon=8.1223,
               maxlon=8.1723,
               channels=["EH"+"[ZNE]"], client_list=["BGR"], iter=None,
-              pair_n, moving_window=30):
+              pair_n=3, moving_window=30):
 
     import shutil
     import os
@@ -136,7 +138,7 @@ def iter_chunked(tinc, path, data_pile, tmin=None,
                  stream=False,
                  reject_blacklisted=None, tpad=0,
                  tstart=None, tstop=None,
-                 hf=10, lf=2):
+                 hf=10, lf=1):
     try:
         tstart = util.stt(tmin) if tmin else None
         tstop = util.stt(tmax) if tmax else None
@@ -176,7 +178,7 @@ def iter_chunked(tinc, path, data_pile, tmin=None,
                     tmaxc = tr.tmax
         for tr in trs:
             tr.highpass(4, lf)
-            tr.lowpass(4, hf)
+        #    tr.lowpass(4, hf)
 
             tr.chop(tminc, tmaxc)
             date_min = download_raw.get_time_format_eq(tminc)
@@ -260,27 +262,31 @@ def main(path, tmin="2021-05-26 06:20:03.800",
                                                "http://ws.gpi.kit.edu/"],
          download=True, seiger=True, selection=None, clean=False,
          stream=False, path_waveforms=None, tinc=None,
-         lf=5, hf=40):
+         lf=5, hf=40, freq=None):
 
     if download is True:
         if tinc is None:
             download_raw.download_raw(path, tmin, tmax, seiger=seiger,
                                       selection=selection,
                                       providers=client_list, clean=True,
-                                      detector=True)
+                                      detector=True, common_f=freq)
         else:
             tmin = util.stt(tmin)
             tmax = util.stt(tmax)
             iter = 0
             vorhalten = True
             tinc = float(tinc)
-            for i in range(int(int(tmax-tmin)/int(tinc))):
+            if int(int(tmax-tmin)/int(tinc)) == 0:
+                nwin = 1
+            else:
+                nwin = int(int(tmax-tmin)/int(tinc))
+            for i in range(nwin):
                 twin_start = tmin + iter*tinc
                 twin_end = tmin + tinc + iter*tinc
                 download_raw.download_raw(path, twin_start, twin_end, seiger=seiger,
                              selection=selection,
                              providers=client_list, clean=clean,
-                             detector=True)
+                             detector=True, common_f=freq)
                 load_eqt_folder(path, tinc, path, tmin=twin_start, tmax=twin_end,
                                 minlat=minlat, maxlat=maxlat,
                                 minlon=minlon, maxlon=maxlon, channels=channels,

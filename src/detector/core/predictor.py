@@ -457,7 +457,6 @@ def predictor(input_dir=None,
                                              ])
                 csvPr_gen.flush()
                 print(f'========= Started working on {st}, {ct+1} out of {len(station_list)} ...', flush=True)
-                print("dass")
 
                 start_Predicting = time.time()
                 detection_memory = []
@@ -467,14 +466,11 @@ def predictor(input_dir=None,
                 prediction_list = df.trace_name.tolist()
                 fl = h5py.File(args['input_hdf5'], 'r')
                 list_generator=generate_arrays_from_file(prediction_list, args['batch_size'])
-                print("das")
 
                 pbar_test = tqdm(total= int(np.ceil(len(prediction_list)/args['batch_size'])), ncols=100, file=sys.stdout)
                 for bn in range(int(np.ceil(len(prediction_list) / args['batch_size']))):
-                    print(nostdout())
                     with nostdout():
                         pbar_test.update()
-                    print("dasdas")
 
                     new_list = next(list_generator)
                     prob_dic=_gen_predictor(new_list, args, model)
@@ -573,7 +569,7 @@ def _gen_predictor(new_list, args, model):
         pred_SS = []
         for mc in range(args['number_of_sampling']):
             predD, predP, predS = model.predict_generator(generator = prediction_generator,
-                                                          use_multiprocessing = args['use_multiprocessing'],
+                                                          use_multiprocessing = False,
                                                           workers = args['number_of_cpus'])
             pred_DD.append(predD)
             pred_PP.append(predP)
@@ -592,7 +588,7 @@ def _gen_predictor(new_list, args, model):
         pred_SS_std = pred_SS.std(axis=0)
     else:
         pred_DD_mean, pred_PP_mean, pred_SS_mean = model.predict_generator(generator = prediction_generator,
-                                                                           use_multiprocessing = args['use_multiprocessing'],
+                                                                           use_multiprocessing = False,
                                                                            workers = args['number_of_cpus'])
         pred_DD_mean = pred_DD_mean.reshape(pred_DD_mean.shape[0], pred_DD_mean.shape[1])
         pred_PP_mean = pred_PP_mean.reshape(pred_PP_mean.shape[0], pred_PP_mean.shape[1])
@@ -667,10 +663,9 @@ def _gen_writer(new_list, args, prob_dic, pred_set, HDF_PROB, predict_writer, sa
     """
 
     for ts in range(prob_dic['DD_mean'].shape[0]):
-        evi =  new_list[ts]
+        evi = new_list[ts]
         dataset = pred_set[evi]
         dat = np.array(dataset)
-
 
         if args['output_probabilities']:
 
@@ -1312,12 +1307,8 @@ def _plotter_prediction(data, evi, args, save_figs, yh1, yh2, yh3, yh1_std, yh2_
                     'size': 12,
                     }
 
-            plt.text(6500, 0.5, 'EQTransformer', fontdict=font)
-            if EQT_VERSION:
-                plt.text(7000, 0.1, str(EQT_VERSION), fontdict=font)
-
         #fig.tight_layout()
-        fig.savefig(os.path.join(save_figs, str(evi)[0:6]+'.png'))
+        fig.savefig(os.path.join(save_figs, str(evi)+'.png'))
         plt.close(fig)
         plt.clf()
 
