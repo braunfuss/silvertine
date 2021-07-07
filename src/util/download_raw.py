@@ -111,11 +111,12 @@ def download_raw(path, tmint, tmaxt, seiger=True, selection=None,
         else:
             util.ensuredir("%s/downloads/" % path)
             window_start = traces[0].tmin
+            window_end = traces[0].tmax
             timestring = util.time_to_str(window_start, format='%Y-%m')
             io.save(traces, "%s/%s/%s_%s_%s.mseed" % (path, timestring,
                                                          provider,
-                                                         tmin,
-                                                         tmax))
+                                                         window_start,
+                                                         window_end))
     if clean is True:
         for provider in providers:
             if provider == "http://192.168.11.220:8080":
