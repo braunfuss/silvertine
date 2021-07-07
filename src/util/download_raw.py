@@ -56,7 +56,7 @@ def supply(watch_folder, tmin, tmax, seiger=True, selection=None, duration=3,
             download_raw(watch_folder, twin_start, twin_end, seiger=seiger,
                          selection=selection,
                          providers=providers, clean=clean)
-            iter =+ 1
+            iter = iter+ 1
 
         if twin_start > tmax:
             vorhalten = False
@@ -115,8 +115,8 @@ def download_raw(path, tmint, tmaxt, seiger=True, selection=None,
             timestring = util.time_to_str(window_start, format='%Y-%m')
             io.save(traces, "%s/%s/%s_%s_%s.mseed" % (path, timestring,
                                                          provider,
-                                                         window_start,
-                                                         window_end))
+                                                         tmin,
+                                                         tmax))
     if clean is True:
         for provider in providers:
             if provider == "http://192.168.11.220:8080":

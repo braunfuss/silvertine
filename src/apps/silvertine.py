@@ -580,7 +580,7 @@ def command_download_raw(args):
                                       tmaxt=twin_end, common_f=options.freq,
                                       tinc=options.tinc, detector=detector,
                                       clean=clean)
-            iter =+ 1
+            iter = iter+1
     else:
         download_raw.download_raw(path=project_dir, tmint=options.tmin,
                                   tmaxt=options.tmax, common_f=options.freq,
@@ -671,7 +671,7 @@ def command_detect(args):
             '--hf', dest='hf', type=float, default=50,
             help='end')
         parser.add_option(
-            '--lf', dest='lf', type=float, default=1,
+            '--lf', dest='lf', type=float, default=10,
             help='end')
     parser, options, args = cl_parse('detect', args, setup)
     if options.load is not False:
