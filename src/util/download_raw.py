@@ -15,6 +15,7 @@ def get_seiger_stations(tmin, tmax):
         ('*', 'LDE*', '*', 'EH*', tmin, tmax),
         ('*', 'LDO*', '*', 'EH*', tmin, tmax),
         ('*', 'ROTT*', '*', 'EH*', tmin, tmax),
+        ('*', 'MOER*', '*', 'EH*', tmin, tmax),
      ]
     return selection
 
