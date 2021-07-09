@@ -6,13 +6,13 @@ from pyrocko import model, guts
 from pyrocko.io import stationxml
 from pyrocko.gf import TPDef
 
-from lassie import receiver, ifc, grid, geo
-from lassie.common import Earthmodel, HasPaths, Path, LassieError, \
+from silvertine.seiger_lassie import receiver, ifc, grid, geo
+from silvertine.seiger_lassie.common import Earthmodel, HasPaths, Path, LassieError, \
     expand_template
 
-guts_prefix = 'lassie'
+guts_prefix = 'seiger_lassie'
 
-logger = logging.getLogger('lassie.config')
+logger = logging.getLogger('seiger_lassie.config')
 
 
 class Config(HasPaths):
@@ -175,7 +175,7 @@ class Config(HasPaths):
 
     def get_figures_path_template(self):
         run_path = self.expand_path(self.run_path)
-        return op.join(run_path, 'figures', 'detection_%(id)06i.%(format)s')
+        return op.join(run_path, 'figures', 'detection_%(id)s.%(format)s')
 
     def get_receivers(self):
         '''Aggregate receivers from different sources.'''

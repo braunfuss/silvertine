@@ -314,8 +314,8 @@ def main():
         '--sites',
         dest='sites',
         metavar='SITE1,SITE2,...',
-        default='bgr',
-    #    default='bgr, http://192.168.11.220:8080',
+    #    default='bgr',
+        default='http://ws.gpi.kit.edu,http://192.168.11.220:8080',
         help='sites to query (available: %s, default: "%%default"'
         % ', '.join(g_sites_available))
 
@@ -342,11 +342,20 @@ def main():
         help='minimum radius [km]')
 
     parser.add_option(
+        '--tinc',
+        dest='tinc',
+        metavar='VALUE',
+        default=3600.*12.,
+        type=float,
+        help='length of seperate saved files in s')
+
+    parser.add_option(
         '--nstations-wanted',
         dest='nstations_wanted',
         metavar='N',
         type=int,
         help='number of stations to select initially')
+
 
     (options, args) = parser.parse_args(sys.argv[1:])
 
@@ -519,8 +528,6 @@ def main():
     tmin -= tpad
     tmax += tpad
 
-    tinc = None
-
     priority_band_code = options.priority_band_code.split(',')
     for s in priority_band_code:
         if len(s) != 1:
@@ -550,7 +557,7 @@ def main():
     output_units = 'M'
 
     sites = [x.strip() for x in options.sites.split(',') if x.strip()]
-
+    tinc = options.tinc
   #  for site in sites:
    #     if site not in g_sites_available:
     #        logger.critical('unknown FDSN site: %s' % site)
@@ -649,9 +656,6 @@ def main():
 
         nsls_selected = set(s.nsl() for s in stations_selected)
         logger.info('number of stations selected: %i' % len(nsls_selected))
-
-    if tinc is None:
-        tinc = 3600.
 
     have_data = set()
 
@@ -860,10 +864,13 @@ util.tts(tmax_win)))
             logger.info('downloading response information (%s)' % site)
             sxs[site] = fdsn.station(
                 site=site, level='response', selection=selection)
+            sited = site
+
             if site == "http://192.168.11.220:8080":
+               print("bgrint")
                sited= "bgr_internal"
-            else:
-               sited = site
+            elif site == "http://ws.gpi.kit.edu":
+               sited= "kit"
             sxs[site].dump_xml(
                 filename=op.join(output_dir, 'stations.%s.xml' % sited))
 

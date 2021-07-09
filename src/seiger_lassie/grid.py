@@ -4,9 +4,9 @@ import numpy as num
 from pyrocko.guts import Object, Float
 from pyrocko import orthodrome as od
 
-from lassie import geo
+from silvertine.seiger_lassie import geo
 
-guts_prefix = 'lassie'
+guts_prefix = 'seiger_lassie'
 
 
 class Grid(Object):

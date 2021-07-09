@@ -8,10 +8,10 @@ from pyrocko.gui import snuffler
 from pyrocko.gui import marker as pmarker
 from pyrocko.gui import util as gui_util
 from pyrocko.gui.snuffling import Snuffling, Param, Choice, Switch
-from lassie import geo, ifc
+from silvertine.seiger_lassie import geo, ifc
 
 
-logger = logging.getLogger('lassie.snuffling')
+logger = logging.getLogger('seiger_lassie.snuffling')
 
 
 kind_default = '1 (green)'

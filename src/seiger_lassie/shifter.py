@@ -6,11 +6,11 @@ import numpy as num
 from pyrocko.guts import Object, Float, String   # noqa
 from pyrocko import cake, spit, util
 from pyrocko.gf import meta
-from lassie import geo
-from lassie.common import LassieError, CakeEarthmodel
+from silvertine.seiger_lassie import geo
+from silvertine.seiger_lassie.common import LassieError, CakeEarthmodel
 
-guts_prefix = 'lassie'
-logger = logging.getLogger('lassie.config')
+guts_prefix = 'seiger_lassie'
+logger = logging.getLogger('lassie_seiger.config')
 
 
 class Shifter(Object):

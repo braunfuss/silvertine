@@ -1,7 +1,7 @@
 from pyrocko.guts import Tuple, String
-from lassie import geo
+from silvertine.seiger_lassie import geo
 
-guts_prefix = 'lassie'
+guts_prefix = 'seiger_lassie'
 
 
 class Receiver(geo.Point):

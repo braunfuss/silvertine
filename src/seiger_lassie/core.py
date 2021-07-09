@@ -13,10 +13,14 @@ from pyrocko.parstack import parstack, argmax as pargmax
 
 from pyrocko.guts import Object, Timestamp, String, Float
 
-from lassie import common, plot, grid as gridmod, geo
-from lassie.config import write_config
 
-logger = logging.getLogger('lassie.core')
+from silvertine.seiger_lassie import common, plot, grid as gridmod, geo
+from silvertine.seiger_lassie.config import write_config
+from obspy.core.event import read_events
+from obspy.core.event import Catalog
+from glob import glob
+import os
+logger = logging.getLogger('seiger_lassie.core')
 
 
 class Detection(Object):
@@ -105,8 +109,8 @@ def zero_fill(trs, tmin, tmax):
 
         tr_combi = trs_group[0].copy()
         tr_combi.extend(tmin, tmax, fillmethod='zeros')
-
         for tr in trs_group[1:]:
+            tr.ydata = tr.ydata.astype(num.int32)
             tr_combi.add(tr)
 
         trs_out.append(tr_combi)
@@ -224,8 +228,7 @@ def search(
             break
 
         deltat_cf *= 2
-
-    logger.info('CF sampling interval (rate): %g s (%g Hz)' % (
+    logger.info('CF lassie sampling interval (rate): %g s (%g Hz)' % (
         deltat_cf, 1.0/deltat_cf))
 
     ngridpoints = grid.size()
@@ -364,7 +367,6 @@ def search(
                 shifts[bad] = num.max(shifts[ok])
 
                 pdata.append((list(trs_selected), shift_table, ifc))
-
                 parstack_params.append((arrays, offsets, shifts, weights))
 
             if config.stacking_blocksize is not None:
@@ -471,7 +473,7 @@ def search(
                 if bark:
                     common.bark()
 
-                logger.info('detection: %s' % str(detection))
+                logger.info('detection found: %s' % str(detection))
 
                 f = open(detections_path, 'a')
                 f.write('%06i %s %g %g %g %g %g %g\n' % (
@@ -494,7 +496,7 @@ def search(
                     fmax = min(ifc.fmax for ifc in ifcs)
 
                     fn = figures_path_template % {
-                        'id': idetection,
+                        'id': util.tts(t0).replace(" ", "T"),
                         'format': 'png'}
 
                     util.ensuredirs(fn)
@@ -549,7 +551,8 @@ def search(
                             tpeaksearch,
                             movie=show_movie,
                             show=show_detections,
-                            save_filename=fn)
+                            save_filename=fn,
+                            event=ev)
                     except:
                         pass
 
@@ -567,7 +570,14 @@ def search(
         logger.info('end processing time window group: %s - %s' % (
             util.time_to_str(tmin_win),
             util.time_to_str(tmax_win)))
-
+    cat = Catalog()
+    files = glob("%s/figures/*qml*" % run_path)
+    files.sort(key=os.path.getmtime)
+    for file in files:
+        cat_read = read_events(file)
+        for event in cat_read:
+            cat.append(event)
+    cat.write("%s/all_events_qml.xml" % run_path, format="QUAKEML")
 
 __all__ = [
     'search',

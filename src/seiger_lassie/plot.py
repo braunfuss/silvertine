@@ -3,7 +3,12 @@ import numpy as num
 
 from pyrocko.plot import automap
 from pyrocko import plot, util
-from lassie import grid as gridmod, geo
+from silvertine.seiger_lassie import grid as gridmod, geo
+from pyrocko.gui.pile_viewer import PhaseMarker, EventMarker
+from pyrocko.gui import marker as pym
+from obspy.core.event import Catalog, Event, Origin, Arrival, Pick, WaveformStreamID
+from obspy import UTCDateTime
+from obspy.core.event import Catalog
 
 km = 1000.
 
@@ -111,8 +116,8 @@ def plot_detection(
         xpeak, ypeak, zpeak, tr_stackmax, tpeaks, apeaks,
         detector_threshold, wmin, wmax, pdata, trs_raw, fmin, fmax,
         idetection, tpeaksearch,
-        movie=False, save_filename=None, show=True):
-
+        movie=False, save_filename=None, show=True,
+        event=None):
     from matplotlib import pyplot as plt
     from matplotlib import cm
     from matplotlib.animation import FuncAnimation
@@ -135,7 +140,6 @@ def plot_detection(
 
     axes3 = plt.subplot2grid((2, 3), (0, 1), rowspan=2)
     axes4 = plt.subplot2grid((2, 3), (0, 0), rowspan=2)
-
     if grid.distance_max() > km:
         dist_units = km
         axes.set_xlabel('Easting [km]')
@@ -247,10 +251,13 @@ def plot_detection(
         lw=2.)
 
     nsl_have = set()
+    phase_markers = []
+    picks = []
     for ishifter, (trs, dists, shift_table, shifter) in enumerate(pdata2):
         color = plot.mpl_graph_color(ishifter)
 
         for tr, dist in zip(trs, dists):
+            tmint = tr.tmin
             tr = tr.chop(
                 tpeak_current - 0.5*tduration + shift_min,
                 tpeak_current + 0.5*tduration + shift_max, inplace=False)
@@ -258,6 +265,19 @@ def plot_detection(
             nsl = tr.nslc_id[:3]
             istation = station_index[nsl]
             shift = shift_table[imax, istation]
+
+            phase_markers.append(PhaseMarker([(nsl[0], nsl[1], "",
+                                               nsl[2])],
+                                             tmin=tmint+shift,
+                                             tmax=tmint+shift,
+                                             phasename=shifter.name,
+                                             event_time=t0,
+                                             event_hash=idetection
+                                             ))
+            p = Pick(time=UTCDateTime(tmint+shift),
+                         waveform_id=WaveformStreamID(network_code=nsl[0], station_code=nsl[1]),
+                         phase_hint=shifter.name, method_id="lassie")
+            picks.append(p)
             axes3.plot(
                 shift, dist/dist_units, '|',
                 mew=2, mec=color, ms=10, zorder=2)
@@ -306,7 +326,17 @@ def plot_detection(
             axes4.plot(
                 shift, dist/dist_units, '|',
                 mew=2, mec=color, ms=10, zorder=2)
-
+    PhaseMarker.save_markers(phase_markers, "%s.pym" % (save_filename[:-4]), fdigits=3)
+    event_obspy = Event()
+    origin = Origin(time=UTCDateTime(t0),
+                    longitude=event.lon,
+                    latitude=event.lat,
+                    method="lassie")
+    event_obspy.origins.append(origin)
+    event_obspy.picks = picks
+    cat = Catalog()
+    cat.append(event_obspy)
+    cat.write(save_filename[:-4]+"_qml.xml", format="QUAKEML")
     nframes = frames.shape[1]
 
     iframe_min = max(0, int(round(iframe - 0.5*tduration/deltat_cf)))

@@ -83,7 +83,7 @@ def preprocessor(preproc_dir, mseed_dir, stations_json, overlap=0.3, n_processor
 
     if not os.path.exists(preproc_dir):
             os.makedirs(preproc_dir)
-    repfile = open(os.path.join(preproc_dir,"X_preprocessor_report.txt"), 'w');
+    #repfile = open(os.path.join(preproc_dir,"X_preprocessor_report.txt"), 'w');
 
     if platform.system() == 'Windows':
         station_list = [join(mseed_dir, ev) for ev in listdir(mseed_dir) if ev.split("\\")[-1] != ".DS_Store"];
@@ -441,8 +441,8 @@ def preprocessor(preproc_dir, mseed_dir, stations_json, overlap=0.3, n_processor
         dd = pd.read_csv(os.path.join(save_dir, output_name+".csv"))
 
 
-        assert count_chuncks == len(uni_list)
-        assert sum(slide_estimates)-(fln/100) <= len(dd) <= sum(slide_estimates)+10
+    #    assert count_chuncks == len(uni_list)
+    #    assert sum(slide_estimates)-(fln/100) <= len(dd) <= sum(slide_estimates)+10
         data_track[output_name]=[time_slots, comp_types]
         print(f" Station {output_name} had {len(uni_list)} chuncks of data")
         print(f"{len(dd)} slices were written, {sum(slide_estimates)} were expected.")
@@ -452,7 +452,7 @@ def preprocessor(preproc_dir, mseed_dir, stations_json, overlap=0.3, n_processor
             repfile.write(f' Station {output_name} had {len(uni_list)} chuncks of data, {len(dd)} slices were written, {int(sum(slide_estimates))} were expected. Number of 1-components: {c1}, Number of 2-components: {c2}, number of 3-components: {c3}, original samplieng rate: {org_samplingRate}\n')
         except Exception:
             pass
-    with ThreadPool(n_processor) as p:
+    with ThreadPool(multiprocessing.cpu_count()) as p:
         p.map(process, station_list)
     with open(os.path.join(preproc_dir,'time_tracks.pkl'), 'wb') as f:
         pickle.dump(data_track, f, pickle.HIGHEST_PROTOCOL)

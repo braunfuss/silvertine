@@ -5,7 +5,7 @@ from collections import defaultdict
 from pyrocko.guts import Object, String
 from pyrocko.gf import Earthmodel1D
 
-guts_prefix = 'lassie'
+guts_prefix = 'seiger_lassie'
 
 
 def data_file(fn):

@@ -6,7 +6,11 @@ from silvertine.detector.core.predictor import predictor
 import multiprocessing
 from silvertine.util import download_raw
 from pyrocko import pile, io, util
+from pyrocko import model as pm
 import subprocess
+from obspy.core.event import read_events
+from obspy.core.event import Catalog
+from glob import glob
 
 
 def make_station_json(path, tmin="2016-02-12 06:20:03.800",
@@ -51,8 +55,8 @@ def preprocess(path, tmin="2016-02-12 06:20:03.800",
     preprocessor(preproc_dir=pre_proc_basepath,
                  mseed_dir=downloads_basepath,
                  stations_json=json_basepath,
-                 overlap=0.0,
-                 n_processor=1)
+                 overlap=0.3,
+                 n_processor=6)
 
 
 def predict(path, tmin="2016-02-12 06:20:03.800",
@@ -77,24 +81,25 @@ def predict(path, tmin="2016-02-12 06:20:03.800",
                   output_dir=out_basepath,
                   estimate_uncertainty=False,
                   output_probabilities=False,
-                  number_of_sampling=1,
-                  loss_weights=[0.03, 0.40, 0.58],
-                  detection_threshold=0.0002,
-                  P_threshold=0.0002,
-                  S_threshold=0.0002,
+                  number_of_sampling=2,
+                  loss_weights=[0.02, 0.40, 0.58],
+                  detection_threshold=0.0001,
+                  P_threshold=0.0001,
+                  S_threshold=0.0001,
                   number_of_plots=300,
                   plot_mode='time',
-                  batch_size=1000,
+                  batch_size=500,
                   number_of_cpus=6,
                   keepPS=False,
                   model=model,
+                  allowonlyS=True,
                   spLimit=3)
 
 
 def associate(path, tmin, tmax, minlat=49.1379, maxlat=49.1879, minlon=8.1223,
               maxlon=8.1723,
               channels=["EH"+"[ZNE]"], client_list=["BGR"], iter=None,
-              pair_n=3, moving_window=30):
+              pair_n=3, moving_window=20):
 
     import shutil
     import os
@@ -127,6 +132,17 @@ def reject_blacklisted(tr, blacklist):
     return not util.match_nslc(blacklist, tr.nslc_id)
 
 
+def downsample(tr, deltat):
+    try:
+        tr.downsample_to(
+            deltat, demean=False, snap=True,
+            allow_upsample_max=4)
+
+    except util.UnavailableDecimation:
+        logger.warn('using resample instead of decimation')
+        tr.resample(deltat)
+
+
 def iter_chunked(tinc, path, data_pile, tmin=None,
                  tmax=None, minlat=49.1379,
                  maxlat=49.1879,
@@ -138,7 +154,7 @@ def iter_chunked(tinc, path, data_pile, tmin=None,
                  stream=False,
                  reject_blacklisted=None, tpad=0,
                  tstart=None, tstop=None,
-                 hf=10, lf=1):
+                 hf=10, lf=1, deltat=None):
     try:
         tstart = util.stt(tmin) if tmin else None
         tstop = util.stt(tmax) if tmax else None
@@ -161,6 +177,8 @@ def iter_chunked(tinc, path, data_pile, tmin=None,
                   loss_weights=[0.02, 0.40, 0.58],
                   optimizer=Adam(lr=0.001),
                   metrics=[f1])
+    deltat_cf = min(data_pile.deltats.keys())
+
     for i, trs in enumerate(data_pile.chopper(tinc=tinc, tmin=tstart,
                                               tmax=tstop, tpad=tpad,
                                             #  keep_current_files_open=False,
@@ -177,8 +195,13 @@ def iter_chunked(tinc, path, data_pile, tmin=None,
                 if tmaxc > tr.tmax:
                     tmaxc = tr.tmax
         for tr in trs:
-            tr.highpass(4, lf)
-        #    tr.lowpass(4, hf)
+#            if tr.station == "INS1":
+#
+        #    tr.highpass(4, 1)
+        #    else:
+            tr.highpass(4, 5)
+
+            #    tr.lowpass(4, 10)
 
             tr.chop(tminc, tmaxc)
             date_min = download_raw.get_time_format_eq(tminc)
@@ -198,6 +221,22 @@ def iter_chunked(tinc, path, data_pile, tmin=None,
                 stream=stream, model=model, iter=i)
         for tr in trs:
             subprocess.run(["rm -r %s/downloads/%s/%s.%s..%s__%s__%s.mseed" %(path, tr.station, tr.network, tr.station, tr.channel, date_min, date_max)], shell=True)
+
+    cat = Catalog()
+    files = glob("%s/asociation*/associations.xml" % path)
+    files.sort(key=os.path.getmtime)
+    for file in files:
+        cat_read = read_events(file)
+        for event in cat_read:
+            cat.append(event)
+    cat.write("%s/events_qml.xml" % path, format="QUAKEML")
+    events = []
+    files = glob("%s/asociation*/events.pf" % path)
+    files.sort(key=os.path.getmtime)
+    for file in files:
+        events_read = pm.load_events(file)
+        events.extend(events_read)
+    pm.dump_events(events, "%s/events.pf" % path)
 
 
 def load_eqt_folder(data_paths, tinc, path, tmin="2021-05-26 06:20:03.800",

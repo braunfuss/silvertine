@@ -74,9 +74,10 @@ def predictor(input_dir=None,
               gpuid=None,
               gpu_limit=None,
               number_of_cpus=6,
-              use_multiprocessing=False,
+              use_multiprocessing=True,
               keepPS=True,
               model=None,
+              allowonlyS=True,
               spLimit=60):
 
 
@@ -197,6 +198,7 @@ def predictor(input_dir=None,
     "number_of_cpus": number_of_cpus,
     "use_multiprocessing": use_multiprocessing,
     "keepPS": keepPS,
+    "allowonlyS": allowonlyS,
     "spLimit": spLimit
     }
 
@@ -208,7 +210,7 @@ def predictor(input_dir=None,
         os.environ['CUDA_VISIBLE_DEVICES'] = '{}'.format(args['gpuid'])
         tf.Session(config=tf.ConfigProto(log_device_placement=True))
         config = tf.ConfigProto()
-        config.gpu_options.allow_growth = True
+        config.gpu_options._growth = True
         config.gpu_options.per_process_gpu_memory_fraction = float(args['gpu_limit'])
         K.tensorflow_backend.set_session(tf.Session(config=config))
 
@@ -334,13 +336,8 @@ def predictor(input_dir=None,
                     dataset = fl.get('data/'+str(ID))
                     pred_set.update({str(ID) : dataset})
 
-            plt_n, detection_memory = _gen_writer(new_list, args, prob_dic,
-                                                  pred_set, HDF_PROB,
-                                                  predict_writer, save_figs,
-                                                  csvPr_gen, plt_n,
-                                                  detection_memory, keepPS,
-                                                  spLimit)
-            end_Predicting = time.time()
+                plt_n, detection_memory= _gen_writer(new_list, args, prob_dic, pred_set, HDF_PROB, predict_writer, save_figs, csvPr_gen, plt_n, detection_memory, keepPS, allowonlyS, spLimit)
+                end_Predicting = time.time()
             delta = (end_Predicting - start_Predicting)
             hour = int(delta / 3600)
             delta -= hour * 3600
@@ -382,6 +379,7 @@ def predictor(input_dir=None,
                 the_file.write('gpuid: '+str(args['gpuid'])+'\n')
                 the_file.write('gpu_limit: '+str(args['gpu_limit'])+'\n')
                 the_file.write('keepPS: '+str(args['keepPS'])+'\n')
+                the_file.write('allowonlyS: '+str(args['allowonlyS'])+'\n')
                 the_file.write('spLimit: '+str(args['spLimit'])+' seconds\n')
 
     else:
@@ -474,14 +472,12 @@ def predictor(input_dir=None,
 
                     new_list = next(list_generator)
                     prob_dic=_gen_predictor(new_list, args, model)
-                    print("nsas")
                     pred_set={}
                     for ID in new_list:
                         dataset = fl.get('data/'+str(ID))
                         pred_set.update( {str(ID) : dataset})
 
-                    plt_n, detection_memory= _gen_writer(new_list, args, prob_dic, pred_set, HDF_PROB, predict_writer, save_figs, csvPr_gen, plt_n, detection_memory, keepPS, spLimit)
-
+                    plt_n, detection_memory= _gen_writer(new_list, args, prob_dic, pred_set, HDF_PROB, predict_writer, save_figs, csvPr_gen, plt_n, detection_memory, keepPS, allowonlyS, spLimit)
                 HDF_PROB.close()
 
                 end_Predicting = time.time()
@@ -609,8 +605,7 @@ def _gen_predictor(new_list, args, model):
 
 
 
-def _gen_writer(new_list, args, prob_dic, pred_set, HDF_PROB, predict_writer, save_figs, csvPr_gen, plt_n, detection_memory, keepPS, spLimit):
-
+def _gen_writer(new_list, args, prob_dic, pred_set, HDF_PROB, predict_writer, save_figs, csvPr_gen, plt_n, detection_memory, keepPS, allowonlyS, spLimit):
     """
 
     Applies the detection and picking on the output predicted probabilities and if it founds any, write them out in the CSV file,
@@ -685,6 +680,10 @@ def _gen_writer(new_list, args, prob_dic, pred_set, HDF_PROB, predict_writer, sa
 
         matches, pick_errors, yh3 =  picker(args, prob_dic['DD_mean'][ts], prob_dic['PP_mean'][ts], prob_dic['SS_mean'][ts],
                                             prob_dic['DD_std'][ts], prob_dic['PP_std'][ts], prob_dic['SS_std'][ts])
+
+        if not allowonlyS: #if NOT limiting to "only S" picks
+            if len(matches)>=1 and matches[list(matches)[0]][6] and not matches[list(matches)[0]][3]: #if S picks exist but no P...
+                continue
         if keepPS:
             if (len(matches) >= 1) and (matches[list(matches)[0]][3] and matches[list(matches)[0]][6]):
                 snr = [_get_snr(dat, matches[list(matches)[0]][3], window = 100), _get_snr(dat, matches[list(matches)[0]][6], window = 100)]
@@ -924,7 +923,7 @@ def _plotter_prediction(data, evi, args, save_figs, yh1, yh2, yh3, yh1_std, yh2_
         widths = [6, 1]
         heights = [1, 1, 1, 1, 1, 1, 1.8]
         spec5 = fig.add_gridspec(ncols=2, nrows=7, width_ratios=widths,
-                              height_ratios=heights, left=0.1, right=0.9, hspace=0.1)
+                              height_ratios=heights, left=0.1, right=0.8, hspace=0.1)
 
 
         ax = fig.add_subplot(spec5[0, 0])

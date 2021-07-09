@@ -5,7 +5,7 @@ import logging
 from optparse import OptionParser
 
 from pyrocko import util
-
+import multiprocessing
 from silvertine import seiger_lassie as lassie
 
 logger = logging.getLogger('main')
@@ -342,7 +342,7 @@ def command_search(args):
         if options.nworkers:
             nparallel = int(options.nworkers)
         else:
-            nparallel = None
+            nparallel = multiprocessing.cpu_count()
 
         lassie.search(
             config,

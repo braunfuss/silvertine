@@ -7,11 +7,11 @@ from pyrocko.guts import Object, String, Float, Bool, StringChoice, List, Dict
 from pyrocko import trace, autopick, util, model
 from pyrocko.gui import util as gui_util
 from pyrocko import marker as pmarker
-from lassie import shifter, common, geo
+from silvertine.seiger_lassie import shifter, common, geo
 
-logger = logging.getLogger('lassie.ifc')
+logger = logging.getLogger('lassie_seiger.ifc')
 
-guts_prefix = 'lassie'
+guts_prefix = 'seiger_lassie'
 
 
 def downsample(tr, deltat):

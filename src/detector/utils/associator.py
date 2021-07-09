@@ -5,7 +5,7 @@ Created on Fri Dec 27 18:52:42 2019
 
 @author: mostafamousavi
 
-last update: 01/29/2021
+modified Andreas Steinberg
 """
 
 from datetime import datetime, timedelta
@@ -132,7 +132,6 @@ def run_associator(input_dir,
     tbl['event_end_time'] = tbl['event_end_time'].apply(lambda row : _date_convertor(row))
     tbl['p_arrival_time'] = tbl['p_arrival_time'].apply(lambda row : _date_convertor(row))
     tbl['s_arrival_time'] = tbl['s_arrival_time'].apply(lambda row : _date_convertor(row))
-
     _dbs_associator(start_time,
                     end_time,
                     moving_window,
@@ -143,9 +142,6 @@ def run_associator(input_dir,
                     consider_combination)
 
     os.remove("phase_dataset")
-
-
-
 
 
 
@@ -379,6 +375,7 @@ def _dbs_associator(start_time, end_time, moving_window,
         while tt < et:
 
             detections = tbl[(tbl.event_start_time >= tt) & (tbl.event_start_time < tt+timedelta(seconds = moving_window))]
+
             pbar.update()
             if len(detections) >= pair_n:
                 evid += 1
@@ -551,8 +548,13 @@ def _dbs_associator(start_time, end_time, moving_window,
         while tt < et:
 
             detections = tbl[(tbl.event_start_time >= tt) & (tbl.event_start_time < tt+timedelta(seconds = moving_window))]
+            pair_nt = pair_n
+            for _, row in detections.iterrows():
+                station = "{:<5}".format(row['station'])
+                if station[0] is "R":
+                    pair_nt = 1
             pbar.update()
-            if len(detections) >= pair_n:
+            if len(detections) >= pair_nt:
 
                 yr = "{:>4}".format(str(detections.iloc[0]['event_start_time']).split(' ')[0].split('-')[0])
                 mo = "{:>2}".format(str(detections.iloc[0]['event_start_time']).split(' ')[0].split('-')[1])
@@ -603,7 +605,7 @@ def _dbs_associator(start_time, end_time, moving_window,
                         sec_p = "{:>4}".format(str(row['p_arrival_time']).split(' ')[1].split(':')[2])
                         p = Pick(time=UTCDateTime(row['p_arrival_time']),
                                      waveform_id=WaveformStreamID(network_code=network, station_code=station.rstrip()),
-                                     phase_hint="P", method_id="EqTransformer")
+                                     phase_hint="P", method_id="Transformer")
                         picks.append(p)
 
                         if p_unc:
@@ -627,7 +629,7 @@ def _dbs_associator(start_time, end_time, moving_window,
                         sec_s = "{:>4}".format(str(row['s_arrival_time']).split(' ')[1].split(':')[2])
                         p = Pick(time=UTCDateTime(row['s_arrival_time']),
                                      waveform_id=WaveformStreamID(network_code=network, station_code=station.rstrip()),
-                                     phase_hint="S", method_id="EqTransformer")
+                                     phase_hint="S", method_id="Transformer")
                         picks.append(p)
 
                         if s_unc:
@@ -677,7 +679,7 @@ def _dbs_associator(start_time, end_time, moving_window,
                 Y2000_writer.write("{:<62}".format(' ')+"%10d"%(evid)+'\n');
                 traceNmae_dic[str(evid)] = tr_names
 
-                if len(row_buffer) >= 2*pair_n:
+                if len(row_buffer) >= 2*pair_nt:
                     Y2000_writer.write("%4d%2d%2d%2d%2d%4.2f%2.0f%1s%4.2f%3.0f%1s%4.2f%5.2f%3.2f\n"%
                                        (int(yr),int(mo),int(dy),int(hr),int(mi),float(sec),
                                         float(st_lat_DMS[0]), str(st_lat_DMS[1]), float(st_lat_DMS[2]),
@@ -690,11 +692,11 @@ def _dbs_associator(start_time, end_time, moving_window,
                     Y2000_writer.write("{:<62}".format(' ')+"%10d"%(evid)+'\n');
                     traceNmae_dic[str(evid)] = tr_names2
 
-                elif len(row_buffer) < pair_n and len(row_buffer) != 0:
+                elif len(row_buffer) < pair_nt and len(row_buffer) != 0:
                     evidd += 1
                     traceNmae_dic[str(evidd)] = tr_names2
 
-            elif len(detections) < pair_n and len(detections) != 0:
+            elif len(detections) < pair_nt and len(detections) != 0:
                 tr_names = []
                 for _, row in detections.iterrows():
                     trace_name = row['traceID']
@@ -717,4 +719,6 @@ def _dbs_associator(start_time, end_time, moving_window,
         cat.write(save_dir+"/associations.xml", format="QUAKEML")
         qml = quakeml.QuakeML.load_xml(filename=save_dir+"/associations.xml")
         events = qml.get_pyrocko_events()
+    #    events_loaded = model.load_events(save_dir+'/events.pf')
+    #    events.extend(events_loaded)
         model.event.dump_events(events, filename=save_dir+'/events.pf')
