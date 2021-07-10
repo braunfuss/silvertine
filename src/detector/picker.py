@@ -81,12 +81,12 @@ def predict(path, tmin="2016-02-12 06:20:03.800",
                   output_dir=out_basepath,
                   estimate_uncertainty=False,
                   output_probabilities=False,
-                  number_of_sampling=2,
+                  number_of_sampling=0,
                   loss_weights=[0.02, 0.40, 0.58],
                   detection_threshold=0.0001,
                   P_threshold=0.0001,
                   S_threshold=0.0001,
-                  number_of_plots=300,
+                  number_of_plots=0,
                   plot_mode='time',
                   batch_size=500,
                   number_of_cpus=6,
@@ -195,24 +195,20 @@ def iter_chunked(tinc, path, data_pile, tmin=None,
                 if tmaxc > tr.tmax:
                     tmaxc = tr.tmax
         for tr in trs:
-#            if tr.station == "INS1":
-#
-        #    tr.highpass(4, 1)
-        #    else:
             tr.highpass(4, 5)
-
-            #    tr.lowpass(4, 10)
-
-            tr.chop(tminc, tmaxc)
-            date_min = download_raw.get_time_format_eq(tminc)
-            date_max = download_raw.get_time_format_eq(tmaxc)
-            io.save(tr, "%s/downloads/%s/%s.%s..%s__%s__%s.mseed" % (path,
-                                                                    tr.station,
-                                                                    tr.network,
-                                                                    tr.station,
-                                                                    tr.channel,
-                                                                    date_min,
-                                                                    date_max))
+            try:
+                tr.chop(tminc, tmaxc)
+                date_min = download_raw.get_time_format_eq(tminc)
+                date_max = download_raw.get_time_format_eq(tmaxc)
+                io.save(tr, "%s/downloads/%s/%s.%s..%s__%s__%s.mseed" % (path,
+                                                                        tr.station,
+                                                                        tr.network,
+                                                                        tr.station,
+                                                                        tr.channel,
+                                                                        date_min,
+                                                                        date_max))
+            except:
+                pass
 
         process(path, tmin=tminc, tmax=tmaxc, minlat=minlat, maxlat=maxlat,
                 minlon=minlon, maxlon=maxlon, channels=channels,
