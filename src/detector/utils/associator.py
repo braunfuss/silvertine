@@ -552,7 +552,7 @@ def _dbs_associator(start_time, end_time, moving_window,
             for _, row in detections.iterrows():
                 station = "{:<5}".format(row['station'])
                 if station[0] is "R":
-                    pair_nt = 1
+                    pair_nt = 2
             pbar.update()
             if len(detections) >= pair_nt:
 
