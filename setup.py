@@ -142,6 +142,7 @@ setup(
             'data/examples/*/*.*',
             'data/examples/*/*/*.*',
             'detector/model/*h5',
+            'detector/json/station_list.json',
             'data/examples/*/*/silvertineown',
             ]},
 
