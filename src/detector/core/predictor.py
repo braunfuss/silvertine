@@ -41,7 +41,27 @@ from scipy import signal
 from matplotlib.lines import Line2D
 from datetime import datetime
 import subprocess
+import ray
+import copy
+global model
 
+class DummyFile(object):
+    file = None
+    def __init__(self, file):
+        self.file = file
+
+    def write(self, x):
+        # Avoid print() second call (useless \n)
+        if len(x.rstrip()) > 0:
+            tqdm.write(x, file=self.file)
+
+@contextlib.contextmanager
+def nostdout():
+    save_stdout = sys.stdout
+    sys.stdout = DummyFile(sys.stdout)
+    yield
+    sys.stdout = save_stdout
+        
 warnings.filterwarnings("ignore")
 from tensorflow.python.util import deprecation
 deprecation._PRINT_DEPRECATION_WARNINGS = False
@@ -55,6 +75,143 @@ except Exception:
     EQT_VERSION = "0.1.61"
 
 
+@ray.remote
+def predict_station(st):
+    # args, out_dir, station_list, nostdout, model, keepPS, allowonlyS, spLimit
+    args["input_hdf5"] = args["input_dir"]+"/"+st+".hdf5"
+    args["input_csv"] = args["input_dir"]+"/"+st+".csv"
+    print(st)
+
+    save_dir = os.path.join(out_dir, str(st)+'_outputs')
+    out_probs = os.path.join(save_dir, 'prediction_probabilities.hdf5')
+    save_figs = os.path.join(save_dir, 'figures')
+    if os.path.isdir(save_dir):
+        shutil.rmtree(save_dir)
+    os.makedirs(save_dir)
+    if args['number_of_plots']:
+        os.makedirs(save_figs)
+    try:
+        os.remove(out_probs)
+    except Exception:
+         pass
+
+    if args['output_probabilities']:
+        HDF_PROB = h5py.File(out_probs, 'a')
+        HDF_PROB.create_group("probabilities")
+        HDF_PROB.create_group("uncertainties")
+    else:
+        HDF_PROB = None
+
+    csvPr_gen = open(os.path.join(save_dir,'X_prediction_results.csv'), 'w')
+    predict_writer = csv.writer(csvPr_gen, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+    predict_writer.writerow(['file_name',
+                             'network',
+                             'station',
+                             'instrument_type',
+                             'station_lat',
+                             'station_lon',
+                             'station_elv',
+                             'event_start_time',
+                             'event_end_time',
+                             'detection_probability',
+                             'detection_uncertainty',
+                             'p_arrival_time',
+                             'p_probability',
+                             'p_uncertainty',
+                             'p_snr',
+                             's_arrival_time',
+                             's_probability',
+                             's_uncertainty',
+                             's_snr'
+                                 ])
+    csvPr_gen.flush()
+ #   print(f'========= Started working on {st}, {ct+1} out of {len(station_list)} ...', flush=True)
+ #   try:
+    start_Predicting = time.time()
+    detection_memory = []
+    plt_n = 0
+
+    df = pd.read_csv(args['input_csv'])
+    prediction_list = df.trace_name.tolist()
+    fl = h5py.File(args['input_hdf5'], 'r')
+    list_generator=generate_arrays_from_file(prediction_list, args['batch_size'])
+
+    model = load_model(args['input_model'],
+                       custom_objects={'SeqSelfAttention': SeqSelfAttention,
+                                       'FeedForward': FeedForward,
+                                       'LayerNormalization': LayerNormalization,
+                                       'f1': f1
+                                        })
+    print("compile")
+    model.compile(loss = args['loss_types'],
+                  #loss_weights =  args['loss_weights'],
+                 # optimizer = Adam(lr = 0.001),
+                  loss_weights=[0.02, 0.40, 0.58],
+                  optimizer=Adam(lr=0.001),
+                  metrics = [f1])
+    print("compile end")
+
+    pbar_test = tqdm(total= int(np.ceil(len(prediction_list)/args['batch_size'])), ncols=100, file=sys.stdout)
+    for bn in range(int(np.ceil(len(prediction_list) / args['batch_size']))):
+        with nostdout():
+            pbar_test.update()
+
+        new_list = next(list_generator)
+        prob_dic =_gen_predictor(new_list, args, model)
+
+        pred_set={}
+        for ID in new_list:
+            dataset = fl.get('data/'+str(ID))
+            pred_set.update({str(ID) : dataset})
+
+        plt_n, detection_memory= _gen_writer(new_list, args, prob_dic, pred_set, HDF_PROB, predict_writer, save_figs, csvPr_gen, plt_n, detection_memory, keepPS_copy, allowonlyS_copy, spLimit_copy)
+        end_Predicting = time.time()
+    delta = (end_Predicting - start_Predicting)
+    hour = int(delta / 3600)
+    delta -= hour * 3600
+    minute = int(delta / 60)
+    delta -= minute * 60
+    seconds = delta
+
+
+    dd = pd.read_csv(os.path.join(save_dir,'X_prediction_results.csv'))
+    print(f'\n', flush=True)
+    print(' *** Finished the prediction in: {} hours and {} minutes and {} seconds.'.format(hour, minute, round(seconds, 2)), flush=True)
+    print(' *** Detected: '+str(len(dd))+' events.', flush=True)
+
+    print(' *** Wrote the results into --> " ' + str(save_dir)+' "', flush=True)
+
+    with open(os.path.join(save_dir,'X_report.txt'), 'a') as the_file:
+        the_file.write('================== Overal Info =============================='+'\n')
+        the_file.write('date of report: '+str(datetime.now())+'\n')
+        the_file.write('input_hdf5: '+str(args['input_hdf5'])+'\n')
+        the_file.write('input_csv: '+str(args['input_csv'])+'\n')
+        the_file.write('input_model: '+str(args['input_model'])+'\n')
+        the_file.write('output_dir: '+str(save_dir)+'\n')
+        the_file.write('================== Prediction Parameters ======================='+'\n')
+        the_file.write('finished the prediction in:  {} hours and {} minutes and {} seconds \n'.format(hour, minute, round(seconds, 2)))
+        the_file.write('detected: '+str(len(dd))+' events.'+'\n')
+        the_file.write('writting_probability_outputs: '+str(args['output_probabilities'])+'\n')
+        the_file.write('loss_types: '+str(args['loss_types'])+'\n')
+        the_file.write('loss_weights: '+str(args['loss_weights'])+'\n')
+        the_file.write('batch_size: '+str(args['batch_size'])+'\n')
+        the_file.write('================== Other Parameters ========================='+'\n')
+        the_file.write('normalization_mode: '+str(args['normalization_mode'])+'\n')
+        the_file.write('estimate uncertainty: '+str(args['estimate_uncertainty'])+'\n')
+        the_file.write('number of Monte Carlo sampling: '+str(args['number_of_sampling'])+'\n')
+        the_file.write('detection_threshold: '+str(args['detection_threshold'])+'\n')
+        the_file.write('P_threshold: '+str(args['P_threshold'])+'\n')
+        the_file.write('S_threshold: '+str(args['S_threshold'])+'\n')
+        the_file.write('number_of_plots: '+str(args['number_of_plots'])+'\n')
+        the_file.write('use_multiprocessing: '+str(args['use_multiprocessing'])+'\n')
+        the_file.write('gpuid: '+str(args['gpuid'])+'\n')
+        the_file.write('gpu_limit: '+str(args['gpu_limit'])+'\n')
+        the_file.write('keepPS: '+str(args['keepPS'])+'\n')
+        the_file.write('allowonlyS: '+str(args['allowonlyS'])+'\n')
+        the_file.write('spLimit: '+str(args['spLimit'])+' seconds\n')
+   # except:
+    #    pass
+      
 def predictor(input_dir=None,
               input_model=None,
               output_dir=None,
@@ -76,8 +233,8 @@ def predictor(input_dir=None,
               number_of_cpus=6,
               use_multiprocessing=True,
               keepPS=True,
-              model=None,
               allowonlyS=True,
+              model=None,
               spLimit=60):
 
 
@@ -171,7 +328,16 @@ def predictor(input_dir=None,
 
 
     """
+    global args
+    global out_dir
+    global station_list
+    global keepPS_copy
+    keepPS_copy = copy.deepcopy(keepPS)
 
+    global allowonlyS_copy
+    allowonlyS_copy  = copy.deepcopy(allowonlyS)
+    global spLimit_copy
+    spLimit_copy  = copy.deepcopy(spLimit)
 
     args = {
     "input_dir": input_dir,
@@ -214,15 +380,6 @@ def predictor(input_dir=None,
         config.gpu_options.per_process_gpu_memory_fraction = float(args['gpu_limit'])
         K.tensorflow_backend.set_session(tf.Session(config=config))
 
-    class DummyFile(object):
-        file = None
-        def __init__(self, file):
-            self.file = file
-
-        def write(self, x):
-            # Avoid print() second call (useless \n)
-            if len(x.rstrip()) > 0:
-                tqdm.write(x, file=self.file)
 
     @contextlib.contextmanager
     def nostdout():
@@ -261,128 +418,11 @@ def predictor(input_dir=None,
         station_list = sorted(set(station_list))
 
         print(f"######### There are files for {len(station_list)} stations in {args['input_dir']} directory. #########", flush=True)
-        for ct, st in enumerate(station_list):
-            if platform.system() == 'Windows':
-                args["input_hdf5"] = args["input_dir"]+"\\"+st+".hdf5"
-                args["input_csv"] = args["input_dir"]+"\\"+st+".csv"
-            else:
-                args["input_hdf5"] = args["input_dir"]+"/"+st+".hdf5"
-                args["input_csv"] = args["input_dir"]+"/"+st+".csv"
+        
+    #    ray.get([predict_station.remote(ct, st, args, out_dir, station_list, nostdout, model, keepPS, allowonlyS, spLimit) for (ct, st) in enumerate(station_list)])
+    #args, out_dir, station_list, nostdout, model, keepPS, allowonlyS, spLimit
+        ray.get([predict_station.remote(station_list[i]) for i in range(len(station_list))])
 
-            save_dir = os.path.join(out_dir, str(st)+'_outputs')
-            out_probs = os.path.join(save_dir, 'prediction_probabilities.hdf5')
-            save_figs = os.path.join(save_dir, 'figures')
-            if os.path.isdir(save_dir):
-                shutil.rmtree(save_dir)
-            os.makedirs(save_dir)
-            if args['number_of_plots']:
-                os.makedirs(save_figs)
-            try:
-                os.remove(out_probs)
-            except Exception:
-                 pass
-
-            if args['output_probabilities']:
-                HDF_PROB = h5py.File(out_probs, 'a')
-                HDF_PROB.create_group("probabilities")
-                HDF_PROB.create_group("uncertainties")
-            else:
-                HDF_PROB = None
-
-            csvPr_gen = open(os.path.join(save_dir,'X_prediction_results.csv'), 'w')
-            predict_writer = csv.writer(csvPr_gen, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-            predict_writer.writerow(['file_name',
-                                     'network',
-                                     'station',
-                                     'instrument_type',
-                                     'station_lat',
-                                     'station_lon',
-                                     'station_elv',
-                                     'event_start_time',
-                                     'event_end_time',
-                                     'detection_probability',
-                                     'detection_uncertainty',
-                                     'p_arrival_time',
-                                     'p_probability',
-                                     'p_uncertainty',
-                                     'p_snr',
-                                     's_arrival_time',
-                                     's_probability',
-                                     's_uncertainty',
-                                     's_snr'
-                                         ])
-            csvPr_gen.flush()
-            print(f'========= Started working on {st}, {ct+1} out of {len(station_list)} ...', flush=True)
-            try:
-                start_Predicting = time.time()
-                detection_memory = []
-                plt_n = 0
-
-                df = pd.read_csv(args['input_csv'])
-                prediction_list = df.trace_name.tolist()
-                fl = h5py.File(args['input_hdf5'], 'r')
-                list_generator=generate_arrays_from_file(prediction_list, args['batch_size'])
-
-                pbar_test = tqdm(total= int(np.ceil(len(prediction_list)/args['batch_size'])), ncols=100, file=sys.stdout)
-                for bn in range(int(np.ceil(len(prediction_list) / args['batch_size']))):
-                    with nostdout():
-                        pbar_test.update()
-
-                    new_list = next(list_generator)
-                    prob_dic =_gen_predictor(new_list, args, model)
-
-                    pred_set={}
-                    for ID in new_list:
-                        dataset = fl.get('data/'+str(ID))
-                        pred_set.update({str(ID) : dataset})
-
-                    plt_n, detection_memory= _gen_writer(new_list, args, prob_dic, pred_set, HDF_PROB, predict_writer, save_figs, csvPr_gen, plt_n, detection_memory, keepPS, allowonlyS, spLimit)
-                    end_Predicting = time.time()
-                delta = (end_Predicting - start_Predicting)
-                hour = int(delta / 3600)
-                delta -= hour * 3600
-                minute = int(delta / 60)
-                delta -= minute * 60
-                seconds = delta
-
-
-                dd = pd.read_csv(os.path.join(save_dir,'X_prediction_results.csv'))
-                print(f'\n', flush=True)
-                print(' *** Finished the prediction in: {} hours and {} minutes and {} seconds.'.format(hour, minute, round(seconds, 2)), flush=True)
-                print(' *** Detected: '+str(len(dd))+' events.', flush=True)
-
-                print(' *** Wrote the results into --> " ' + str(save_dir)+' "', flush=True)
-
-                with open(os.path.join(save_dir,'X_report.txt'), 'a') as the_file:
-                    the_file.write('================== Overal Info =============================='+'\n')
-                    the_file.write('date of report: '+str(datetime.now())+'\n')
-                    the_file.write('input_hdf5: '+str(args['input_hdf5'])+'\n')
-                    the_file.write('input_csv: '+str(args['input_csv'])+'\n')
-                    the_file.write('input_model: '+str(args['input_model'])+'\n')
-                    the_file.write('output_dir: '+str(save_dir)+'\n')
-                    the_file.write('================== Prediction Parameters ======================='+'\n')
-                    the_file.write('finished the prediction in:  {} hours and {} minutes and {} seconds \n'.format(hour, minute, round(seconds, 2)))
-                    the_file.write('detected: '+str(len(dd))+' events.'+'\n')
-                    the_file.write('writting_probability_outputs: '+str(args['output_probabilities'])+'\n')
-                    the_file.write('loss_types: '+str(args['loss_types'])+'\n')
-                    the_file.write('loss_weights: '+str(args['loss_weights'])+'\n')
-                    the_file.write('batch_size: '+str(args['batch_size'])+'\n')
-                    the_file.write('================== Other Parameters ========================='+'\n')
-                    the_file.write('normalization_mode: '+str(args['normalization_mode'])+'\n')
-                    the_file.write('estimate uncertainty: '+str(args['estimate_uncertainty'])+'\n')
-                    the_file.write('number of Monte Carlo sampling: '+str(args['number_of_sampling'])+'\n')
-                    the_file.write('detection_threshold: '+str(args['detection_threshold'])+'\n')
-                    the_file.write('P_threshold: '+str(args['P_threshold'])+'\n')
-                    the_file.write('S_threshold: '+str(args['S_threshold'])+'\n')
-                    the_file.write('number_of_plots: '+str(args['number_of_plots'])+'\n')
-                    the_file.write('use_multiprocessing: '+str(args['use_multiprocessing'])+'\n')
-                    the_file.write('gpuid: '+str(args['gpuid'])+'\n')
-                    the_file.write('gpu_limit: '+str(args['gpu_limit'])+'\n')
-                    the_file.write('keepPS: '+str(args['keepPS'])+'\n')
-                    the_file.write('allowonlyS: '+str(args['allowonlyS'])+'\n')
-                    the_file.write('spLimit: '+str(args['spLimit'])+' seconds\n')
-            except:
-                pass
     else:
         NN_in = len(args['output_dir'])
         for iidir in range(NN_in):
@@ -564,7 +604,11 @@ def _gen_predictor(new_list, args, model):
         pred_DD = []
         pred_PP = []
         pred_SS = []
+        print("preds")
         for mc in range(args['number_of_sampling']):
+            print("loop")
+         #   ray.get([process.remote(station_list[i]) for i in range(len(station_list))])
+
             predD, predP, predS = model.predict_generator(generator = prediction_generator,
                                                           use_multiprocessing = False,
                                                           workers = args['number_of_cpus'])
@@ -934,9 +978,11 @@ def _plotter_prediction(data, evi, args, save_figs, yh1, yh2, yh3, yh1_std, yh2_
      #   for ev in detected_events:
      #       l, = plt.gca().plot(x[ev[0]:ev[1]], data[ev[0]:ev[1], 0], 'mediumblue')
         ax.set_xticks([])
-        plt.rcParams["figure.figsize"] = (10, 10)
+        plt.rcParams["figure.figsize"] = (7, 7)
         legend_properties = {'weight':'bold'}
-        plt.title('Trace Name: '+str(evi))
+        name = str(evi)[0:5]
+        name = name.replace("_", "")
+        plt.title('Trace Name: '+name)
 
         pl = None
         sl = None
@@ -1072,7 +1118,7 @@ def _plotter_prediction(data, evi, args, save_figs, yh1, yh2, yh3, yh1_std, yh2_
             upperS = yh3+yh3_std
             plt.fill_between(x, lowerS, upperS, edgecolor='#CC4F1B', facecolor='#FF9848')
 
-            plt.tight_layout()
+        #    plt.tight_layout()
             plt.ylim((-0.1, 1.1))
             plt.xlim(0, 6000)
             plt.ylabel('Probability', fontsize=12)
@@ -1094,7 +1140,7 @@ def _plotter_prediction(data, evi, args, save_figs, yh1, yh2, yh3, yh1_std, yh2_
             plt.plot(x, yh1, '--', color='g', alpha = 0.5, linewidth=2, label='Earthquake')
             plt.plot(x, yh2, '--', color='b', alpha = 0.5, linewidth=2, label='Parrival')
             plt.plot(x, yh3, '--', color='r', alpha = 0.5, linewidth=2, label='Sarrival')
-            plt.tight_layout()
+            #plt.tight_layout()
             plt.ylim((-0.1, 1.1))
             plt.xlim(0, 6000)
             plt.ylabel('Probability', fontsize=12)
@@ -1119,16 +1165,16 @@ def _plotter_prediction(data, evi, args, save_figs, yh1, yh2, yh3, yh1_std, yh2_
                     }
 
         plt.xlim(0, 6000)
-        fig.tight_layout()
+    #    fig.tight_layout()
         fig.savefig(os.path.join(save_figs, str(evi)+'.png'), dpi=200)
         plt.close(fig)
         plt.clf()
 
 
     else:
-
+        print("plot")
         ########################################## ploting only in time domain
-        fig = plt.figure(constrained_layout=True)
+        fig = plt.figure()
         widths = [1]
         heights = [1.6, 1.6, 1.6, 2.5]
         spec5 = fig.add_gridspec(ncols=1, nrows=4, width_ratios=widths,
@@ -1144,9 +1190,11 @@ def _plotter_prediction(data, evi, args, save_figs, yh1, yh2, yh3, yh1_std, yh2_
     #    for ev in detected_events:
     #        l, = plt.gca().plot(x[ev[0]:ev[1]], data[ev[0]:ev[1], 0], 'mediumblue')
 
-        plt.rcParams["figure.figsize"] = (8,6)
+        plt.rcParams["figure.figsize"] = (8,8)
         legend_properties = {'weight':'bold'}
-        plt.title('Trace Name: ')
+        name = str(evi)[0:5]
+        name = name.replace("_", "")
+        plt.title('Trace Name: '+name)
 
         pl = sl = None
         if len(spt) > 0 and np.count_nonzero(data[:, 0]) > 10:
@@ -1260,7 +1308,7 @@ def _plotter_prediction(data, evi, args, save_figs, yh1, yh2, yh3, yh1_std, yh2_
             upperS = yh3+yh3_std
             plt.fill_between(x, lowerS, upperS, edgecolor='#CC4F1B', facecolor='#FF9848')
 
-            plt.tight_layout()
+        #    plt.tight_layout()
             plt.ylim((-0.1, 1.1))
             plt.xlim(0, 6000)
             plt.ylabel('Probability')
@@ -1288,7 +1336,7 @@ def _plotter_prediction(data, evi, args, save_figs, yh1, yh2, yh3, yh1_std, yh2_
             plt.plot(x, yh2, '--', color='b', alpha = 0.5, linewidth=1.5, label='Parrival')
             plt.plot(x, yh3, '--', color='r', alpha = 0.5, linewidth=1.5, label='Sarrival')
 
-            plt.tight_layout()
+        #    plt.tight_layout()
             plt.ylim((-0.1, 1.1))
             plt.xlim(0, 6000)
             plt.ylabel('Probability')

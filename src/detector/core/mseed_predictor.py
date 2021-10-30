@@ -364,8 +364,8 @@ def mseed_predictor(input_dir='downloads_mseeds',
             the_file.write('gpuid: '+str(args['gpuid'])+'\n')
             the_file.write('gpu_limit: '+str(args['gpu_limit'])+'\n')    
   
-    with open('time_tracks.pkl', 'wb') as f:
-        pickle.dump(data_track, f, pickle.HIGHEST_PROTOCOL)
+   # with open('time_tracks.pkl', 'wb') as f:
+    #    pickle.dump(data_track, f, pickle.HIGHEST_PROTOCOL)
 
        
         

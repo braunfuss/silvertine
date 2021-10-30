@@ -161,7 +161,7 @@ class Optimizer(Object):
                 raise Exception('No such parameter: %s' % key)
 
             setattr(want_modifiy, key, attribute)
-            
+
         model.config = new_config
 
     def save_model(self, model):

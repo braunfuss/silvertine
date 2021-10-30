@@ -300,7 +300,6 @@ def _date_convertor(r):
         return new_t
 
 
-
 def _doubleChecking(station_list, detections, preprocessed_dir, moving_window, thr_on=3.7, thr_of=0.5):
     'this function perform traditional detection (STA/LTA) and picker (AIC) to double check for events on the remaining stations when an event has been detected on more than two stations'
     for stt in station_list:
@@ -552,7 +551,7 @@ def _dbs_associator(start_time, end_time, moving_window,
             for _, row in detections.iterrows():
                 station = "{:<5}".format(row['station'])
                 if station[0] is "R":
-                    pair_nt = 2
+                    pair_nt = 3
             pbar.update()
             if len(detections) >= pair_nt:
 

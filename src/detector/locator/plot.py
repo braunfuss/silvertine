@@ -7,7 +7,7 @@ matplotlib.rcParams['mathtext.rm'] = 'Bitstream Vera Sans'
 matplotlib.rcParams['mathtext.it'] = 'Bitstream Vera Sans:italic'
 matplotlib.rcParams['mathtext.bf'] = 'Bitstream Vera Sans:bold'
 from matplotlib.ticker import FuncFormatter
-from mpl_toolkits.axes_grid1.colorbar import colorbar
+#from mpl_toolkits.axes_grid1.colorbar import colorbar
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 import matplotlib.pyplot as plt
@@ -373,7 +373,7 @@ def error_contourf(predictions, labels, ax, text_labels=None):
 		     borderpad=0,)
 
     # cax.set_title('Err [km]')
-    cbar = colorbar(s, cax=cax)
+    cbar = plt.colorbar(s, cax=cax)
     cbar.ax.text(9.5, 0.5, r'$\triangle$DD [km]', rotation=90.,
             horizontalalignment='center',
         verticalalignment='center', transform=cax.transAxes)

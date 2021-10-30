@@ -30,7 +30,7 @@ import multiprocessing
 import pickle
 import faulthandler; faulthandler.enable()
 from obspy import read
-
+import ray
 
 
 def preprocessor(preproc_dir, mseed_dir, stations_json, overlap=0.3, n_processor=None):
@@ -92,6 +92,7 @@ def preprocessor(preproc_dir, mseed_dir, stations_json, overlap=0.3, n_processor
 
     data_track = dict()
 
+    @ray.remote
     def process(station):
     # for station in station_list:
         if platform.system() == 'Windows':
@@ -452,10 +453,14 @@ def preprocessor(preproc_dir, mseed_dir, stations_json, overlap=0.3, n_processor
             repfile.write(f' Station {output_name} had {len(uni_list)} chuncks of data, {len(dd)} slices were written, {int(sum(slide_estimates))} were expected. Number of 1-components: {c1}, Number of 2-components: {c2}, number of 3-components: {c3}, original samplieng rate: {org_samplingRate}\n')
         except Exception:
             pass
-    with ThreadPool(multiprocessing.cpu_count()) as p:
-        p.map(process, station_list)
-    with open(os.path.join(preproc_dir,'time_tracks.pkl'), 'wb') as f:
-        pickle.dump(data_track, f, pickle.HIGHEST_PROTOCOL)
+    #with ThreadPool(multiprocessing.cpu_count()) as p:
+     #   p.map(process, station_list)
+
+    ray.get([process.remote(station_list[i]) for i in range(len(station_list))])
+   # for station in station_list:
+    #    process(station)
+   # with open(os.path.join(preproc_dir,'time_tracks.pkl'), 'wb') as f:
+    #    pickle.dump(data_track, f, pickle.HIGHEST_PROTOCOL)
 
 
 

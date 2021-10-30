@@ -8,7 +8,7 @@ from pyrocko.guts import Object, String, Int, Float, Tuple, Bool, Dict, List
 from pyrocko.gui import marker
 from pyrocko.gf.seismosizer import Engine, Target, LocalEngine, Source
 from pyrocko import orthodrome
-from pyrocko import pile
+from pyrocko import pile, trace
 
 from collections import defaultdict, OrderedDict
 from functools import lru_cache, partialmethod, partial
@@ -759,10 +759,24 @@ class PileData(DataGenerator):
                     keep_current_files_open=True,
                     want_incomplete=False,
                     trace_selector=self.reject_blacklisted):
-
+                trace_nsls = []
                 for tr in trs:
                     self.preprocess(tr)
-
+                    shape = num.shape(tr.ydata)
+                    trace_nsls.append(tr.nslc_id)
+                    deltat = tr.deltat
+                for i, tr in enumerate(trs):
+                    try:
+                        nslc_to_index[tr.nslc_id]
+                    except:
+                        self.config.channels.extend([(tr.nslc_id[0],tr.nslc_id[1],tr.nslc_id[2],tr.nslc_id[3])])
+                    #    print(m.tmin, m.tmax)
+                    #    empty_array = num.empty(shape, dtype=num.float32)
+                    #    empty_array.fill(num.nan)
+                    #    tr = trace.Trace(network=tr.network,
+                    #    station=tr.station, channel=tr.channel, deltat=deltat, tmin=m.tmin-tpad, ydata=empty_array)
+                    #    trs[i] = tr
+                        nslc_to_index = self.nslc_to_index
                 indices = [nslc_to_index[tr.nslc_id] for tr in trs]
                 chunk = self.get_raw_data_chunk(self.tensor_shape)
                 self.fit_data_into_chunk(trs, chunk=chunk, indices=indices, tref=m.tmin)

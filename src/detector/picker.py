@@ -51,11 +51,11 @@ def preprocess(path, tmin="2016-02-12 06:20:03.800",
     pre_proc_basepath = os.path.join(path, "prepoc")
     downloads_basepath = os.path.join(path, "downloads")
     json_basepath = os.path.join(path, "json/station_list.json")
-
+    print(downloads_basepath, pre_proc_basepath, json_basepath)
     preprocessor(preproc_dir=pre_proc_basepath,
                  mseed_dir=downloads_basepath,
                  stations_json=json_basepath,
-                 overlap=0.3,
+                 overlap=0.4,
                  n_processor=6)
 
 
@@ -79,18 +79,18 @@ def predict(path, tmin="2016-02-12 06:20:03.800",
         predictor(input_dir=downloads_processed_path,
                   input_model=model_path,
                   output_dir=out_basepath,
-                  estimate_uncertainty=False,
+                  estimate_uncertainty=True,
                   output_probabilities=False,
-                  number_of_sampling=0,
+                  number_of_sampling=1,
                   loss_weights=[0.02, 0.40, 0.58],
-                  detection_threshold=0.0001,
-                  P_threshold=0.0001,
-                  S_threshold=0.0001,
-                  number_of_plots=0,
+                  detection_threshold=0.001,
+                  P_threshold=0.001,
+                  S_threshold=0.001,
+                  number_of_plots=10,
                   plot_mode='time',
                   batch_size=500,
                   number_of_cpus=6,
-                  keepPS=False,
+                  keepPS=True,
                   model=model,
                   allowonlyS=True,
                   spLimit=3)
@@ -99,7 +99,7 @@ def predict(path, tmin="2016-02-12 06:20:03.800",
 def associate(path, tmin, tmax, minlat=49.1379, maxlat=49.1879, minlon=8.1223,
               maxlon=8.1723,
               channels=["EH"+"[ZNE]"], client_list=["BGR"], iter=None,
-              pair_n=3, moving_window=20):
+              pair_n=4, moving_window=30):
 
     import shutil
     import os
@@ -116,10 +116,13 @@ def associate(path, tmin, tmax, minlat=49.1379, maxlat=49.1879, minlon=8.1223,
     except Exception:
         pass
     os.makedirs(out_dir)
-
+    if tmin is not None:
+        tmin = util.tts(tmin)
+    if tmax is not None:
+        tmax = util.tts(tmax)
     run_associator(input_dir=out_basepath,
-                   start_time=util.tts(tmin),
-                   end_time=util.tts(tmax),
+                   start_time=tmin,
+                   end_time=tmax,
                    moving_window=moving_window,
                    pair_n=pair_n,
                    output_dir=out_dir,
@@ -165,6 +168,7 @@ def iter_chunked(tinc, path, data_pile, tmin=None,
     from tensorflow.keras.optimizers import Adam
 
     from silvertine.detector.core.EqT_utils import f1, SeqSelfAttention, FeedForward, LayerNormalization
+    global model
 
     model = load_model(model_path,
                        custom_objects={'SeqSelfAttention': SeqSelfAttention,
@@ -181,7 +185,7 @@ def iter_chunked(tinc, path, data_pile, tmin=None,
 
     for i, trs in enumerate(data_pile.chopper(tinc=tinc, tmin=tstart,
                                               tmax=tstop, tpad=tpad,
-                                            #  keep_current_files_open=False,
+                                              keep_current_files_open=False,
                                               want_incomplete=True)):
         tminc = None
         tmaxc = None
@@ -340,8 +344,6 @@ def main(path, tmin="2021-05-26 06:20:03.800",
 
                 iter =+ 1
 
-            #    if twin_start > tmax:
-            #        vorhalten = False
 
     if path_waveforms is not None:
         load_eqt_folder(path_waveforms, tinc, path, tmin=tmin, tmax=tmax,

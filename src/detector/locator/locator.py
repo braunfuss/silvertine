@@ -19,7 +19,18 @@ def main():
 
     parser = argparse.ArgumentParser(
                 description='')
+    parser.add_argument(
+        '--download_method', dest='download_method', type=str, default="stream",
+        help='Choose download method')
+    parser.add_argument(
+        '--loop', dest='loop', type=str, default="internal",
+        help='Type of loop; experimental.')
+    parser.add_argument(
+        '--on_run', dest='on_run', type=str, default=False,
+        help='Detect on live stream.')
+
     parser.add_argument('detect', help='Load a configuration file')
+    parser.add_argument('--on_stream', help='Detect on incoming stream.')
     parser.add_argument('--config', help='Load a configuration file')
     parser.add_argument('--configs',
             help='load a comma separated list of configs and process them')
