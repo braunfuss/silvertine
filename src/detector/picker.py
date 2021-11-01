@@ -51,7 +51,6 @@ def preprocess(path, tmin="2016-02-12 06:20:03.800",
     pre_proc_basepath = os.path.join(path, "prepoc")
     downloads_basepath = os.path.join(path, "downloads")
     json_basepath = os.path.join(path, "json/station_list.json")
-    print(downloads_basepath, pre_proc_basepath, json_basepath)
     preprocessor(preproc_dir=pre_proc_basepath,
                  mseed_dir=downloads_basepath,
                  stations_json=json_basepath,
@@ -63,12 +62,7 @@ def predict(path, tmin="2016-02-12 06:20:03.800",
             tmax="2016-02-12 06:20:03.800", minlat=49.1379, maxlat=49.1879,
             minlon=8.1223,
             maxlon=8.1723, model_path=None, model=None, iter=None,
-            catalog=True):
-
-    if iter is None:
-        out_basepath = os.path.join(path, 'detections')
-    else:
-        out_basepath = os.path.join(path, 'detections_%s_%s' % (tmin, tmax))
+            catalog=True, out_basepath=None):
 
 
     if model_path is None:
@@ -272,6 +266,10 @@ def process(path, tmin="2021-05-26 06:20:03.800",
             path_waveforms=None, model=None,
             stream=False, iter=None):
 
+    if iter is None:
+        out_basepath = os.path.join(path, 'detections')
+    else:
+        out_basepath = os.path.join(path, 'detections_%s_%s' % (tmin, tmax))
     make_station_json(path, tmin=tmin,
                       tmax=tmax,
                       minlat=minlat, maxlat=maxlat, minlon=minlon,
@@ -282,11 +280,10 @@ def process(path, tmin="2021-05-26 06:20:03.800",
                tmax=tmax,
                minlat=minlat, maxlat=maxlat, minlon=minlon,
                maxlon=maxlon)
-
     predict(path, tmin=tmin,
             tmax=tmax,
             minlat=minlat, maxlat=maxlat, minlon=minlon,
-            maxlon=maxlon, model=model, iter=iter)
+            maxlon=maxlon, model=model, iter=iter, out_basepath=out_basepath)
     associate(path, tmin=tmin,
               tmax=tmax,
               minlat=minlat, maxlat=maxlat, minlon=minlon,
