@@ -76,138 +76,139 @@ except Exception:
 
 @ray.remote
 def predict_station(st, args_copy):
-    # args_copy, out_dir, station_list, nostdout, model, keepPS, allowonlyS, spLimit
-    args_copy["input_hdf5"] = args_copy["input_dir"]+"/"+st+".hdf5"
-    args_copy["input_csv"] = args_copy["input_dir"]+"/"+st+".csv"
-    out_dir = os.path.join(os.getcwd(), str(args_copy['output_dir']))
-
-    save_dir = os.path.join(out_dir, str(st)+'_outputs')
-    out_probs = os.path.join(save_dir, 'prediction_probabilities.hdf5')
-    save_figs = os.path.join(save_dir, 'figures')
-    if os.path.isdir(save_dir):
-        shutil.rmtree(save_dir)
-    os.makedirs(save_dir)
-    if args_copy['number_of_plots']:
-        os.makedirs(save_figs)
     try:
-        os.remove(out_probs)
-    except Exception:
-         pass
-
-    if args_copy['output_probabilities']:
-        HDF_PROB = h5py.File(out_probs, 'a')
-        HDF_PROB.create_group("probabilities")
-        HDF_PROB.create_group("uncertainties")
-    else:
-        HDF_PROB = None
-
-    csvPr_gen = open(os.path.join(save_dir,'X_prediction_results.csv'), 'w')
-    predict_writer = csv.writer(csvPr_gen, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-    predict_writer.writerow(['file_name',
-                             'network',
-                             'station',
-                             'instrument_type',
-                             'station_lat',
-                             'station_lon',
-                             'station_elv',
-                             'event_start_time',
-                             'event_end_time',
-                             'detection_probability',
-                             'detection_uncertainty',
-                             'p_arrival_time',
-                             'p_probability',
-                             'p_uncertainty',
-                             'p_snr',
-                             's_arrival_time',
-                             's_probability',
-                             's_uncertainty',
-                             's_snr'
-                                 ])
-    csvPr_gen.flush()
- #   print(f'========= Started working on {st}, {ct+1} out of {len(station_list)} ...', flush=True)
- #   try:
-    start_Predicting = time.time()
-    detection_memory = []
-    plt_n = 0
-
-    df = pd.read_csv(args_copy['input_csv'])
-    prediction_list = df.trace_name.tolist()
-    fl = h5py.File(args_copy['input_hdf5'], 'r')
-    list_generator=generate_arrays_from_file(prediction_list, args_copy['batch_size'])
-
-    model = load_model(args_copy['input_model'],
-                       custom_objects={'SeqSelfAttention': SeqSelfAttention,
-                                       'FeedForward': FeedForward,
-                                       'LayerNormalization': LayerNormalization,
-                                       'f1': f1
-                                        })
-    model.compile(loss = args_copy['loss_types'],
-                  #loss_weights =  args_copy['loss_weights'],
-                 # optimizer = Adam(lr = 0.001),
-                  loss_weights=[0.02, 0.40, 0.58],
-                  optimizer=Adam(lr=0.001),
-                  metrics = [f1])
-
-    pbar_test = tqdm(total= int(np.ceil(len(prediction_list)/args_copy['batch_size'])), ncols=100, file=sys.stdout)
-    for bn in range(int(np.ceil(len(prediction_list) / args_copy['batch_size']))):
-        with nostdout():
-            pbar_test.update()
-
-        new_list = next(list_generator)
-        prob_dic =_gen_predictor(new_list, args_copy, model)
-
-        pred_set={}
-        for ID in new_list:
-            dataset = fl.get('data/'+str(ID))
-            pred_set.update({str(ID) : dataset})
-
-        plt_n, detection_memory= _gen_writer(new_list, args_copy, prob_dic, pred_set, HDF_PROB, predict_writer, save_figs, csvPr_gen, plt_n, detection_memory, keepPS_copy, allowonlyS_copy, spLimit_copy)
-        end_Predicting = time.time()
-    delta = (end_Predicting - start_Predicting)
-    hour = int(delta / 3600)
-    delta -= hour * 3600
-    minute = int(delta / 60)
-    delta -= minute * 60
-    seconds = delta
-
-
-    dd = pd.read_csv(os.path.join(save_dir,'X_prediction_results.csv'))
-    print(f'\n', flush=True)
-    print(' *** Finished the prediction in: {} hours and {} minutes and {} seconds.'.format(hour, minute, round(seconds, 2)), flush=True)
-    print(' *** Detected: '+str(len(dd))+' events.', flush=True)
-
-    print(' *** Wrote the results into --> " ' + str(save_dir)+' "', flush=True)
-
-    with open(os.path.join(save_dir,'X_report.txt'), 'a') as the_file:
-        the_file.write('================== Overal Info =============================='+'\n')
-        the_file.write('date of report: '+str(datetime.now())+'\n')
-        the_file.write('input_hdf5: '+str(args_copy['input_hdf5'])+'\n')
-        the_file.write('input_csv: '+str(args_copy['input_csv'])+'\n')
-        the_file.write('input_model: '+str(args_copy['input_model'])+'\n')
-        the_file.write('output_dir: '+str(save_dir)+'\n')
-        the_file.write('================== Prediction Parameters ======================='+'\n')
-        the_file.write('finished the prediction in:  {} hours and {} minutes and {} seconds \n'.format(hour, minute, round(seconds, 2)))
-        the_file.write('detected: '+str(len(dd))+' events.'+'\n')
-        the_file.write('writting_probability_outputs: '+str(args_copy['output_probabilities'])+'\n')
-        the_file.write('loss_types: '+str(args_copy['loss_types'])+'\n')
-        the_file.write('loss_weights: '+str(args_copy['loss_weights'])+'\n')
-        the_file.write('batch_size: '+str(args_copy['batch_size'])+'\n')
-        the_file.write('================== Other Parameters ========================='+'\n')
-        the_file.write('normalization_mode: '+str(args_copy['normalization_mode'])+'\n')
-        the_file.write('estimate uncertainty: '+str(args_copy['estimate_uncertainty'])+'\n')
-        the_file.write('number of Monte Carlo sampling: '+str(args_copy['number_of_sampling'])+'\n')
-        the_file.write('detection_threshold: '+str(args_copy['detection_threshold'])+'\n')
-        the_file.write('P_threshold: '+str(args_copy['P_threshold'])+'\n')
-        the_file.write('S_threshold: '+str(args_copy['S_threshold'])+'\n')
-        the_file.write('number_of_plots: '+str(args_copy['number_of_plots'])+'\n')
-        the_file.write('use_multiprocessing: '+str(args_copy['use_multiprocessing'])+'\n')
-        the_file.write('gpuid: '+str(args_copy['gpuid'])+'\n')
-        the_file.write('gpu_limit: '+str(args_copy['gpu_limit'])+'\n')
-        the_file.write('keepPS: '+str(args_copy['keepPS'])+'\n')
-        the_file.write('allowonlyS: '+str(args_copy['allowonlyS'])+'\n')
-        the_file.write('spLimit: '+str(args_copy['spLimit'])+' seconds\n')
-   # except:
-    #    pass
+        # args_copy, out_dir, station_list, nostdout, model, keepPS, allowonlyS, spLimit
+        args_copy["input_hdf5"] = args_copy["input_dir"]+"/"+st+".hdf5"
+        args_copy["input_csv"] = args_copy["input_dir"]+"/"+st+".csv"
+        out_dir = os.path.join(os.getcwd(), str(args_copy['output_dir']))
+    
+        save_dir = os.path.join(out_dir, str(st)+'_outputs')
+        out_probs = os.path.join(save_dir, 'prediction_probabilities.hdf5')
+        save_figs = os.path.join(save_dir, 'figures')
+        if os.path.isdir(save_dir):
+            shutil.rmtree(save_dir)
+        os.makedirs(save_dir)
+        if args_copy['number_of_plots']:
+            os.makedirs(save_figs)
+        try:
+            os.remove(out_probs)
+        except Exception:
+             pass
+    
+        if args_copy['output_probabilities']:
+            HDF_PROB = h5py.File(out_probs, 'a')
+            HDF_PROB.create_group("probabilities")
+            HDF_PROB.create_group("uncertainties")
+        else:
+            HDF_PROB = None
+    
+        csvPr_gen = open(os.path.join(save_dir,'X_prediction_results.csv'), 'w')
+        predict_writer = csv.writer(csvPr_gen, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        predict_writer.writerow(['file_name',
+                                 'network',
+                                 'station',
+                                 'instrument_type',
+                                 'station_lat',
+                                 'station_lon',
+                                 'station_elv',
+                                 'event_start_time',
+                                 'event_end_time',
+                                 'detection_probability',
+                                 'detection_uncertainty',
+                                 'p_arrival_time',
+                                 'p_probability',
+                                 'p_uncertainty',
+                                 'p_snr',
+                                 's_arrival_time',
+                                 's_probability',
+                                 's_uncertainty',
+                                 's_snr'
+                                     ])
+        csvPr_gen.flush()
+     #   print(f'========= Started working on {st}, {ct+1} out of {len(station_list)} ...', flush=True)
+     #   try:
+        start_Predicting = time.time()
+        detection_memory = []
+        plt_n = 0
+    
+        df = pd.read_csv(args_copy['input_csv'])
+        prediction_list = df.trace_name.tolist()
+        fl = h5py.File(args_copy['input_hdf5'], 'r')
+        list_generator=generate_arrays_from_file(prediction_list, args_copy['batch_size'])
+    
+        model = load_model(args_copy['input_model'],
+                           custom_objects={'SeqSelfAttention': SeqSelfAttention,
+                                           'FeedForward': FeedForward,
+                                           'LayerNormalization': LayerNormalization,
+                                           'f1': f1
+                                            })
+        model.compile(loss = args_copy['loss_types'],
+                      #loss_weights =  args_copy['loss_weights'],
+                     # optimizer = Adam(lr = 0.001),
+                      loss_weights=[0.02, 0.40, 0.58],
+                      optimizer=Adam(lr=0.001),
+                      metrics = [f1])
+    
+        pbar_test = tqdm(total= int(np.ceil(len(prediction_list)/args_copy['batch_size'])), ncols=100, file=sys.stdout)
+        for bn in range(int(np.ceil(len(prediction_list) / args_copy['batch_size']))):
+            with nostdout():
+                pbar_test.update()
+    
+            new_list = next(list_generator)
+            prob_dic =_gen_predictor(new_list, args_copy, model)
+    
+            pred_set={}
+            for ID in new_list:
+                dataset = fl.get('data/'+str(ID))
+                pred_set.update({str(ID) : dataset})
+    
+            plt_n, detection_memory= _gen_writer(new_list, args_copy, prob_dic, pred_set, HDF_PROB, predict_writer, save_figs, csvPr_gen, plt_n, detection_memory, keepPS_copy, allowonlyS_copy, spLimit_copy)
+            end_Predicting = time.time()
+        delta = (end_Predicting - start_Predicting)
+        hour = int(delta / 3600)
+        delta -= hour * 3600
+        minute = int(delta / 60)
+        delta -= minute * 60
+        seconds = delta
+    
+    
+        dd = pd.read_csv(os.path.join(save_dir,'X_prediction_results.csv'))
+        print(f'\n', flush=True)
+        print(' *** Finished the prediction in: {} hours and {} minutes and {} seconds.'.format(hour, minute, round(seconds, 2)), flush=True)
+        print(' *** Detected: '+str(len(dd))+' events.', flush=True)
+    
+        print(' *** Wrote the results into --> " ' + str(save_dir)+' "', flush=True)
+    
+        with open(os.path.join(save_dir,'X_report.txt'), 'a') as the_file:
+            the_file.write('================== Overal Info =============================='+'\n')
+            the_file.write('date of report: '+str(datetime.now())+'\n')
+            the_file.write('input_hdf5: '+str(args_copy['input_hdf5'])+'\n')
+            the_file.write('input_csv: '+str(args_copy['input_csv'])+'\n')
+            the_file.write('input_model: '+str(args_copy['input_model'])+'\n')
+            the_file.write('output_dir: '+str(save_dir)+'\n')
+            the_file.write('================== Prediction Parameters ======================='+'\n')
+            the_file.write('finished the prediction in:  {} hours and {} minutes and {} seconds \n'.format(hour, minute, round(seconds, 2)))
+            the_file.write('detected: '+str(len(dd))+' events.'+'\n')
+            the_file.write('writting_probability_outputs: '+str(args_copy['output_probabilities'])+'\n')
+            the_file.write('loss_types: '+str(args_copy['loss_types'])+'\n')
+            the_file.write('loss_weights: '+str(args_copy['loss_weights'])+'\n')
+            the_file.write('batch_size: '+str(args_copy['batch_size'])+'\n')
+            the_file.write('================== Other Parameters ========================='+'\n')
+            the_file.write('normalization_mode: '+str(args_copy['normalization_mode'])+'\n')
+            the_file.write('estimate uncertainty: '+str(args_copy['estimate_uncertainty'])+'\n')
+            the_file.write('number of Monte Carlo sampling: '+str(args_copy['number_of_sampling'])+'\n')
+            the_file.write('detection_threshold: '+str(args_copy['detection_threshold'])+'\n')
+            the_file.write('P_threshold: '+str(args_copy['P_threshold'])+'\n')
+            the_file.write('S_threshold: '+str(args_copy['S_threshold'])+'\n')
+            the_file.write('number_of_plots: '+str(args_copy['number_of_plots'])+'\n')
+            the_file.write('use_multiprocessing: '+str(args_copy['use_multiprocessing'])+'\n')
+            the_file.write('gpuid: '+str(args_copy['gpuid'])+'\n')
+            the_file.write('gpu_limit: '+str(args_copy['gpu_limit'])+'\n')
+            the_file.write('keepPS: '+str(args_copy['keepPS'])+'\n')
+            the_file.write('allowonlyS: '+str(args_copy['allowonlyS'])+'\n')
+            the_file.write('spLimit: '+str(args_copy['spLimit'])+' seconds\n')
+    except:
+        pass
       
 def predictor(input_dir=None,
               input_model=None,
