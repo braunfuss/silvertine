@@ -1190,15 +1190,15 @@ def command_detect(args):
             #        except:
             #            pass
 
-                    # remove_outdated_wc(store_path_base_down+"download-tmp",
-                    #                    int(wait_period/60),
-                    #                    wc="*")
-                    # remove_outdated_wc(store_path_base_down,
-                    #                    int(wait_period/60),
-                    #                    wc="detections_*")
-                    # remove_outdated_wc(store_path_base_down,
-                    #                    24*60,
-                    #                    wc="asociation_*")
+                    remove_outdated_wc(store_path_base_down+"download-tmp",
+                                       int(wait_period/60),
+                                       wc="*")
+                    remove_outdated_wc(store_path_base_down,
+                                       int(wait_period/60),
+                                       wc="detections_*")
+                    remove_outdated_wc(store_path_base_down,
+                                       24*60,
+                                       wc="asociation_*")
 
                     if options.download_method == "stream_sim":
                         process_in_progress = False
