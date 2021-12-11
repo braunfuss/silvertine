@@ -1028,25 +1028,29 @@ def command_detect(args):
             ]  # seedlink sources
             pollinjector = None
             tempdir = None
-            store_path_base_down = options.store_path
-            store_path_base = options.store_path
+            if options.store_path is not None:
+                store_path_base_down = options.store_path+"/download-tmp"
+                store_path_base = options.store_path
+            else:
+                store_path_base_down = "."
+                store_path_base = "."
             try:
-                stations = model.load_stations(store_path_base_down+"/stations_landau.txt")
+                stations = model.load_stations(store_path_base+"/stations_landau.txt")
             except:
-                stations = model.load_stations(store_path_base_down+"stations_landau.txt")
+                stations = model.load_stations(store_path_base+"stations_landau.txt")
             store_interval = 10
             wait_period = 130
             if sources_list:
-                if store_path_base is None:
+                if store_path_base_down is None:
                     tempdir = tempfile.mkdtemp("", "snuffler-tmp-")
                     store_path = pjoin(
                         tempdir,
                         "trace-%(network)s.%(station)s.%(location)s.%(channel)s."
                         "%(tmin_ms)s.mseed",
                     )
-                elif os.path.isdir(store_path_base):
+                elif os.path.isdir(store_path_base_down):
                     store_path = pjoin(
-                        store_path_base,
+                        store_path_base_down,
                         "trace-%(network)s.%(station)s.%(location)s.%(channel)s."
                         "%(tmin_ms)s.mseed",
                     )
@@ -1094,7 +1098,7 @@ def command_detect(args):
                                                    show_detections=True,
                                                    nparallel=2))
                     pool.apply_async(detector.picker.main(
-                        store_path_base_down,
+                        store_path_base,
                         tmin=options.tmin,
                         tmax=options.tmax,
                         minlat=49.0,
@@ -1106,7 +1110,7 @@ def command_detect(args):
                             "http://eida.bgr.de",
                             "http://ws.gpi.kit.edu",
                         ],
-                        path_waveforms=store_path_base_down+"download-tmp",
+                        path_waveforms=store_path_base_down,
                         download=options.download,
                         tinc=options.tinc,
                         freq=options.freq,
