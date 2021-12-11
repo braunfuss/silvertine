@@ -1111,8 +1111,8 @@ def command_detect(args):
                         lf=options.lf,
                         models=models
                     ))
-                   pool.close()
-                   pool.join()
+                    pool.close()
+                    pool.join()
                     end = time.time()
                     diff = end - start
 
