@@ -12,10 +12,7 @@ from __future__ import print_function
 from __future__ import division
 import os
 os.environ['KERAS_BACKEND']='tensorflow'
-from tensorflow.keras import backend as K
-from tensorflow.keras.models import load_model
-from tensorflow.keras.optimizers import Adam
-import tensorflow as tf
+
 import matplotlib
 from matplotlib import rc
 import matplotlib.pyplot as plt
@@ -43,7 +40,8 @@ from datetime import datetime
 import subprocess
 import ray
 import copy
-
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.models import load_model
 class DummyFile(object):
     file = None
     def __init__(self, file):
@@ -60,7 +58,7 @@ def nostdout():
     sys.stdout = DummyFile(sys.stdout)
     yield
     sys.stdout = save_stdout
-        
+
 warnings.filterwarnings("ignore")
 from tensorflow.python.util import deprecation
 deprecation._PRINT_DEPRECATION_WARNINGS = False
@@ -74,14 +72,18 @@ except Exception:
     EQT_VERSION = "0.1.61"
 
 
-@ray.remote
-def predict_station(st, args_copy):
+#@ray.remote
+def predict_station(st, args_copy, model):
+    from tensorflow.keras import backend as K
+    from tensorflow.keras.models import load_model
+    from tensorflow.keras.optimizers import Adam
+    import tensorflow as tf
     try:
         # args_copy, out_dir, station_list, nostdout, model, keepPS, allowonlyS, spLimit
         args_copy["input_hdf5"] = args_copy["input_dir"]+"/"+st+".hdf5"
         args_copy["input_csv"] = args_copy["input_dir"]+"/"+st+".csv"
         out_dir = os.path.join(os.getcwd(), str(args_copy['output_dir']))
-    
+
         save_dir = os.path.join(out_dir, str(st)+'_outputs')
         out_probs = os.path.join(save_dir, 'prediction_probabilities.hdf5')
         save_figs = os.path.join(save_dir, 'figures')
@@ -94,14 +96,14 @@ def predict_station(st, args_copy):
             os.remove(out_probs)
         except Exception:
              pass
-    
+
         if args_copy['output_probabilities']:
             HDF_PROB = h5py.File(out_probs, 'a')
             HDF_PROB.create_group("probabilities")
             HDF_PROB.create_group("uncertainties")
         else:
             HDF_PROB = None
-    
+
         csvPr_gen = open(os.path.join(save_dir,'X_prediction_results.csv'), 'w')
         predict_writer = csv.writer(csvPr_gen, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         predict_writer.writerow(['file_name',
@@ -125,44 +127,36 @@ def predict_station(st, args_copy):
                                  's_snr'
                                      ])
         csvPr_gen.flush()
-     #   print(f'========= Started working on {st}, {ct+1} out of {len(station_list)} ...', flush=True)
-     #   try:
         start_Predicting = time.time()
         detection_memory = []
         plt_n = 0
-    
+
         df = pd.read_csv(args_copy['input_csv'])
         prediction_list = df.trace_name.tolist()
         fl = h5py.File(args_copy['input_hdf5'], 'r')
         list_generator=generate_arrays_from_file(prediction_list, args_copy['batch_size'])
-    
-        model = load_model(args_copy['input_model'],
-                           custom_objects={'SeqSelfAttention': SeqSelfAttention,
-                                           'FeedForward': FeedForward,
-                                           'LayerNormalization': LayerNormalization,
-                                           'f1': f1
-                                            })
-        model.compile(loss = args_copy['loss_types'],
-                      #loss_weights =  args_copy['loss_weights'],
-                     # optimizer = Adam(lr = 0.001),
-                      loss_weights=[0.02, 0.40, 0.58],
-                      optimizer=Adam(lr=0.001),
-                      metrics = [f1])
-    
-        pbar_test = tqdm(total= int(np.ceil(len(prediction_list)/args_copy['batch_size'])), ncols=100, file=sys.stdout)
+
+        # model = load_model(args_copy['input_model'],
+        #                     custom_objects={'SeqSelfAttention': SeqSelfAttention,
+        #                                     'FeedForward': FeedForward,
+        #                                     'LayerNormalization': LayerNormalization,
+        #                                     'f1': f1
+        #                                      })
+    #    model.compile(loss = args_copy['loss_types'],
+    #                   loss_weights=[0.02, 0.40, 0.58],
+    #                   optimizer=Adam(lr=0.001),
+    #                   metrics = [f1])
+
         for bn in range(int(np.ceil(len(prediction_list) / args_copy['batch_size']))):
-            with nostdout():
-                pbar_test.update()
-    
             new_list = next(list_generator)
             prob_dic =_gen_predictor(new_list, args_copy, model)
-    
-            pred_set={}
+
+            pred_set = {}
             for ID in new_list:
                 dataset = fl.get('data/'+str(ID))
-                pred_set.update({str(ID) : dataset})
-    
-            plt_n, detection_memory= _gen_writer(new_list, args_copy, prob_dic, pred_set, HDF_PROB, predict_writer, save_figs, csvPr_gen, plt_n, detection_memory, keepPS_copy, allowonlyS_copy, spLimit_copy)
+                pred_set.update({str(ID): dataset})
+
+            plt_n, detection_memory = _gen_writer(new_list, args_copy, prob_dic, pred_set, HDF_PROB, predict_writer, save_figs, csvPr_gen, plt_n, detection_memory, keepPS_copy, allowonlyS_copy, spLimit_copy)
             end_Predicting = time.time()
         delta = (end_Predicting - start_Predicting)
         hour = int(delta / 3600)
@@ -170,15 +164,11 @@ def predict_station(st, args_copy):
         minute = int(delta / 60)
         delta -= minute * 60
         seconds = delta
-    
-    
+
         dd = pd.read_csv(os.path.join(save_dir,'X_prediction_results.csv'))
-        print(f'\n', flush=True)
         print(' *** Finished the prediction in: {} hours and {} minutes and {} seconds.'.format(hour, minute, round(seconds, 2)), flush=True)
         print(' *** Detected: '+str(len(dd))+' events.', flush=True)
-    
-        print(' *** Wrote the results into --> " ' + str(save_dir)+' "', flush=True)
-    
+
         with open(os.path.join(save_dir,'X_report.txt'), 'a') as the_file:
             the_file.write('================== Overal Info =============================='+'\n')
             the_file.write('date of report: '+str(datetime.now())+'\n')
@@ -209,7 +199,8 @@ def predict_station(st, args_copy):
             the_file.write('spLimit: '+str(args_copy['spLimit'])+' seconds\n')
     except:
         pass
-      
+
+
 def predictor(input_dir=None,
               input_model=None,
               output_dir=None,
@@ -233,7 +224,8 @@ def predictor(input_dir=None,
               keepPS=True,
               allowonlyS=True,
               model=None,
-              spLimit=60):
+              spLimit=60,
+              models=None):
 
 
     """
@@ -386,10 +378,7 @@ def predictor(input_dir=None,
         sys.stdout = save_stdout
 
 
-    print('============================================================================')
-
     if model is None:
-        print(' *** Loading the model ...', flush=True)
 
         model = load_model(args['input_model'],
                            custom_objects={'SeqSelfAttention': SeqSelfAttention,
@@ -401,26 +390,27 @@ def predictor(input_dir=None,
                       loss_weights =  args['loss_weights'],
                       optimizer = Adam(lr = 0.001),
                       metrics = [f1])
-        print('*** Loading is complete!', flush=True)
 
     if isinstance(args['output_dir'], str):
         out_dir = os.path.join(os.getcwd(), str(args['output_dir']))
-        
+
         if os.path.isdir(out_dir):
             shutil.rmtree(out_dir)
             os.makedirs(out_dir)
-        if platform.system() == 'Windows':
-            station_list = [ev.split(".")[0] for ev in listdir(args["input_dir"]) if ev.split("\\")[-1] != ".DS_Store"];
-        else:
-            station_list = [ev.split(".")[0] for ev in listdir(args['input_dir']) if ev.split("/")[-1] != ".DS_Store"];
+
+        station_list = [ev.split(".")[0] for ev in listdir(args['input_dir']) if ev.split("/")[-1] != ".DS_Store"]
         station_list = sorted(set(station_list))
 
-        print(f"######### There are files for {len(station_list)} stations in {args['input_dir']} directory. #########", flush=True)
-        
+
     #    ray.get([predict_station.remote(ct, st, args, out_dir, station_list, nostdout, model, keepPS, allowonlyS, spLimit) for (ct, st) in enumerate(station_list)])
     #args, out_dir, station_list, nostdout, model, keepPS, allowonlyS, spLimit
-        ray.get([predict_station.remote(station_list[i], args_copy) for i in range(len(station_list))])
-        del args 
+    #    print(len(station_list), len(models))
+    #    ray.get([predict_station.remote(station_list[i], args_copy) for i in range(len(station_list))])
+    #    ray.shutdown()
+        for i in range(len(station_list)):
+            predict_station(station_list[i], args_copy, model)
+
+        del args
         del args_copy
     else:
         NN_in = len(args['output_dir'])
@@ -430,19 +420,17 @@ def predictor(input_dir=None,
 
           #  out_dir = os.path.join(os.getcwd(), str(output_dir_cur))
             if os.path.isdir(out_dir):
-                print('============================================================================')
                 print(f' *** {out_dir} already exists!')
                 inp = input(" --> Type (Yes or y) to create a new empty directory! otherwise it will overwrite!   ")
                 if inp.lower() == "yes" or inp.lower() == "y":
                     shutil.rmtree(out_dir)
                     os.makedirs(out_dir)
             if platform.system() == 'Windows':
-                station_list = [ev.split(".")[0] for ev in listdir(input_dir_cur) if ev.split("\\")[-1] != ".DS_Store"];
+                station_list = [ev.split(".")[0] for ev in listdir(input_dir_cur) if ev.split("\\")[-1] != ".DS_Store"]
             else:
-                station_list = [ev.split(".")[0] for ev in listdir(input_dir_cur) if ev.split("/")[-1] != ".DS_Store"];
+                station_list = [ev.split(".")[0] for ev in listdir(input_dir_cur) if ev.split("/")[-1] != ".DS_Store"]
             station_list = sorted(set(station_list))
 
-            print(f"######### There are files for {len(station_list)} stations in {input_dir_cur} directory. #########", flush=True)
             for ct, st in enumerate(station_list):
                 if platform.system() == 'Windows':
                     args["input_hdf5"] = input_dir_cur+"\\"+st+".hdf5"
@@ -505,10 +493,10 @@ def predictor(input_dir=None,
                 fl = h5py.File(args['input_hdf5'], 'r')
                 list_generator=generate_arrays_from_file(prediction_list, args['batch_size'])
 
-                pbar_test = tqdm(total= int(np.ceil(len(prediction_list)/args['batch_size'])), ncols=100, file=sys.stdout)
+            #    pbar_test = tqdm(total= int(np.ceil(len(prediction_list)/args['batch_size'])), ncols=100, file=sys.stdout)
                 for bn in range(int(np.ceil(len(prediction_list) / args['batch_size']))):
-                    with nostdout():
-                        pbar_test.update()
+                #    with nostdout():
+                #        pbar_test.update()
 
                     new_list = next(list_generator)
                     prob_dic=_gen_predictor(new_list, args, model)
@@ -530,10 +518,8 @@ def predictor(input_dir=None,
 
 
                 dd = pd.read_csv(os.path.join(save_dir,'X_prediction_results.csv'))
-                print(f'\n', flush=True)
                 print(' *** Finished the prediction in: {} hours and {} minutes and {} seconds.'.format(hour, minute, round(seconds, 2)), flush=True)
                 print(' *** Detected: '+str(len(dd))+' events.', flush=True)
-                print(' *** Wrote the results into --> " ' + str(save_dir)+' "', flush=True)
 
                 with open(os.path.join(save_dir,'X_report.txt'), 'a') as the_file:
                     the_file.write('================== Overal Info =============================='+'\n')
@@ -562,6 +548,7 @@ def predictor(input_dir=None,
                     the_file.write('gpu_limit: '+str(args['gpu_limit'])+'\n')
                     the_file.write('keepPS: '+str(args['keepPS'])+'\n')
                     the_file.write('spLimit: '+str(args['spLimit'])+' seconds\n')
+
 
 def _gen_predictor(new_list, args, model):
 
@@ -604,10 +591,9 @@ def _gen_predictor(new_list, args, model):
         pred_SS = []
         for mc in range(args['number_of_sampling']):
          #   ray.get([process.remote(station_list[i]) for i in range(len(station_list))])
-
-            predD, predP, predS = model.predict_generator(generator = prediction_generator,
-                                                          use_multiprocessing = False,
-                                                          workers = args['number_of_cpus'])
+            predD, predP, predS = model.predict_generator(generator=prediction_generator,
+                                                          use_multiprocessing=False,
+                                                          workers=args['number_of_cpus'])
             pred_DD.append(predD)
             pred_PP.append(predP)
             pred_SS.append(predS)
@@ -643,7 +629,6 @@ def _gen_predictor(new_list, args, model):
     prob_dic['SS_std']=pred_SS_std
 
     return prob_dic
-
 
 
 def _gen_writer(new_list, args, prob_dic, pred_set, HDF_PROB, predict_writer, save_figs, csvPr_gen, plt_n, detection_memory, keepPS, allowonlyS, spLimit):
@@ -740,7 +725,7 @@ def _gen_writer(new_list, args, prob_dic, pred_set, HDF_PROB, predict_writer, sa
                                           prob_dic['PP_std'][ts],
                                           prob_dic['SS_std'][ts],
                                           matches)
-                    plt_n += 1 ;
+                    plt_n += 1
         else:
             if (len(matches) >= 1) and ((matches[list(matches)[0]][3] or matches[list(matches)[0]][6])):
                 snr = [_get_snr(dat, matches[list(matches)[0]][3], window = 100), _get_snr(dat, matches[list(matches)[0]][6], window = 100)]
@@ -756,11 +741,10 @@ def _gen_writer(new_list, args, prob_dic, pred_set, HDF_PROB, predict_writer, sa
                                           prob_dic['PP_std'][ts],
                                           prob_dic['SS_std'][ts],
                                           matches)
-                    plt_n += 1 ;
+                    plt_n += 1
 
 
     return plt_n, detection_memory
-
 
 
 def _output_writter_prediction(dataset, predict_writer, csvPr, matches, snr, detection_memory):
@@ -827,10 +811,10 @@ def _output_writter_prediction(dataset, predict_writer, csvPr, matches, snr, det
         return new_t
 
     for match, match_value in matches.items():
-        ev_strt = start_time+timedelta(seconds= match/100)
-        ev_end = start_time+timedelta(seconds= match_value[0]/100)
+        ev_strt = start_time+timedelta(seconds=match/100)
+        ev_end = start_time+timedelta(seconds=match_value[0]/100)
 
-        doublet = [ st for st in detection_memory if abs((st-ev_strt).total_seconds()) < 2]
+        doublet = [st for st in detection_memory if abs((st-ev_strt).total_seconds()) < 2]
 
         if len(doublet) == 0:
             det_prob = round(match_value[1], 2)
@@ -840,7 +824,7 @@ def _output_writter_prediction(dataset, predict_writer, csvPr, matches, snr, det
                 det_unc = match_value[2]
 
             if match_value[3]:
-                p_time = start_time+timedelta(seconds= match_value[3]/100)
+                p_time = start_time+timedelta(seconds=match_value[3]/100)
             else:
                 p_time = None
             p_prob = match_value[4]
@@ -1384,18 +1368,18 @@ def _get_snr(data, pat, window=200):
     if pat:
         try:
             if int(pat) >= window and (int(pat)+window) < len(data):
-                nw1 = data[int(pat)-window : int(pat)];
-                sw1 = data[int(pat) : int(pat)+window];
+                nw1 = data[int(pat)-window : int(pat)]
+                sw1 = data[int(pat) : int(pat)+window]
                 snr = round(10*math.log10((np.percentile(sw1,95)/np.percentile(nw1,95))**2), 1)
             elif int(pat) < window and (int(pat)+window) < len(data):
                 window = int(pat)
-                nw1 = data[int(pat)-window : int(pat)];
-                sw1 = data[int(pat) : int(pat)+window];
+                nw1 = data[int(pat)-window : int(pat)]
+                sw1 = data[int(pat) : int(pat)+window]
                 snr = round(10*math.log10((np.percentile(sw1,95)/np.percentile(nw1,95))**2), 1)
             elif (int(pat)+window) > len(data):
                 window = len(data)-int(pat)
-                nw1 = data[int(pat)-window : int(pat)];
-                sw1 = data[int(pat) : int(pat)+window];
+                nw1 = data[int(pat)-window : int(pat)]
+                sw1 = data[int(pat) : int(pat)+window]
                 snr = round(10*math.log10((np.percentile(sw1,95)/np.percentile(nw1,95))**2), 1)
         except Exception:
             pass

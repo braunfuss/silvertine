@@ -19,7 +19,6 @@ import pandas as pd
 import csv
 from os import listdir
 import h5py
-#import matplotlib.pyplot as plt
 from obspy import UTCDateTime
 from obspy.signal.trigger import ar_pick
 from obspy.signal.trigger import recursive_sta_lta, trigger_onset
@@ -109,14 +108,13 @@ def run_associator(input_dir,
                                     amp NUMERIC
                                     )''')
     if platform.system() == 'Windows':
-        station_list = [ev for ev in listdir(input_dir) if ev.split("\\")[-1] != ".DS_Store"];
+        station_list = [ev for ev in listdir(input_dir) if ev.split("\\")[-1] != ".DS_Store"]
     else:
-        station_list = [ev for ev in listdir(input_dir) if ev.split("/")[-1] != ".DS_Store"];
+        station_list = [ev for ev in listdir(input_dir) if ev.split("/")[-1] != ".DS_Store"]
 
     station_list = sorted(set(station_list))
 
     for st in station_list:
-        print(f'reading {st} ...')
         if platform.system() == 'Windows':
             _pick_database_maker(conn, cur, input_dir+"\\"+st+'"\\"X_prediction_results.csv')
         else:
@@ -124,7 +122,7 @@ def run_associator(input_dir,
 
     #  read the database as dataframe
     conn = sqlite3.connect("phase_dataset")
-    tbl = pd.read_sql_query("SELECT * FROM phase_dataset", conn);
+    tbl = pd.read_sql_query("SELECT * FROM phase_dataset", conn)
     #tbl = tbl[tbl.p_prob > 0.3]
     #tbl = tbl[tbl.s_prob > 0.3]
 
@@ -328,7 +326,6 @@ def _doubleChecking(station_list, detections, preprocessed_dir, moving_window, t
             if len(on_of) >= 1:
                 p_pick, s_pick = ar_pick(data[:,2], data[:,1], data[:,0], 100, 1.0, 20.0, 1.0, 0.1, 4.0, 1.0, 2, 8, 0.1, 0.2)
                 if (on_of[0][1]+100)/100 > p_pick > (on_of[0][0]-100)/100:
-                   # print('got one')
                     new_picks['traceID'] = df['trace_name'].to_list()[0]
                     new_picks['network'] = dataset.attrs["network_code"]
                     new_picks['station'] = sttt
@@ -353,29 +350,25 @@ def _doubleChecking(station_list, detections, preprocessed_dir, moving_window, t
     return detections
 
 
-
 def _dbs_associator(start_time, end_time, moving_window,
                     tbl, pair_n, save_dir, station_list,
                     consider_combination=False):
 
     if consider_combination==True:
-        if platform.system() == 'Windows':
-            Y2000_writer = open(save_dir+"\\"+"Y2000.phs", "w")
-        else:
-            Y2000_writer = open(save_dir+"/"+"Y2000.phs", "w")
 
+        Y2000_writer = open(save_dir+"/"+"Y2000.phs", "w")
         traceNmae_dic = dict()
         st = datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S.%f')
         et = datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S.%f')
-        total_t = et-st;
-        evid = 0;
+        total_t = et-st
+        evid = 0
         tt = st
-        pbar = tqdm(total= int(np.ceil(total_t.total_seconds()/moving_window)), ncols=100)
+        #pbar = tqdm(total= int(np.ceil(total_t.total_seconds()/moving_window)), ncols=100)
         while tt < et:
 
             detections = tbl[(tbl.event_start_time >= tt) & (tbl.event_start_time < tt+timedelta(seconds = moving_window))]
 
-            pbar.update()
+        #    pbar.update()
             if len(detections) >= pair_n:
                 evid += 1
 
@@ -389,9 +382,6 @@ def _dbs_associator(start_time, end_time, moving_window,
                 st_lon_DMS = _decimalDegrees2DMS(float(detections.iloc[0]['stlon']),  "Longitude")
                 depth = 5.0
                 mag = 0.0
-
-                # QuakeML
-                print(detections.iloc[0]['event_start_time'])
 
                 if len(detections)/pair_n <= 2:
                     ch = pair_n
@@ -409,9 +399,12 @@ def _dbs_associator(start_time, end_time, moving_window,
                         Y2000_writer.write("%4d%2d%2d%2d%2d%4.2f%2.0f%1s%4.2f%3.0f%1s%4.2f%5.2f%3.2f\n"%
                                            (int(yr),int(mo),int(dy), int(hr),int(mi),float(sec),float(st_lat_DMS[0]),
                                             str(st_lat_DMS[1]), float(st_lat_DMS[2]),float(st_lon_DMS[0]), str(st_lon_DMS[1]),
-                                            float(st_lon_DMS[2]),float(depth), float(mag)));
+                                            float(st_lon_DMS[2]),float(depth), float(mag)))
 
-                        station_buffer=[]; row_buffer=[]; tr_names=[]; tr_names2=[]
+                        station_buffer = []
+                        row_buffer = []
+                        tr_names = []
+                        tr_names2 = []
                         for _, row in sorted_detections.iterrows():
 
                             trace_name = row['traceID']+'*'+row['station']+'*'+str(row['event_start_time'])
@@ -419,7 +412,6 @@ def _dbs_associator(start_time, end_time, moving_window,
                             p_prob = row['p_prob']
                             s_unc = row['s_unc']
                             s_prob = row['s_prob']
-
 
                             station = "{:<5}".format(row['station'])
                             network = "{:<2}".format(row['network'])
@@ -489,14 +481,14 @@ def _dbs_associator(start_time, end_time, moving_window,
                                     row_buffer.append("%5s%2s  HHE     %4d%2d%2d%2d%2d%5.2f       %5.2fES %1d\n"%(station,network,
                                                                                                                  int(yrs),int(mos),int(dys),
                                                                                                                  int(hrs),int(mis),0.0,
-                                                                                                                 float(sec_s), Sweihgt));
+                                                                                                                 float(sec_s), Sweihgt))
                                 if sec_p:
                                     row_buffer.append("%5s%2s  HHZ IP %1d%4d%2d%2d%2d%2d%5.2f       %5.2f   0\n"%(station,network,
                                                                                                                  Pweihgt,
                                                                                                                  int(yrp),int(mop),int(dyp),
                                                                                                                  int(hrp),int(mip),float(sec_p),
-                                                                                                                 float(0.0)));
-                        Y2000_writer.write("{:<62}".format(' ')+"%10d"%(evid)+'\n');
+                                                                                                                 float(0.0)))
+                        Y2000_writer.write("{:<62}".format(' ')+"%10d"%(evid)+'\n')
 
                 traceNmae_dic[str(evid)] = tr_names
 
@@ -505,11 +497,11 @@ def _dbs_associator(start_time, end_time, moving_window,
                                        (int(yr),int(mo),int(dy),int(hr),int(mi),float(sec),
                                         float(st_lat_DMS[0]), str(st_lat_DMS[1]), float(st_lat_DMS[2]),
                                         float(st_lon_DMS[0]), str(st_lon_DMS[1]), float(st_lon_DMS[2]),
-                                        float(depth), float(mag)));
+                                        float(depth), float(mag)))
                     for rr in row_buffer:
-                        Y2000_writer.write(rr);
+                        Y2000_writer.write(rr)
 
-                    Y2000_writer.write("{:<62}".format(' ')+"%10d"%(evid)+'\n');
+                    Y2000_writer.write("{:<62}".format(' ')+"%10d"%(evid)+'\n')
                     traceNmae_dic[str(evid)] = tr_names2
 
 
@@ -540,10 +532,11 @@ def _dbs_associator(start_time, end_time, moving_window,
         traceNmae_dic = dict()
         st = datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S.%f')
         et = datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S.%f')
-        total_t = et-st;
-        evid = 200000;  evidd = 100000
+        total_t = et-st
+        evid = 200000
+        evidd = 100000
         tt = st
-        pbar = tqdm(total= int(np.ceil(total_t.total_seconds()/moving_window)))
+        #pbar = tqdm(total= int(np.ceil(total_t.total_seconds()/moving_window)))
         while tt < et:
 
             detections = tbl[(tbl.event_start_time >= tt) & (tbl.event_start_time < tt+timedelta(seconds = moving_window))]
@@ -552,7 +545,7 @@ def _dbs_associator(start_time, end_time, moving_window,
                 station = "{:<5}".format(row['station'])
                 if station[0] is "R":
                     pair_nt = 3
-            pbar.update()
+            #pbar.update()
             if len(detections) >= pair_nt:
 
                 yr = "{:>4}".format(str(detections.iloc[0]['event_start_time']).split(' ')[0].split('-')[0])
@@ -570,7 +563,7 @@ def _dbs_associator(start_time, end_time, moving_window,
                                                                                              int(hr),int(mi),float(sec),
                                                                                              float(st_lat_DMS[0]), str(st_lat_DMS[1]), float(st_lat_DMS[2]),
                                                                                              float(st_lon_DMS[0]), str(st_lon_DMS[1]), float(st_lon_DMS[2]),
-                                                                                             float(depth), float(mag)));
+                                                                                             float(depth), float(mag)))
                 event = Event()
                 origin = Origin(time=UTCDateTime(detections.iloc[0]['event_start_time']),
                                 longitude=detections.iloc[0]['stlon'],
@@ -663,19 +656,19 @@ def _dbs_associator(start_time, end_time, moving_window,
                             row_buffer.append("%5s%2s  HHE     %4d%2d%2d%2d%2d%5.2f       %5.2fES %1d\n"%(station,network,
                                                                                                          int(yrs),int(mos),int(dys),
                                                                                                          int(hrs),int(mis),0.0,
-                                                                                                         float(sec_s), Sweihgt));
+                                                                                                         float(sec_s), Sweihgt))
                         if sec_p:
                             row_buffer.append("%5s%2s  HHZ IP %1d%4d%2d%2d%2d%2d%5.2f       %5.2f   0\n"%(station,network,
                                                                                                          Pweihgt,
                                                                                                          int(yrp),int(mop),int(dyp),
                                                                                                          int(hrp),int(mip),float(sec_p),
-                                                                                                         float(0.0)));
+                                                                                                         float(0.0)))
                 event.picks = picks
                 event.preferred_origin_id = event.origins[0].resource_id
                 cat.append(event)
 
                 evid += 1
-                Y2000_writer.write("{:<62}".format(' ')+"%10d"%(evid)+'\n');
+                Y2000_writer.write("{:<62}".format(' ')+"%10d"%(evid)+'\n')
                 traceNmae_dic[str(evid)] = tr_names
 
                 if len(row_buffer) >= 2*pair_nt:
@@ -683,12 +676,12 @@ def _dbs_associator(start_time, end_time, moving_window,
                                        (int(yr),int(mo),int(dy),int(hr),int(mi),float(sec),
                                         float(st_lat_DMS[0]), str(st_lat_DMS[1]), float(st_lat_DMS[2]),
                                         float(st_lon_DMS[0]), str(st_lon_DMS[1]), float(st_lon_DMS[2]),
-                                        float(depth), float(mag)));
+                                        float(depth), float(mag)))
                     for rr in row_buffer:
-                        Y2000_writer.write(rr);
+                        Y2000_writer.write(rr)
 
                     evid += 1
-                    Y2000_writer.write("{:<62}".format(' ')+"%10d"%(evid)+'\n');
+                    Y2000_writer.write("{:<62}".format(' ')+"%10d"%(evid)+'\n')
                     traceNmae_dic[str(evid)] = tr_names2
 
                 elif len(row_buffer) < pair_nt and len(row_buffer) != 0:
@@ -718,6 +711,4 @@ def _dbs_associator(start_time, end_time, moving_window,
         cat.write(save_dir+"/associations.xml", format="QUAKEML")
         qml = quakeml.QuakeML.load_xml(filename=save_dir+"/associations.xml")
         events = qml.get_pyrocko_events()
-    #    events_loaded = model.load_events(save_dir+'/events.pf')
-    #    events.extend(events_loaded)
         model.event.dump_events(events, filename=save_dir+'/events.pf')

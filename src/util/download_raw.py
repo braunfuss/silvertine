@@ -34,7 +34,7 @@ def get_time_format_eq(time):
 
 def supply(watch_folder, tmin, tmax, seiger=True, selection=None, duration=3,
            package_length=86400,
-           providers=["http://192.168.11.220:8080", "http://ws.gpi.kit.edu"],
+           providers=["bgr", "http://ws.gpi.kit.edu"],
            clean=True):
 
     try:
@@ -64,7 +64,7 @@ def supply(watch_folder, tmin, tmax, seiger=True, selection=None, duration=3,
 
 
 def download_raw(path, tmint, tmaxt, seiger=True, selection=None,
-                 providers=["http://192.168.11.220:8080", "http://ws.gpi.kit.edu"],
+                 providers=["bgr", "http://ws.gpi.kit.edu"],
                  clean=True,
                  detector=False, common_f=80, tinc=None):
     try:
@@ -115,9 +115,9 @@ def download_raw(path, tmint, tmaxt, seiger=True, selection=None,
             window_end = traces[0].tmax
             timestring = util.time_to_str(window_start, format='%Y-%m')
             io.save(traces, "%s/%s/%s_%s_%s.mseed" % (path, timestring,
-                                                         provider,
-                                                         tmin,
-                                                         tmax))
+                                                      provider,
+                                                      tmin,
+                                                      tmax))
     if clean is True:
         for provider in providers:
             if provider == "http://192.168.11.220:8080":

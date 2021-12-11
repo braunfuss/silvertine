@@ -68,11 +68,6 @@ def process(station):
 
     time_slots, comp_types = [], []
 
-    if platform.system() == 'Windows':
-        print('============ Station {} has {} chunks of data.'.format(station.split("\\")[1], len(uni_list)), flush=True)
-    else:
-        print('============ Station {} has {} chunks of data.'.format(station.split("/")[1], len(uni_list)), flush=True)
-
     count_chuncks=0; fln=0; c1=0; c2=0; c3=0; fl_counts=1; slide_estimates=[];
 
     for ct, month in enumerate(uni_list):
@@ -94,11 +89,6 @@ def process(station):
                 st1.merge(fill_value=0)
             st1.detrend('demean')
             count_chuncks += 1; c3 += 1
-            if platform.system() == 'Windows':
-                print('  * '+station.split("\\")[1]+' ('+str(count_chuncks)+') .. '+month.split('T')[0]+' --> '+month.split('__')[1].split('T')[0]+' .. 3 components .. sampling rate: '+str(org_samplingRate))
-            else:
-                print('  * '+station.split("/")[1]+' ('+str(count_chuncks)+') .. '+month.split('T')[0]+' --> '+month.split('__')[1].split('T')[0]+' .. 3 components .. sampling rate: '+str(org_samplingRate))
-
             st2 = read(matching[1], debug_headers=True)
             try:
                 st2.merge(fill_value=0)
@@ -205,11 +195,6 @@ def process(station):
                  st1.merge(fill_value=0)
              st1.detrend('demean')
 
-             if platform.system() == 'Windows':
-                 print('  * '+station.split("\\")[1]+' ('+str(count_chuncks)+') .. '+month.split('T')[0]+' --> '+month.split('__')[1].split('T')[0]+' .. 1 components .. sampling rate: '+str(org_samplingRate))
-             else:
-                 print('  * '+station.split("/")[1]+' ('+str(count_chuncks)+') .. '+month.split('T')[0]+' --> '+month.split('__')[1].split('T')[0]+' .. 1 components .. sampling rate: '+str(org_samplingRate))
-
              st1.filter('bandpass',freqmin = 1.0, freqmax = 45, corners=2, zerophase=True)
              st1.taper(max_percentage=0.001, type='cosine', max_length=2)
              if len([tr for tr in st1 if tr.stats.sampling_rate != 100.0]) != 0:
@@ -238,22 +223,14 @@ def process(station):
 
                  tr_name = st1[0].stats.station+'_'+st1[0].stats.network+'_'+st1[0].stats.channel[:2]+'_'+str(start_time)
                  HDF = h5py.File(os.path.join(save_dir,output_name+'.hdf5'), 'r')
-                 print(os.path.join(save_dir,output_name+'.hdf5'))
                  dsF = HDF.create_dataset('data/'+tr_name, npz_data.shape, data = npz_data, dtype= np.float32)
                  dsF.attrs["trace_name"] = tr_name
 
-                 if platform.system() == 'Windows':
-                     dsF.attrs["receiver_code"] = station.split("\\")[-1]
-                     dsF.attrs["network_code"] = stations_[station.split("\\")[-1]]['network']
-                     dsF.attrs["receiver_latitude"] = stations_[station.split("\\")[-1]]['coords'][0]
-                     dsF.attrs["receiver_longitude"] = stations_[station.split("\\")[-1]]['coords'][1]
-                     dsF.attrs["receiver_elevation_m"] = stations_[station.split("\\")[-1]]['coords'][2]
-                 else:
-                     dsF.attrs["receiver_code"] = station.split("/")[-1]
-                     dsF.attrs["network_code"] = stations_[station.split("/")[-1]]['network']
-                     dsF.attrs["receiver_latitude"] = stations_[station.split("/")[-1]]['coords'][0]
-                     dsF.attrs["receiver_longitude"] = stations_[station.split("/")[-1]]['coords'][1]
-                     dsF.attrs["receiver_elevation_m"] = stations_[station.split("/")[-1]]['coords'][2]
+                 dsF.attrs["receiver_code"] = station.split("/")[-1]
+                 dsF.attrs["network_code"] = stations_[station.split("/")[-1]]['network']
+                 dsF.attrs["receiver_latitude"] = stations_[station.split("/")[-1]]['coords'][0]
+                 dsF.attrs["receiver_longitude"] = stations_[station.split("/")[-1]]['coords'][1]
+                 dsF.attrs["receiver_elevation_m"] = stations_[station.split("/")[-1]]['coords'][2]
 
                  start_time_str = str(start_time)
                  start_time_str = start_time_str.replace('T', ' ')
@@ -284,11 +261,6 @@ def process(station):
             st1.detrend('demean')
 
             org_samplingRate = st1[0].stats.sampling_rate
-
-            if platform.system() == 'Windows':
-                print('  * '+station.split("\\")[1]+' ('+str(count_chuncks)+') .. '+month.split('T')[0]+' --> '+month.split('__')[1].split('T')[0]+' .. 2 components .. sampling rate: '+str(org_samplingRate))
-            else:
-                print('  * '+station.split("/")[1]+' ('+str(count_chuncks)+') .. '+month.split('T')[0]+' --> '+month.split('__')[1].split('T')[0]+' .. 2 components .. sampling rate: '+str(org_samplingRate))
 
             st2 = read(matching[1], debug_headers=True)
             try:
@@ -387,11 +359,7 @@ def process(station):
 #    assert count_chuncks == len(uni_list)
 #    assert sum(slide_estimates)-(fln/100) <= len(dd) <= sum(slide_estimates)+10
     data_track[output_name]=[time_slots, comp_types]
-    print(f" Station {output_name} had {len(uni_list)} chuncks of data")
-    print(f"{len(dd)} slices were written, {sum(slide_estimates)} were expected.")
-    print(f"Number of 1-components: {c1}. Number of 2-components: {c2}. Number of 3-components: {c3}.")
     try:
-        print(f"Original samplieng rate: {org_samplingRate}.")
         repfile.write(f' Station {output_name} had {len(uni_list)} chuncks of data, {len(dd)} slices were written, {int(sum(slide_estimates))} were expected. Number of 1-components: {c1}, Number of 2-components: {c2}, number of 3-components: {c3}, original samplieng rate: {org_samplingRate}\n')
     except Exception:
         pass
@@ -402,7 +370,7 @@ def process(station):
 def preprocessor(preproc_dir, mseed_dir, stations_json, overlap=0.3, n_processor=None):
     global preproc_dir_copy
     global mseed_dir_copy
-    
+
     global stations_json_copy
     global overlap_copy
     global n_processor_copy
@@ -416,7 +384,7 @@ def preprocessor(preproc_dir, mseed_dir, stations_json, overlap=0.3, n_processor
 
 
     """
-    
+
     Performs preprocessing and partitions the continuous waveforms into 1-minute slices.
 
     Parameters
@@ -534,7 +502,6 @@ def stationListFromMseed(mseed_directory, station_locations):
 def _resampling(st):
     need_resampling = [tr for tr in st if tr.stats.sampling_rate != 100.0]
     if len(need_resampling) > 0:
-       # print('resampling ...', flush=True)
         for indx, tr in enumerate(need_resampling):
             if tr.stats.delta < 0.01:
                 tr.filter('lowpass',freq=45,zerophase=True)

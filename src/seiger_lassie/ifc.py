@@ -123,7 +123,6 @@ class IFC(common.HasPaths):
                     if util.match_nslc(selector, nsl):
                         weights[insl] = self.weights[selector]
                         break
-
             return weights
 
 

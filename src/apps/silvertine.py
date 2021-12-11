@@ -1,22 +1,26 @@
-#!/usr/bin/env python
-
 from __future__ import print_function, absolute_import
-
 import sys
 from os.path import join as pjoin
 import os.path as op
-import logging
-from optparse import OptionParser, OptionValueError
-import silvertine
-from io import StringIO
-from pyrocko import pile as pile_mod
-from pyrocko.gui.snuffler_app import *
-import tempfile
-
 import os
+from multiprocessing import Pool
+import logging
+from optparse import OptionParser, OptionValueError, IndentedHelpFormatter
+from io import StringIO
+import tempfile
+import time
+from pathlib import Path
+import arrow
+import shutil
 
+from silvertine.setup_info import version as __version__
+import silvertine
 try:
-    from pyrocko import util, marker
+    from pyrocko import util, marker, model
+    from pyrocko import pile as pile_mod
+    from pyrocko.gui.snuffler_app import *
+    from pyrocko.io import quakeml
+
 except ImportError:
     print(
         "Pyrocko is required for silvertine!"
@@ -39,6 +43,23 @@ class Color:
     BOLD = "\033[1m"
     UNDERLINE = "\033[4m"
     END = "\033[0m"
+
+
+def remove_outdated_wc(path, factor, scale="minutes", wc="*", factor2=None):
+    if scale == "minutes":
+        criticalTime = arrow.now().shift(minutes=-factor)
+    elif scale == "seconds":
+        criticalTime = arrow.now().shift(seconds=-factor)
+    elif scale == "minutes-seconds":
+        criticalTime = arrow.now().shift(minutes=-factor).shift(seconds=-factor2)
+
+    for item in Path(path).glob(wc):
+        itemTime = arrow.get(item.stat().st_mtime)
+        if itemTime < criticalTime:
+            try:
+                os.remove(item.absolute())
+            except:
+                shutil.rmtree(item.absolute())
 
 
 def d2u(d):
@@ -139,7 +160,6 @@ program_name = "silvertine"
 
 usage_tdata = d2u(subcommand_descriptions)
 usage_tdata["program_name"] = program_name
-from silvertine.setup_info import version as __version__
 
 usage_tdata["version_number"] = __version__
 
@@ -276,9 +296,6 @@ def add_common_options(parser):
 
 
 def print_docs(command, parser):
-
-    from optparse import IndentedHelpFormatter
-
     class DocsFormatter(IndentedHelpFormatter):
         def format_heading(self, heading):
             return "%s\n%s\n\n" % (heading, "." * len(heading))
@@ -488,14 +505,16 @@ def command_locate(args):
             dest="model",
             type=str,
             default="insheim",
-            help="Name of the refrence model, if crust the appropiate crust model will be used",
+            help="Name of the refrence model, if crust the appropiate crust\
+                  model will be used",
         )
         parser.add_option(
             "--nboot",
             dest="nboot",
             type=int,
             default=1,
-            help="Number of bootstrap results, based on different velocity models",
+            help="Number of bootstrap results, based on different\
+                  velocity models",
         )
         parser.add_option(
             "--minimum_vel",
@@ -686,8 +705,8 @@ def command_detect_run(args):
             dest="detector",
             type=str,
             default="both",
-            help="Detect with both the EQT and the stacking based approaches or only one",
-        )
+            help="Detect with both the EQT and the stacking based approaches\
+                  or only one")
 
 
 def command_collect_detections(args):
@@ -711,7 +730,6 @@ def command_collect_detections(args):
 
 def command_detect(args):
     def setup(parser):
-
         parser.add_option(
             "--download_method",
             dest="download_method",
@@ -741,10 +759,18 @@ def command_detect(args):
             help="Display progress of localisation for each event in browser",
         )
         parser.add_option(
-            "--mode", dest="mode", type=str, default="both", help="Mode to to use"
+            "--mode",
+            dest="mode",
+            type=str,
+            default="both",
+            help="Mode to to use"
         )
         parser.add_option(
-            "--load", dest="load", type=str, default=False, help="Load data"
+            "--load",
+            dest="load",
+            type=str,
+            default=False,
+            help="Load data"
         )
         parser.add_option(
             "--train_model",
@@ -768,11 +794,24 @@ def command_detect(args):
             help="Download data.",
         )
         parser.add_option(
-            "--tinc", dest="tinc", type=float, default=None, help="Increment."
+            "--tinc",
+            dest="tinc",
+            type=float,
+            default=None,
+            help="Increment."
         )
-        parser.add_option("--path", dest="path", type=str, default=None, help="path")
         parser.add_option(
-            "--data_dir", dest="data_dir", type=str, default=None, help="data_dir"
+            "--path",
+            dest="path",
+            type=str,
+            default=None,
+            help="path")
+        parser.add_option(
+            "--data_dir",
+            dest="data_dir",
+            type=str,
+            default=None,
+            help="data_dir"
         )
         parser.add_option(
             "--validation_data",
@@ -782,21 +821,48 @@ def command_detect(args):
             help="validation_data",
         )
         parser.add_option(
-            "--start", dest="wanted_start", type=str, default=None, help="start"
+            "--start",
+            dest="wanted_start",
+            type=str,
+            default=None,
+            help="start"
         )
         parser.add_option(
-            "--end", dest="wanted_end", type=str, default=None, help="end"
+            "--end",
+            dest="wanted_end",
+            type=str,
+            default=None,
+            help="end"
         )
-        parser.add_option("--tmin", dest="tmin", type=str, default=None, help="begin")
-        parser.add_option("--tmax", dest="tmax", type=str, default=None, help="end")
         parser.add_option(
-            "--on_stream", dest="on_stream", type=str, default=False, help="end"
-        )
-        parser.add_option("--config", help="Load a configuration file")
+            "--tmin",
+            dest="tmin",
+            type=str,
+            default=None,
+            help="begin")
         parser.add_option(
-            "--configs", help="load a comma separated list of configs and process them"
+            "--tmax",
+            dest="tmax",
+            type=str,
+            default=None,
+            help="end")
+        parser.add_option(
+            "--on_stream",
+            dest="on_stream",
+            type=str,
+            default=False,
+            help="end"
         )
-        parser.add_option("--train", action="store_true")
+        parser.add_option(
+            "--config",
+            help="Load a configuration file")
+        parser.add_option(
+            "--configs",
+            help="load a comma separated list of configs and process them"
+        )
+        parser.add_option(
+            "--train",
+            action="store_true")
         parser.add_option(
             "--evaluate",
             action="store_true",
@@ -817,19 +883,29 @@ def command_detect(args):
             action="store_true",
             help="Predict from input of `predict_data_generator` in config.",
         )
-        parser.add_option("--detect", action="store_true", help="Detect earthquakes")
         parser.add_option(
-            "--optimize", metavar="FILENAME", help="use optimizer defined in FILENAME"
+            "--detect",
+            action="store_true",
+            help="Detect earthquakes")
+        parser.add_option(
+            "--optimize",
+            metavar="FILENAME",
+            help="use optimizer defined in FILENAME"
         )
         parser.add_option(
             "--write-tfrecord",
             metavar="FILENAME",
             help="write data_generator out to FILENAME",
         )
-        parser.add_option("--from-tfrecord", metavar="FILENAME", help="read tfrecord")
+        parser.add_option(
+            "--from-tfrecord",
+            metavar="FILENAME",
+            help="read tfrecord")
         parser.add_option("--new-config")
         parser.add_option(
-            "--clear", help="delete remaints of former runs", action="store_true"
+            "--clear",
+            help="delete remaints of former runs",
+            action="store_true"
         )
         parser.add_option(
             "--show-data",
@@ -837,19 +913,54 @@ def command_detect(args):
             metavar="N",
             help="show N data examples. Call with `--debug` to get plot figures with additional information.",
         )
-        parser.add_option("--nskip", type=int, help="For plotting. Examples to skip.")
-        parser.add_option("--ngpu", help="number of GPUs to use")
-        parser.add_option("--gpu-no", help="GPU number to use", type=int)
         parser.add_option(
-            "--debug", help="enable logging level DEBUG", action="store_true"
+            "--nskip",
+            type=int,
+            help="For plotting. Examples to skip.")
+        parser.add_option(
+            "--ngpu",
+            help="number of GPUs to use")
+        parser.add_option(
+            "--gpu-no",
+            help="GPU number to use",
+            type=int)
+        parser.add_option(
+            "--debug",
+            help="enable logging level DEBUG",
+            action="store_true"
         )
         parser.add_option(
-            "--tfdebug", help="break into tensorflow debugger", action="store_true"
+            "--tfdebug",
+            help="break into tensorflow debugger",
+            action="store_true"
         )
-        parser.add_option("--force", action="store_true")
-        parser.add_option("--freq", dest="freq", type=float, default=None, help="end")
-        parser.add_option("--hf", dest="hf", type=float, default=50, help="end")
-        parser.add_option("--lf", dest="lf", type=float, default=2, help="end")
+        parser.add_option(
+            "--force",
+            action="store_true")
+        parser.add_option(
+            "--freq",
+            dest="freq",
+            type=float,
+            default=None,
+            help="Frequency value")
+        parser.add_option(
+            "--hf",
+            dest="hf",
+            type=float,
+            default=50,
+            help="High frequency filter")
+        parser.add_option(
+            "--lf",
+            dest="lf",
+            type=float,
+            default=2,
+            help="end")
+        parser.add_option(
+            "--store_path",
+            dest="store_path",
+            type=str,
+            default="",
+            help="Store path")
 
     parser, options, args = cl_parse("detect", args, setup)
     if options.load is not False:
@@ -863,7 +974,9 @@ def command_detect(args):
     if options.detector_only is not False:
         options.detector_only = True
 
-    from silvertine import detector
+    from silvertine import detector, locate
+    from silvertine import seiger_lassie as lassie
+    from silvertine.util import waveform
 
     if options.on_run is False:
 
@@ -908,125 +1021,184 @@ def command_detect(args):
             )
     else:
         if options.mode == "both":
-            # make parallel over time loop
-            # set parameters from one for the other...
-            if options.download_method is "stream":
-                if options.loop == "external":
-                    while True:
-                        from silvertine.monitoring.stream import poll
+            piled = pile_mod.make_pile()
+            sources_list = [
+                "seedlink://eida.bgr.de/GR.INS*.*.EH*",
+                "seedlink://eida.bgr.de/GR.TMO*.*.EH*",
+            ]  # seedlink sources
+            pollinjector = None
+            tempdir = None
+            store_path_base_down = options.store_path
+            store_path_base = options.store_path
+            stations = model.load_stations(store_path_base_down+"/stations_landau.txt")
+            store_interval = 10
+            wait_period = 130
+            if sources_list:
+                if store_path_base is None:
+                    tempdir = tempfile.mkdtemp("", "snuffler-tmp-")
+                    store_path = pjoin(
+                        tempdir,
+                        "trace-%(network)s.%(station)s.%(location)s.%(channel)s."
+                        "%(tmin_ms)s.mseed",
+                    )
+                elif os.path.isdir(store_path_base):
+                    store_path = pjoin(
+                        store_path_base,
+                        "trace-%(network)s.%(station)s.%(location)s.%(channel)s."
+                        "%(tmin_ms)s.mseed",
+                    )
+                _injector = pile_mod.Injector(
+                    piled,
+                    path=store_path,
+                    fixation_length=50,
+                    forget_fixed=True,
+                )
 
-                        time.sleep(10.3)
-                        piled = poll()
-                        # arg for stream data hand me down
-                        detector.locator.locator.main()
+                # Data is downloaded continously after starting the stream
+                if options.download_method is "stream":
+                    sources = setup_acquisition_sources(sources_list)
+                    for source in sources:
+                        source.start()
 
-                        detector.picker.main(
-                            options.path,
-                            tmin=options.tmin,
-                            tmax=options.tmax,
-                            minlat=49.0,
-                            maxlat=49.979,
-                            minlon=7.9223,
-                            maxlon=8.9723,
-                            channels=["EH" + "[ZNE]"],
-                            client_list=["http://eida.bgr.de", "http://ws.gpi.kit.edu"],
-                            path_waveforms=options.data_dir,
-                            download=options.download,
-                            tinc=options.tinc,
-                            freq=options.freq,
-                            hf=options.hf,
-                            lf=options.lf,
-                        )
-                else:
-                    # arg for folder hand me down
-
-                    piled = pile_mod.make_pile()
-                    sources_list = [
-                        "seedlink://eida.bgr.de/GR.INS7.*.EH*",
-                        "seedlink://eida.bgr.de/GR.TMO22.*.EH*",
-                    ]  # seedlink sources
-                    pollinjector = None
-                    tempdir = None
-                    store_path_base = "/home/asteinbe/testdown/download-tmp"
-                    store_interval = 10
-                    wait_period = 10.3
-                    if sources_list:
-                        if store_path_base is None:
-                            tempdir = tempfile.mkdtemp("", "snuffler-tmp-")
-                            store_path = pjoin(
-                                tempdir,
-                                "trace-%(network)s.%(station)s.%(location)s.%(channel)s."
-                                "%(tmin_ms)s.mseed",
-                            )
-                        elif os.path.isdir(store_path_base):
-                            store_path = pjoin(
-                                store_path_base,
-                                "trace-%(network)s.%(station)s.%(location)s.%(channel)s."
-                                "%(tmin_ms)s.mseed",
-                            )
-                        print(store_path)
-                        _injector = pile_mod.Injector(
-                            piled,
-                            path=store_path,
-                            fixation_length=10,
-                            forget_fixed=True,
-                        )
-
-                        sources = setup_acquisition_sources(sources_list)
+                diff = 0 # for keeping track of time between data saving
+                models = []
+                events_eqt = []
+                events_stacking = []
+                process_in_progress = True
+                while process_in_progress is True:
+                    try:
+                        if options.download_method is "stream":
+                            time.sleep(wait_period-diff)
+                    except:
+                        print("Alarm! Processing takes to long!")
                         for source in sources:
-                            source.start()
-                        while True:
-                            time.sleep(wait_period)
-                            for source in sources:
-                                #            source.start()
-                                print("poll")
-                                trs = source.poll()
-                                print(trs)
-                                for tr in trs:
-                                    _injector.inject(tr)
-                                    print("inject")
-                                from pyrocko import trace
+                            source.stop()
+                        pass
 
-                                trace.snuffle(trs)
-                            # make parallel
-                            store_path_base_down = "/home/asteinbe/testdown/"
-                            #    detector.locator.locator.main() # on 1/2 -1 cpus, needs to work on yaml change
-                            from silvertine import seiger_lassie as lassie
+                    if options.download_method is "stream":
+                        for source in sources:
+                            trs = source.poll()
+                            for tr in trs:
+                                _injector.inject(tr)
+                    start = time.time()
+                    config_path = options.config
+                    config = lassie.read_config(config_path)
+                    pool = Pool(processes=1)
+                    pool.apply_async(lassie.search(config,
+                                                   override_tmin=options.tmin,
+                                                   override_tmax=options.tmax,
+                                                   force=True,
+                                                   show_detections=True,
+                                                   nparallel=2))
+                    pool.apply_async(detector.picker.main(
+                        store_path_base_down,
+                        tmin=options.tmin,
+                        tmax=options.tmax,
+                        minlat=49.0,
+                        maxlat=49.979,
+                        minlon=7.9223,
+                        maxlon=8.9723,
+                        channels=["EH" + "[ZNE]"],
+                        client_list=[
+                            "http://eida.bgr.de",
+                            "http://ws.gpi.kit.edu",
+                        ],
+                        path_waveforms=store_path_base_down+"download-tmp",
+                        download=options.download,
+                        tinc=options.tinc,
+                        freq=options.freq,
+                        hf=options.hf,
+                        lf=options.lf,
+                        models=models
+                    ))
+                   pool.close()
+                   pool.join()
+                    end = time.time()
+                    diff = end - start
 
-                            config_path = options.config
-                            config = lassie.read_config(config_path)
-                            lassie.search(
-                                config,
-                                override_tmin=options.tmin,
-                                override_tmax=options.tmax,
-                                force=True,
-                                show_detections=True,
-                                nparallel=2,
-                            )
-                            detector.picker.main(
-                                store_path_base_down,
-                                tmin=options.tmin,  # on 1/2 -1 cpus
-                                tmax=options.tmax,
-                                minlat=49.0,
-                                maxlat=49.979,
-                                minlon=7.9223,
-                                maxlon=8.9723,
-                                channels=["EH" + "[ZNE]"],
-                                client_list=[
-                                    "http://eida.bgr.de",
-                                    "http://ws.gpi.kit.edu",
-                                ],
-                                path_waveforms=store_path_base_down,
-                                download=options.download,
-                                tinc=options.tinc,
-                                freq=options.freq,
-                                hf=options.hf,
-                                lf=options.lf,
-                            )
+                    # if detection make fine location and output here
 
-                            # if detection make fine location and output here
-                            for source in sources:
-                                source.stop()
+                #    try:
+                    try:
+                        try:
+                            events_stacking = model.load_events(store_path_base_down+"stacking_events.pf")
+                        except:
+                            events_stacking = []
+                        events_stacking.extend(model.load_events(config.get_events_path()))
+                        model.dump_events(events_stacking, store_path_base_down+"stacking_events.pf")
+                    except:
+                        pass
+                    try:
+                        events_eqt = model.load_events(store_path_base_down+"eqt_events.pf")
+                    except:
+                        events_eqt = []
+                    for item in Path(store_path_base_down).glob("asociation_*/events.pf"):
+                        events_eqt.extend(model.load_events(item.absolute()))
+                    model.dump_events(events_eqt, store_path_base_down+"eqt_events.pf")
+                    for event in events_stacking:
+                        savedir = store_path_base_down + '/stacking_detections/' + str(event.time) + '/'
+                        if not os.path.exists(savedir):
+                            os.makedirs(savedir)
+                            os.makedirs(savedir+"figures_stacking")
+                        for item in Path(config.path_prefix+"/"+config.run_path+"/figures").glob("*"):
+                            time_item = util.stt(str(item.absolute())[-27:-17]+" "+str(item.absolute())[-16:-4])
+                            if event.time-10 < time_item and event.time+10 > time_item:
+                                os.system("cp %s %s" % (item.absolute(), savedir+"figures_stacking"))
+                                plot_waveforms = False
+                                if plot_waveforms is True:
+                                    pile_event = pile.make_pile(store_path_base_down+"download-tmp", show_progress=False)
+                                    for traces in pile_event.chopper(tmin=event.time-10,
+                                                                     tmax=event.time+10,
+                                                                     keep_current_files_open=False,
+                                                                     want_incomplete=True):
+                                        waveform.plot_waveforms(traces, event, stations,
+                                                                savedir, None)
+
+
+                    for event in events_eqt:
+                        savedir = store_path_base_down + '/eqt_detections/' + str(event.time) + '/'
+                        if not os.path.exists(savedir):
+                            os.makedirs(savedir)
+                            os.makedirs(savedir+"figures_eqt")
+                        for item in Path(store_path_base_down).glob("asociation_*/associations.xml"):
+                            qml = quakeml.QuakeML.load_xml(filename=item)
+                            events_qml = qml.get_pyrocko_events()
+                            for i, eq in enumerate(events_qml):
+                                if event.time == eq.time:
+                                    evqml = qml.get_events()[i]
+                                    evqml.dump_xml(filename=savedir+"phases_eqt.qml")
+                        for item in Path(store_path_base_down).glob("detections_*/*/figures/*"):
+                            time_item = util.stt(str(item.absolute())[-31:-21]+" "+str(item.absolute())[-20:-5])
+                            if event.time-wait_period < time_item and event.time+wait_period > time_item:
+                                os.system("cp %s %s" % (item.absolute(), savedir+"figures_eqt"))
+
+                    for event_stack in events_stacking:
+                        for event_eqt in events_eqt:
+                            if event_stack.time-10 < event_eqt.time and event_stack.time+10 > event_eqt.time:
+                                savedir = store_path_base_down + '/combined_detections/' + util.tts(event_stack.time) + '/'
+                                if not os.path.exists(savedir):
+                                    os.makedirs(savedir)
+
+
+            #        except:
+            #            pass
+
+                    # remove_outdated_wc(store_path_base_down+"download-tmp",
+                    #                    int(wait_period/60),
+                    #                    wc="*")
+                    # remove_outdated_wc(store_path_base_down,
+                    #                    int(wait_period/60),
+                    #                    wc="detections_*")
+                    # remove_outdated_wc(store_path_base_down,
+                    #                    24*60,
+                    #                    wc="asociation_*")
+
+                    if options.download_method == "stream_sim":
+                        process_in_progress = False
+
+                if options.download_method == "stream":
+                    for source in sources:
+                        source.stop()
 
 
 def command_optimize(args):
@@ -1266,7 +1438,6 @@ def command_analyse_statistics(args):
         events = model.load_events("data/events_ler.pf")
 
     distances, time_rel, msd = stats.calcuate_msd(events)
-    print(msd)
     # prod_data.plot_insheim_prod_data()
 
 
@@ -2598,6 +2769,13 @@ def command_report(args):
             help="open report in browser",
         )
         parser.add_option(
+            "--all",
+            "-a",
+            dest="all",
+            action="store_true",
+            help="Make report for all in directory",
+        )
+        parser.add_option(
             "--config",
             dest="config",
             metavar="FILE",
@@ -2624,7 +2802,8 @@ def command_report(args):
             "If set to more than one, --status=quiet is implied.",
         )
         parser.add_option(
-            "--scenario", dest="scenario", type=str, default="False", help="Scenario."
+            "--scenario", dest="scenario", type=str, default="False",
+                          help="Scenario."
         )
         parser.add_option(
             "--threads",
@@ -2684,12 +2863,9 @@ def command_report(args):
 
     entries_generated = False
     payload = []
-    all = True
-    print(options.scenario)
     try:
-        if all is True:
+        if options.all is True:
             from pathlib import Path
-
             if options.scenario is True:
                 pathlist = Path(args[0]).glob("scenario*/")
             else:
@@ -2705,6 +2881,18 @@ def command_report(args):
                         options.nthreads,
                     )
                 )
+        else:
+            from pathlib import Path
+            rundir = str(path) + "/"
+            payload.append(
+                (
+                    [rundir],
+                    None,
+                    conf,
+                    options.update_without_plotting,
+                    options.nthreads,
+                )
+            )
         if all is False and open is False:
             if args and all(op.isdir(rundir) for rundir in args):
                 rundirs = args
@@ -2721,7 +2909,6 @@ def command_report(args):
                     )
     except:
         pass
-
     if payload:
         entries_generated = []
         for result in parimap.parimap(
@@ -2974,7 +3161,6 @@ def command_version(args):
 
     elif not options.failsafe:
         from silvertine import info
-
         print(info.version_info())
         return
 

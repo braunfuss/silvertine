@@ -498,21 +498,22 @@ def associate_waveforms(test_events, stations_list, reference_events=None,
                     paths_mseeds = []
                     for p_mseed in pathlist_mseeds:
                         paths_mseeds.append(str(p_mseed))
-                    print(paths_mseeds)
                     p = pile.make_pile(paths_mseeds)
                     for tr in p.chopper():
                         tr.snuffle()
                         tr.chop(ev.time-10, ev.time+60)
     if scenario is True:
-        for i, event in enumerate(test_events):
-            stations = stations_list[i]
-            savedir = folder + '/scenario_' + str(i) + '/'
-            traces = io.load(savedir+"traces.mseed")
-            traces_dict.update({'%s' % i: traces})
-            if picks is not None:
-                pick = picks[i]
-            if plot is True:
-                plot_waveforms(traces, event, stations, savedir, pick)
+        savedir = folder + '/scenario_' + str(i) + '/'
+    else:
+        savedir = folder
+    for i, event in enumerate(test_events):
+        stations = stations_list[i]
+        traces = io.load(savedir+"traces.mseed")
+        traces_dict.update({'%s' % i: traces})
+        if picks is not None:
+            pick = picks[i]
+        if plot is True:
+            plot_waveforms(traces, event, stations, savedir, pick)
     return traces_dict
 
 

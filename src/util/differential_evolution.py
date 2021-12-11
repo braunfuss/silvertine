@@ -9,12 +9,11 @@ import numpy as np
 from scipy.optimize import OptimizeResult, minimize
 from scipy.optimize.optimize import _status_message
 from scipy._lib._util import check_random_state, MapWrapper
-from scipy._lib.six import xrange, string_types
 
 from scipy.optimize._constraints import (Bounds, new_bounds_to_old,
                                          NonlinearConstraint, LinearConstraint)
 
-
+from six import string_types
 __all__ = ['differential_evolution']
 
 _MACHEPS = np.finfo(np.float64).eps

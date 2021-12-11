@@ -127,7 +127,7 @@ def search(
         show_window_traces=False,
         force=False,
         stop_after_first=False,
-        nparallel=None,
+        nparallel=6,
         bark=False):
 
     fp = config.expand_path
@@ -571,13 +571,13 @@ def search(
             util.time_to_str(tmin_win),
             util.time_to_str(tmax_win)))
     cat = Catalog()
-    files = glob("%s/figures/*qml*" % run_path)
+    files = glob("%s/../figures/*qml*" % run_path)
     files.sort(key=os.path.getmtime)
     for file in files:
         cat_read = read_events(file)
         for event in cat_read:
             cat.append(event)
-    cat.write("%s/all_events_qml.xml" % run_path, format="QUAKEML")
+    cat.write("%s/../all_events_stacking.qml" % run_path, format="QUAKEML")
 
 __all__ = [
     'search',

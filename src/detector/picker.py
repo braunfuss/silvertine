@@ -1,4 +1,3 @@
-
 import os
 from silvertine.detector.utils.downloader import makeStationList
 from silvertine.detector.utils.hdf5_maker import preprocessor
@@ -11,6 +10,7 @@ import subprocess
 from obspy.core.event import read_events
 from obspy.core.event import Catalog
 from glob import glob
+import time
 
 
 def make_station_json(path, tmin="2016-02-12 06:20:03.800",
@@ -21,8 +21,8 @@ def make_station_json(path, tmin="2016-02-12 06:20:03.800",
                       seiger=True):
     # CHANLIST =["HH[ZNE]", "HH[Z21]", "BH[ZNE]", "EH[ZNE]", "SH[ZNE]", "HN[ZNE]", "HN[Z21]", "DP[ZNE]"]
     if tmin is None:
-        tmin = util.stt("2021-01-22 14:05:03.00")
-        tmax = util.stt("2021-12-22 14:05:03.00")
+        tmin = time.time()-120
+        tmax = time.time()
     json_basepath = os.path.join(path, "json/station_list.json")
     if seiger is False:
         makeStationList(json_path=json_basepath,
@@ -62,32 +62,32 @@ def predict(path, tmin="2016-02-12 06:20:03.800",
             tmax="2016-02-12 06:20:03.800", minlat=49.1379, maxlat=49.1879,
             minlon=8.1223,
             maxlon=8.1723, model_path=None, model=None, iter=None,
-            catalog=True, out_basepath=None):
+            out_basepath=None, models=None):
 
 
     if model_path is None:
         model_path = os.path.dirname(os.path.abspath(__file__))+"/model/EqT_model.h5"
     downloads_basepath = os.path.join(path, "downloads")
     downloads_processed_path = os.path.join(path, "downloads_processed_hdfs")
-    if catalog is True:
-        predictor(input_dir=downloads_processed_path,
-                  input_model=model_path,
-                  output_dir=out_basepath,
-                  estimate_uncertainty=True,
-                  output_probabilities=False,
-                  number_of_sampling=1,
-                  loss_weights=[0.02, 0.40, 0.58],
-                  detection_threshold=0.001,
-                  P_threshold=0.001,
-                  S_threshold=0.001,
-                  number_of_plots=10,
-                  plot_mode='time',
-                  batch_size=500,
-                  number_of_cpus=6,
-                  keepPS=True,
-                  model=model,
-                  allowonlyS=True,
-                  spLimit=3)
+    predictor(input_dir=downloads_processed_path,
+              input_model=model_path,
+              output_dir=out_basepath,
+              estimate_uncertainty=False,
+              output_probabilities=False,
+              number_of_sampling=1,
+              loss_weights=[0.02, 0.40, 0.58],
+              detection_threshold=0.001,
+              P_threshold=0.001,
+              S_threshold=0.001,
+              number_of_plots=10,
+              plot_mode='time',
+              batch_size=500,
+              number_of_cpus=7,
+              keepPS=True,
+              model=model,
+              allowonlyS=True,
+              spLimit=3,
+              models=models)
 
 
 def associate(path, tmin, tmax, minlat=49.1379, maxlat=49.1879, minlon=8.1223,
@@ -151,32 +151,15 @@ def iter_chunked(tinc, path, data_pile, tmin=None,
                  stream=False,
                  reject_blacklisted=None, tpad=0,
                  tstart=None, tstop=None,
-                 hf=10, lf=1, deltat=None):
+                 hf=10, lf=1, deltat=None, models=None):
     try:
         tstart = util.stt(tmin) if tmin else None
         tstop = util.stt(tmax) if tmax else None
     except:
         pass
     model_path = os.path.dirname(os.path.abspath(__file__))+"/model/EqT_model.h5"
-    from tensorflow.keras.models import load_model
-    from tensorflow.keras.optimizers import Adam
 
-    from silvertine.detector.core.EqT_utils import f1, SeqSelfAttention, FeedForward, LayerNormalization
-    global model
-
-    model = load_model(model_path,
-                       custom_objects={'SeqSelfAttention': SeqSelfAttention,
-                                       'FeedForward': FeedForward,
-                                       'LayerNormalization': LayerNormalization,
-                                       'f1': f1
-                                        })
-    model.compile(loss=['binary_crossentropy', 'binary_crossentropy',
-                        'binary_crossentropy'],
-                  loss_weights=[0.02, 0.40, 0.58],
-                  optimizer=Adam(lr=0.001),
-                  metrics=[f1])
     deltat_cf = min(data_pile.deltats.keys())
-
     for i, trs in enumerate(data_pile.chopper(tinc=tinc, tmin=tstart,
                                               tmax=tstop, tpad=tpad,
                                               keep_current_files_open=False,
@@ -194,25 +177,28 @@ def iter_chunked(tinc, path, data_pile, tmin=None,
                     tmaxc = tr.tmax
         for tr in trs:
             tr.highpass(4, 5)
+        #    try:
             try:
                 tr.chop(tminc, tmaxc)
-                date_min = download_raw.get_time_format_eq(tminc)
-                date_max = download_raw.get_time_format_eq(tmaxc)
-                io.save(tr, "%s/downloads/%s/%s.%s..%s__%s__%s.mseed" % (path,
-                                                                        tr.station,
-                                                                        tr.network,
-                                                                        tr.station,
-                                                                        tr.channel,
-                                                                        date_min,
-                                                                        date_max))
             except:
                 pass
+            date_min = download_raw.get_time_format_eq(tminc)
+            date_max = download_raw.get_time_format_eq(tmaxc)
+            io.save(tr, "%s/downloads/%s/%s.%s..%s__%s__%s.mseed" % (path,
+                                                                    tr.station,
+                                                                    tr.network,
+                                                                    tr.station,
+                                                                    tr.channel,
+                                                                    date_min,
+                                                                    date_max))
+        #    except:
+        #        pass
 
         process(path, tmin=tminc, tmax=tmaxc, minlat=minlat, maxlat=maxlat,
                 minlon=minlon, maxlon=maxlon, channels=channels,
                 client_list=client_list, download=download, seiger=seiger,
                 selection=selection, path_waveforms=path_waveforms,
-                stream=stream, model=model, iter=i)
+                stream=stream, model=None, iter=i, models=models)
         for tr in trs:
             subprocess.run(["rm -r %s/downloads/%s/%s.%s..%s__%s__%s.mseed" %(path, tr.station, tr.network, tr.station, tr.channel, date_min, date_max)], shell=True)
 
@@ -243,8 +229,7 @@ def load_eqt_folder(data_paths, tinc, path, tmin="2021-05-26 06:20:03.800",
                     path_waveforms=None,
                     stream=False,
                     data_format='mseed', deltat_want=100,
-                    tstart=None, tstop=None, hf=8, lf=2):
-
+                    tstart=None, tstop=None, hf=8, lf=2, models=[]):
     data_pile = pile.make_pile(data_paths, fileformat=data_format, show_progress=False)
     iter_chunked(tinc, path, data_pile, tmin=tmin, tmax=tmax, minlat=minlat,
                  maxlat=maxlat,
@@ -254,7 +239,7 @@ def load_eqt_folder(data_paths, tinc, path, tmin="2021-05-26 06:20:03.800",
                  stream=stream,
                  reject_blacklisted=None, tpad=0,
                  tstart=None, tstop=None, hf=hf,
-                 lf=lf)
+                 lf=lf, models=models)
 
 
 def process(path, tmin="2021-05-26 06:20:03.800",
@@ -264,7 +249,7 @@ def process(path, tmin="2021-05-26 06:20:03.800",
             channels=["EH"+"[ZNE]"], client_list=["BGR"],
             download=True, seiger=True, selection=None,
             path_waveforms=None, model=None,
-            stream=False, iter=None):
+            stream=False, iter=None, models=None):
 
     if iter is None:
         out_basepath = os.path.join(path, 'detections')
@@ -283,7 +268,8 @@ def process(path, tmin="2021-05-26 06:20:03.800",
     predict(path, tmin=tmin,
             tmax=tmax,
             minlat=minlat, maxlat=maxlat, minlon=minlon,
-            maxlon=maxlon, model=model, iter=iter, out_basepath=out_basepath)
+            maxlon=maxlon, model=model, iter=iter, out_basepath=out_basepath,
+            models=models)
     associate(path, tmin=tmin,
               tmax=tmax,
               minlat=minlat, maxlat=maxlat, minlon=minlon,
@@ -298,7 +284,7 @@ def main(path, tmin="2021-05-26 06:20:03.800",
                                                "http://ws.gpi.kit.edu/"],
          download=True, seiger=True, selection=None, clean=False,
          stream=False, path_waveforms=None, tinc=None,
-         lf=5, hf=40, freq=None):
+         lf=5, hf=40, freq=None, models=None):
 
     if download is True:
         if tinc is None:
@@ -323,13 +309,14 @@ def main(path, tmin="2021-05-26 06:20:03.800",
                              selection=selection,
                              providers=client_list, clean=clean,
                              detector=True, common_f=freq)
+
                 load_eqt_folder(path, tinc, path, tmin=twin_start, tmax=twin_end,
                                 minlat=minlat, maxlat=maxlat,
                                 minlon=minlon, maxlon=maxlon, channels=channels,
                                 client_list=client_list, download=download,
                                 seiger=seiger,
                                 selection=selection,
-                                stream=stream, hf=hf, lf=lf)
+                                stream=stream, hf=hf, lf=lf, models=models)
 
             #    process(path, tmin=tmin, tmax=tmax, minlat=minlat, maxlat=maxlat,
             #            minlon=minlon, maxlon=maxlon, channels=channels,
@@ -349,10 +336,10 @@ def main(path, tmin="2021-05-26 06:20:03.800",
                         client_list=client_list, download=download,
                         seiger=seiger,
                         selection=selection,
-                        stream=stream, hf=hf, lf=lf)
+                        stream=stream, hf=hf, lf=lf, models=models)
     else:
         process(path, tmin=tmin, tmax=tmax, minlat=minlat, maxlat=maxlat,
                 minlon=minlon, maxlon=maxlon, channels=channels,
                 client_list=client_list, download=download, seiger=seiger,
                 selection=selection, path_waveforms=path_waveforms,
-                stream=stream)
+                stream=stream, models=models)

@@ -78,11 +78,9 @@ class HasPaths(Object):
                 basepath, self.path_prefix or self._parent_path_prefix)
 
     def get_basepath(self):
-        assert self._basepath is not None
         return self._basepath
 
     def change_basepath(self, new_basepath, parent_path_prefix=None):
-        assert self._basepath is not None
 
         self._parent_path_prefix = parent_path_prefix
         if self.path_prefix or not self._parent_path_prefix:
@@ -97,7 +95,6 @@ class HasPaths(Object):
         self._basepath = new_basepath
 
     def expand_path(self, path, extra=None):
-        assert self._basepath is not None
 
         if extra is None:
             def extra(path):

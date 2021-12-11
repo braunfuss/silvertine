@@ -307,7 +307,7 @@ def plot_waveforms(traces, event, stations, savedir, picks, show=True):
                 fontsize=fontsize,
                 fontstyle='normal')
             if i/nstations == 1 or i/nstations == 2 or i/nstations ==3:
-                fig.savefig(savedir+"waveforms_%s.png" % str(int(i/nstations)), dpi=1000)
+                fig.savefig(savedir+"waveforms_%s.png" % str(int(i/nstations)), dpi=100)
 
                 if show is True:
                     plt.show()

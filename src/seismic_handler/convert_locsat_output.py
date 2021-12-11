@@ -1,7 +1,9 @@
 from pyrocko import model
 import numpy as np
 from pyrocko.gui.pile_viewer import PhaseMarker, EventMarker
-from pyrocko import cake
+from pyrocko import cake, util
+from pyrocko.gui import marker as pym
+
 from pyrocko.util import stt
 
 
@@ -66,19 +68,19 @@ def locsat2pyrocko(fname):
     events = []
     events_data = []
     phase_markers_all_events = []
+    phase = None
+    depth = None
+    component = None
     for line in file:
-        phase = None
-        depth = None
+        component = None
         idx = line.find("Event ID               :")
         if idx != -1:
             idx = line.find(":")
             event_id = line[idx+1:]
             if event_id in events:
                 idx_event = events.index(event_id)
-                event_data = events_data[idx_event]
                 phase_markers = phase_markers_all_events[idx_event]
             else:
-                event_data = []
                 phase_markers = []
                 events.append(event_id)
 
@@ -128,12 +130,12 @@ def locsat2pyrocko(fname):
             idx = line.find(":")
             depth = float(line[idx+1:])*1000.
 
-        if phase is not None:
-            phase_markers.append(PhaseMarker(["0", station],
+        if component is not None:
+            phase_markers.append(PhaseMarker([("GR", station.strip(), "",
+                                               component.strip())],
                                              tmin=t,
                                              tmax=t,
-                                             phasename=phase,
-                                             event_hash=event_id))
+                                             phasename=phase.strip()))
         if depth is not None:
             try:
                 event = model.event.Event(lat=lat, lon=lon, time=t, depth=depth,
@@ -147,6 +149,9 @@ def locsat2pyrocko(fname):
                 phase_markers_all_events[idx_event] = phase_markers
             else:
                 phase_markers_all_events.append(phase_markers)
+
         else:
             phase_markers_all_events.append(phase_markers)
+    for phase_markers in phase_markers_all_events:
+        PhaseMarker.save_markers(phase_markers, "%s.pym" % (str(t)), fdigits=3)
     return events, phase_markers_all_events

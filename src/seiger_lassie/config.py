@@ -175,7 +175,7 @@ class Config(HasPaths):
 
     def get_figures_path_template(self):
         run_path = self.expand_path(self.run_path)
-        return op.join(run_path, 'figures', 'detection_%(id)s.%(format)s')
+        return op.join(run_path, 'figures', '%(id)s.%(format)s')
 
     def get_receivers(self):
         '''Aggregate receivers from different sources.'''

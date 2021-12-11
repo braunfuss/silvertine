@@ -45,16 +45,25 @@ def bayesian_model_plot(models, axes=None, draw_bg=True, highlightidx=[]):
     vs_c = scolor('skyblue2')
 
     for i, mod in enumerate(models):
-        plot_profile(
+            plot_profile(
             mod, axes, vp_c=light(vp_c, 0.3), vs_c=light(vs_c, 0.3), lw=1.)
 
     for count, i in enumerate(sorted(highlightidx)):
         if count == 0:
             vpcolor = ref_vp_c
             vscolor = ref_vs_c
+        elif count == 1:
+            vpcolor = scolor('butter3')
+            vscolor = scolor('butter3')
+        elif count == 2:
+            vpcolor = scolor('skyblue2')
+            vscolor = scolor('skyblue2')
+        elif count == 3:
+            vpcolor = scolor('plum2')
+            vscolor = scolor('plum2')
         else:
-            vpcolor = vp_c
-            vscolor = vs_c
+            vpcolor = scolor('scarletred2')
+            vscolor = scolor('scarletred2')
 
         plot_profile(
             models[i], axes, vp_c=vpcolor, vs_c=vscolor, lw=2.)
