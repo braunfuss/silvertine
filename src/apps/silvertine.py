@@ -1030,7 +1030,10 @@ def command_detect(args):
             tempdir = None
             store_path_base_down = options.store_path
             store_path_base = options.store_path
-            stations = model.load_stations(store_path_base_down+"/stations_landau.txt")
+            try:
+                stations = model.load_stations(store_path_base_down+"/stations_landau.txt")
+            except:
+                stations = model.load_stations(store_path_base_down+"stations_landau.txt")
             store_interval = 10
             wait_period = 130
             if sources_list:
