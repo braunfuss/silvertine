@@ -1128,22 +1128,22 @@ def command_detect(args):
                 #    try:
                     try:
                         try:
-                            events_stacking = model.load_events(store_path_base_down+"stacking_events.pf")
+                            events_stacking = model.load_events(store_path_base+"stacking_events.pf")
                         except:
                             events_stacking = []
                         events_stacking.extend(model.load_events(config.get_events_path()))
-                        model.dump_events(events_stacking, store_path_base_down+"stacking_events.pf")
+                        model.dump_events(events_stacking, store_path_base+"stacking_events.pf")
                     except:
                         pass
                     try:
-                        events_eqt = model.load_events(store_path_base_down+"eqt_events.pf")
+                        events_eqt = model.load_events(store_path_base+"eqt_events.pf")
                     except:
                         events_eqt = []
-                    for item in Path(store_path_base_down).glob("asociation_*/events.pf"):
+                    for item in Path(store_path_base).glob("asociation_*/events.pf"):
                         events_eqt.extend(model.load_events(item.absolute()))
-                    model.dump_events(events_eqt, store_path_base_down+"eqt_events.pf")
+                    model.dump_events(events_eqt, store_path_base+"eqt_events.pf")
                     for event in events_stacking:
-                        savedir = store_path_base_down + '/stacking_detections/' + str(event.time) + '/'
+                        savedir = store_path_base + '/stacking_detections/' + str(event.time) + '/'
                         if not os.path.exists(savedir):
                             os.makedirs(savedir)
                             os.makedirs(savedir+"figures_stacking")
@@ -1190,14 +1190,14 @@ def command_detect(args):
             #        except:
             #            pass
 
-                    remove_outdated_wc(store_path_base+"download-tmp",
+                    remove_outdated_wc(store_path_base+"/download-tmp",
                                        int(wait_period/60),
                                        wc="*")
                     remove_outdated_wc(store_path_base,
                                        int(wait_period/60),
                                        wc="detections_*")
                     remove_outdated_wc(store_path_base,
-                                       24*60,
+                                       int(wait_period/60),                            
                                        wc="asociation_*")
 
                     if options.download_method == "stream_sim":
