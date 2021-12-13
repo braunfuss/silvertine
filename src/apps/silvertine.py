@@ -1163,18 +1163,18 @@ def command_detect(args):
 
 
                     for event in events_eqt:
-                        savedir = store_path_base_down + '/eqt_detections/' + str(event.time) + '/'
+                        savedir = store_path_base + '/eqt_detections/' + str(event.time) + '/'
                         if not os.path.exists(savedir):
                             os.makedirs(savedir)
                             os.makedirs(savedir+"figures_eqt")
-                        for item in Path(store_path_base_down).glob("asociation_*/associations.xml"):
+                        for item in Path(store_path_base).glob("/asociation_*/associations.xml"):
                             qml = quakeml.QuakeML.load_xml(filename=item)
                             events_qml = qml.get_pyrocko_events()
                             for i, eq in enumerate(events_qml):
                                 if event.time == eq.time:
                                     evqml = qml.get_events()[i]
                                     evqml.dump_xml(filename=savedir+"phases_eqt.qml")
-                        for item in Path(store_path_base_down).glob("detections_*/*/figures/*"):
+                        for item in Path(store_path_base).glob("/detections_*/*/figures/*"):
                             time_item = util.stt(str(item.absolute())[-31:-21]+" "+str(item.absolute())[-20:-5])
                             if event.time-wait_period < time_item and event.time+wait_period > time_item:
                                 os.system("cp %s %s" % (item.absolute(), savedir+"figures_eqt"))
@@ -1182,7 +1182,7 @@ def command_detect(args):
                     for event_stack in events_stacking:
                         for event_eqt in events_eqt:
                             if event_stack.time-10 < event_eqt.time and event_stack.time+10 > event_eqt.time:
-                                savedir = store_path_base_down + '/combined_detections/' + util.tts(event_stack.time) + '/'
+                                savedir = store_path_base + '/combined_detections/' + util.tts(event_stack.time) + '/'
                                 if not os.path.exists(savedir):
                                     os.makedirs(savedir)
 
@@ -1190,13 +1190,13 @@ def command_detect(args):
             #        except:
             #            pass
 
-                    remove_outdated_wc(store_path_base_down+"download-tmp",
+                    remove_outdated_wc(store_path_base+"download-tmp",
                                        int(wait_period/60),
                                        wc="*")
-                    remove_outdated_wc(store_path_base_down,
+                    remove_outdated_wc(store_path_base,
                                        int(wait_period/60),
                                        wc="detections_*")
-                    remove_outdated_wc(store_path_base_down,
+                    remove_outdated_wc(store_path_base,
                                        24*60,
                                        wc="asociation_*")
 
