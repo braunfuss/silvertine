@@ -268,7 +268,7 @@ def process(path, tmin="2021-05-26 06:20:03.800",
     predict(path, tmin=tmin,
             tmax=tmax,
             minlat=minlat, maxlat=maxlat, minlon=minlon,
-            maxlon=maxlon, model=model, iter=iter, out_basepath=out_basepath,
+            maxlon=maxlon, model=models[0], iter=iter, out_basepath=out_basepath,
             models=models)
     associate(path, tmin=tmin,
               tmax=tmax,
@@ -318,11 +318,6 @@ def main(path, tmin="2021-05-26 06:20:03.800",
                                 selection=selection,
                                 stream=stream, hf=hf, lf=lf, models=models)
 
-            #    process(path, tmin=tmin, tmax=tmax, minlat=minlat, maxlat=maxlat,
-            #            minlon=minlon, maxlon=maxlon, channels=channels,
-            #            client_list=client_list, download=download, seiger=seiger,
-            #            selection=selection, path_waveforms=path_waveforms,
-            #            stream=stream)
                 subprocess.run(['rm -r %s*' % (path+'/downloads*')], shell=True)
 
 

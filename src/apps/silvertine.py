@@ -978,6 +978,22 @@ def command_detect(args):
     from silvertine import seiger_lassie as lassie
     from silvertine.util import waveform
 
+    from .EqT_utils import DataGeneratorPrediction, picker, generate_arrays_from_file
+    from .EqT_utils import f1, SeqSelfAttention, FeedForward, LayerNormalization
+    from tensorflow.keras.optimizers import Adam
+    from tensorflow.keras.models import load_model
+    model_eqt = load_model(args['input_model'],
+                           custom_objects={'SeqSelfAttention': SeqSelfAttention,
+                           'FeedForward': FeedForward,
+                           'LayerNormalization': LayerNormalization,
+                           'f1': f1
+                            })
+
+    model_eqt.compile(loss=['binary_crossentropy', 'binary_crossentropy', 'binary_crossentropy'],
+                      loss_weights= [0.03, 0.40, 0.58],
+                      optimizer=Adam(lr=0.001),
+                      metrics=[f1])
+
     if options.on_run is False:
 
         if options.mode == "transformer":
@@ -1118,7 +1134,7 @@ def command_detect(args):
                         freq=options.freq,
                         hf=options.hf,
                         lf=options.lf,
-                        models=models
+                        models=[model_eqt],
                     ))
                     pool.close()
                     pool.join()
