@@ -1199,9 +1199,11 @@ def command_detect(args):
                                        int(wait_period/60),
                                        wc="detections_*")
                     remove_outdated_wc(store_path_base,
-                                       int(wait_period/60),                            
+                                       int(wait_period/60),
                                        wc="asociation_*")
 
+                    for item in Path(store_path_base+"/downloads/").glob("*"):
+                        shutil.rmtree(item.absolute())
                     if options.download_method == "stream_sim":
                         process_in_progress = False
 
