@@ -68,6 +68,21 @@ def d2u(d):
     else:
         return d.replace("-", "_")
 
+def check_options(options):
+    if options.load is not False:
+        options.load = True
+    if options.train_model is not True:
+        options.train_model = False
+    if options.detector_only is not False:
+        options.detector_only = True
+    if options.mode is "detector_only":
+        options.detector_only = True
+    if options.detector_only is not False:
+        options.detector_only = True
+    if options.download is not False:
+        options.download = True
+    return options
+
 
 subcommand_descriptions = {
     "init": "initialise new project structure or print configuration",
@@ -738,13 +753,6 @@ def command_detect(args):
             help="Choose download method",
         )
         parser.add_option(
-            "--loop",
-            dest="loop",
-            type=str,
-            default="internal",
-            help="Type of loop; experimental.",
-        )
-        parser.add_option(
             "--on_run",
             dest="on_run",
             type=str,
@@ -784,22 +792,19 @@ def command_detect(args):
             dest="detector_only",
             type=str,
             default=False,
-            help="Detector only mode.",
-        )
+            help="Detector only mode.")
         parser.add_option(
             "--download",
             dest="download",
             type=str,
             default=False,
-            help="Download data.",
-        )
+            help="Download data.",)
         parser.add_option(
             "--tinc",
             dest="tinc",
             type=float,
             default=None,
-            help="Increment."
-        )
+            help="Increment.")
         parser.add_option(
             "--path",
             dest="path",
@@ -811,29 +816,7 @@ def command_detect(args):
             dest="data_dir",
             type=str,
             default=None,
-            help="data_dir"
-        )
-        parser.add_option(
-            "--validation_data",
-            dest="validation_data",
-            type=str,
-            default=None,
-            help="validation_data",
-        )
-        parser.add_option(
-            "--start",
-            dest="wanted_start",
-            type=str,
-            default=None,
-            help="start"
-        )
-        parser.add_option(
-            "--end",
-            dest="wanted_end",
-            type=str,
-            default=None,
-            help="end"
-        )
+            help="data_dir")
         parser.add_option(
             "--tmin",
             dest="tmin",
@@ -851,8 +834,7 @@ def command_detect(args):
             dest="on_stream",
             type=str,
             default=False,
-            help="end"
-        )
+            help="end")
         parser.add_option(
             "--config",
             help="Load a configuration file")
@@ -927,13 +909,7 @@ def command_detect(args):
         parser.add_option(
             "--debug",
             help="enable logging level DEBUG",
-            action="store_true"
-        )
-        parser.add_option(
-            "--tfdebug",
-            help="break into tensorflow debugger",
-            action="store_true"
-        )
+            action="store_true")
         parser.add_option(
             "--force",
             action="store_true")
@@ -961,45 +937,47 @@ def command_detect(args):
             type=str,
             default="",
             help="Store path")
+        parser.add_option(
+            "--pre_load",
+            dest="pre_load",
+            type=str,
+            default=True,
+            help="Pre-load the EQT model")
+        parser.add_option(
+            "--store_interval",
+            dest="store_interval",
+            type=float,
+            default=50,
+            help="store_interval")
+        parser.add_option(
+            "--wait_period",
+            dest="wait_period",
+            type=float,
+            default=130,
+            help="wait_period")
+        parser.add_option(
+            "--stations_file",
+            dest="stations_file",
+            type=str,
+            default="/stations_landau.txt",
+            help="Pyrocko format station file")
 
-    parser, options, args = cl_parse("detect", args, setup)
-    if options.load is not False:
-        options.load = True
-    if options.train_model is not True:
-        options.train_model = False
-    if options.detector_only is not False:
-        options.detector_only = True
-    if options.mode is "detector_only":
-        options.detector_only = True
-    if options.detector_only is not False:
-        options.detector_only = True
 
     from silvertine import detector, locate
     from silvertine import seiger_lassie as lassie
     from silvertine.util import waveform
+    from pyrocko import model
+    parser, options, args = cl_parse("detect", args, setup)
 
-    from silvertine.detector.core.EqT_utils import DataGeneratorPrediction, picker, generate_arrays_from_file
-    from silvertine.detector.core.EqT_utils import f1, SeqSelfAttention, FeedForward, LayerNormalization
-    from tensorflow.keras.optimizers import Adam
-    from tensorflow.keras.models import load_model
-    model_path = os.path.dirname(os.path.abspath(__file__))+"/../detector/model/EqT_model.h5"
-    model_eqt = load_model(model_path,
-                           custom_objects={'SeqSelfAttention': SeqSelfAttention,
-                           'FeedForward': FeedForward,
-                           'LayerNormalization': LayerNormalization,
-                           'f1': f1
-                            })
+    options = check_options(options)
 
-    model_eqt.compile(loss=['binary_crossentropy', 'binary_crossentropy', 'binary_crossentropy'],
-                      loss_weights= [0.03, 0.40, 0.58],
-                      optimizer=Adam(lr=0.001),
-                      metrics=[f1])
-
+    if options.pre_load is True:
+        from silvertine.util import eqt_util
+        model_eqt = eqt_util.load_eqt_model()
+    else:
+        model_eqt = []
     if options.on_run is False:
-
         if options.mode == "transformer":
-            if options.download is not False:
-                options.download = True
             detector.picker.main(
                 options.path,
                 tmin=options.tmin,
@@ -1051,12 +1029,10 @@ def command_detect(args):
             else:
                 store_path_base_down = "."
                 store_path_base = "."
-            try:
-                stations = model.load_stations(store_path_base+"/stations_landau.txt")
-            except:
-                stations = model.load_stations(store_path_base+"stations_landau.txt")
-            store_interval = 10
-            wait_period = 130
+
+            stations = model.load_stations(store_path_base+options.stations_file)
+
+
             if sources_list:
                 if store_path_base_down is None:
                     tempdir = tempfile.mkdtemp("", "snuffler-tmp-")
@@ -1074,9 +1050,8 @@ def command_detect(args):
                 _injector = pile_mod.Injector(
                     piled,
                     path=store_path,
-                    fixation_length=50,
-                    forget_fixed=True,
-                )
+                    fixation_length=options.store_interval,
+                    forget_fixed=True)
 
                 # Data is downloaded continously after starting the stream
                 if options.download_method is "stream":
@@ -1089,14 +1064,13 @@ def command_detect(args):
                 events_eqt = []
                 events_stacking = []
                 process_in_progress = True
+
                 while process_in_progress is True:
                     try:
-                        print(diff)
                         if options.download_method is "stream":
-                            time.sleep(wait_period-diff)
+                            time.sleep(options.wait_period-diff)
                     except:
                         print("Alarm! Processing takes to long!")
-                        print(diff)
                         for source in sources:
                             source.stop()
                         pass
@@ -1141,10 +1115,8 @@ def command_detect(args):
                     pool.join()
                     end = time.time()
                     diff = end - start
-                    print(diff)
                     # if detection make fine location and output here
 
-                #    try:
                     try:
                         try:
                             events_stacking = model.load_events(store_path_base+"stacking_events.pf")
@@ -1204,10 +1176,6 @@ def command_detect(args):
                                 savedir = store_path_base + '/combined_detections/' + util.tts(event_stack.time) + '/'
                                 if not os.path.exists(savedir):
                                     os.makedirs(savedir)
-
-
-            #        except:
-            #            pass
 
                     remove_outdated_wc(store_path_base+"/download-tmp",
                                        3.5,
