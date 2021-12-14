@@ -978,11 +978,12 @@ def command_detect(args):
     from silvertine import seiger_lassie as lassie
     from silvertine.util import waveform
 
-    from .EqT_utils import DataGeneratorPrediction, picker, generate_arrays_from_file
-    from .EqT_utils import f1, SeqSelfAttention, FeedForward, LayerNormalization
+    from silvertine.detector.core.EqT_utils import DataGeneratorPrediction, picker, generate_arrays_from_file
+    from silvertine.detector.core.EqT_utils import f1, SeqSelfAttention, FeedForward, LayerNormalization
     from tensorflow.keras.optimizers import Adam
     from tensorflow.keras.models import load_model
-    model_eqt = load_model(args['input_model'],
+    model_path = os.path.dirname(os.path.abspath(__file__))+"/../detector/model/EqT_model.h5"
+    model_eqt = load_model(model_path,
                            custom_objects={'SeqSelfAttention': SeqSelfAttention,
                            'FeedForward': FeedForward,
                            'LayerNormalization': LayerNormalization,
@@ -1140,7 +1141,7 @@ def command_detect(args):
                     pool.join()
                     end = time.time()
                     diff = end - start
-
+                    print(diff)
                     # if detection make fine location and output here
 
                 #    try:
