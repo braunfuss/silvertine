@@ -1032,7 +1032,6 @@ def command_detect(args):
 
             stations = model.load_stations(store_path_base+options.stations_file)
 
-
             if sources_list:
                 if store_path_base_down is None:
                     tempdir = tempfile.mkdtemp("", "snuffler-tmp-")
@@ -1158,14 +1157,14 @@ def command_detect(args):
                         if not os.path.exists(savedir):
                             os.makedirs(savedir)
                             os.makedirs(savedir+"figures_eqt")
-                        for item in Path(store_path_base).glob("/asociation_*/associations.xml"):
+                        for item in Path(store_path_base+"/").glob("asociation_*/associations.xml"):
                             qml = quakeml.QuakeML.load_xml(filename=item)
                             events_qml = qml.get_pyrocko_events()
                             for i, eq in enumerate(events_qml):
                                 if event.time == eq.time:
                                     evqml = qml.get_events()[i]
                                     evqml.dump_xml(filename=savedir+"phases_eqt.qml")
-                        for item in Path(store_path_base).glob("/detections_*/*/figures/*"):
+                        for item in Path(store_path_base+"/").glob("detections_*/*/figures/*"):
                             time_item = util.stt(str(item.absolute())[-31:-21]+" "+str(item.absolute())[-20:-5])
                             if event.time-wait_period < time_item and event.time+wait_period > time_item:
                                 os.system("cp %s %s" % (item.absolute(), savedir+"figures_eqt"))
