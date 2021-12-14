@@ -1074,10 +1074,12 @@ def command_detect(args):
                 process_in_progress = True
                 while process_in_progress is True:
                     try:
+                        print(diff)
                         if options.download_method is "stream":
                             time.sleep(wait_period-diff)
                     except:
                         print("Alarm! Processing takes to long!")
+                        print(diff)
                         for source in sources:
                             source.stop()
                         pass
@@ -1090,13 +1092,13 @@ def command_detect(args):
                     start = time.time()
                     config_path = options.config
                     config = lassie.read_config(config_path)
-                    pool = Pool(processes=1)
+                    pool = Pool(processes=2)
                     pool.apply_async(lassie.search(config,
                                                    override_tmin=options.tmin,
                                                    override_tmax=options.tmax,
                                                    force=True,
                                                    show_detections=True,
-                                                   nparallel=2))
+                                                   nparallel=10))
                     pool.apply_async(detector.picker.main(
                         store_path_base,
                         tmin=options.tmin,
@@ -1109,7 +1111,7 @@ def command_detect(args):
                         client_list=[
                             "http://eida.bgr.de",
                             "http://ws.gpi.kit.edu",
-                        ],
+                            ],
                         path_waveforms=store_path_base_down,
                         download=options.download,
                         tinc=options.tinc,
@@ -1191,7 +1193,7 @@ def command_detect(args):
             #            pass
 
                     remove_outdated_wc(store_path_base+"/download-tmp",
-                                       int(wait_period/60),
+                                       3.5,
                                        wc="*")
                     remove_outdated_wc(store_path_base,
                                        int(wait_period/60),
