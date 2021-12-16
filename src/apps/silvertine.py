@@ -1164,7 +1164,7 @@ def command_detect(args):
                             events_qml = qml.get_pyrocko_events()
                             for i, eq in enumerate(events_qml):
                                 if event.time == eq.time:
-                                    evqml = qml.get_events()[i]
+                                    evqml = events_qml.get_events()[i]
                                     evqml.dump_xml(filename=savedir+"phases_eqt.qml")
                         for item in Path(store_path_base+"/").glob("detections_*/*/figures/*"):
                             try:
