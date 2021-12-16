@@ -1138,19 +1138,21 @@ def command_detect(args):
                             os.makedirs(savedir)
                             os.makedirs(savedir+"figures_stacking")
                         for item in Path(config.path_prefix+"/"+config.run_path+"/figures").glob("*"):
-                            time_item = util.stt(str(item.absolute())[-27:-17]+" "+str(item.absolute())[-16:-4])
-                            if event.time-10 < time_item and event.time+10 > time_item:
-                                os.system("cp %s %s" % (item.absolute(), savedir+"figures_stacking"))
-                                plot_waveforms = False
-                                if plot_waveforms is True:
-                                    pile_event = pile.make_pile(store_path_base_down+"download-tmp", show_progress=False)
-                                    for traces in pile_event.chopper(tmin=event.time-10,
-                                                                     tmax=event.time+10,
-                                                                     keep_current_files_open=False,
-                                                                     want_incomplete=True):
-                                        waveform.plot_waveforms(traces, event, stations,
-                                                                savedir, None)
-
+                            try:
+                                time_item = util.stt(str(item.absolute())[-27:-17]+" "+str(item.absolute())[-16:-4])
+                                if event.time-10 < time_item and event.time+10 > time_item:
+                                    os.system("cp %s %s" % (item.absolute(), savedir+"figures_stacking"))
+                                    plot_waveforms = False
+                                    if plot_waveforms is True:
+                                        pile_event = pile.make_pile(store_path_base_down+"download-tmp", show_progress=False)
+                                        for traces in pile_event.chopper(tmin=event.time-10,
+                                                                         tmax=event.time+10,
+                                                                         keep_current_files_open=False,
+                                                                         want_incomplete=True):
+                                            waveform.plot_waveforms(traces, event, stations,
+                                                                    savedir, None)
+                            except:
+                                pass
 
                     for event in events_eqt:
                         savedir = store_path_base + '/eqt_detections/' + str(event.time) + '/'
@@ -1165,9 +1167,12 @@ def command_detect(args):
                                     evqml = qml.get_events()[i]
                                     evqml.dump_xml(filename=savedir+"phases_eqt.qml")
                         for item in Path(store_path_base+"/").glob("detections_*/*/figures/*"):
-                            time_item = util.stt(str(item.absolute())[-31:-21]+" "+str(item.absolute())[-20:-5])
-                            if event.time-wait_period < time_item and event.time+wait_period > time_item:
-                                os.system("cp %s %s" % (item.absolute(), savedir+"figures_eqt"))
+                            try:
+                                time_item = util.stt(str(item.absolute())[-31:-21]+" "+str(item.absolute())[-20:-5])
+                                if event.time-config.wait_period < time_item and event.time+config.wait_period > time_item:
+                                    os.system("cp %s %s" % (item.absolute(), savedir+"figures_eqt"))
+                            except:
+                                pass
 
                     for event_stack in events_stacking:
                         for event_eqt in events_eqt:
@@ -1175,6 +1180,13 @@ def command_detect(args):
                                 savedir = store_path_base + '/combined_detections/' + util.tts(event_stack.time) + '/'
                                 if not os.path.exists(savedir):
                                     os.makedirs(savedir)
+
+                                # lassie.search(config_fine,
+                                #                override_tmin=options.tmin,
+                                #                override_tmax=options.tmax,
+                                #                force=True,
+                                #                show_detections=True,
+                                #                nparallel=10)
 
                     remove_outdated_wc(store_path_base+"/download-tmp",
                                        3.5,
