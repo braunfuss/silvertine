@@ -336,7 +336,7 @@ def plot_detection(
     event_obspy.picks = picks
     cat = Catalog()
     cat.append(event_obspy)
-    cat.write(save_filename[:-4]+"_qml.xml", format="QUAKEML")
+    cat.write(save_filename[:-4]+".qml", format="QUAKEML")
     nframes = frames.shape[1]
 
     iframe_min = max(0, int(round(iframe - 0.5*tduration/deltat_cf)))

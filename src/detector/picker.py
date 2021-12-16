@@ -209,7 +209,7 @@ def iter_chunked(tinc, path, data_pile, tmin=None,
         cat_read = read_events(file)
         for event in cat_read:
             cat.append(event)
-    cat.write("%s/events_qml.xml" % path, format="QUAKEML")
+    cat.write("%s/events.qml" % path, format="QUAKEML")
     events = []
     files = glob("%s/asociation*/events.pf" % path)
     files.sort(key=os.path.getmtime)
