@@ -1169,7 +1169,7 @@ def command_detect(args):
                         for item in Path(store_path_base+"/").glob("detections_*/*/figures/*"):
                             try:
                                 time_item = util.stt(str(item.absolute())[-31:-21]+" "+str(item.absolute())[-20:-5])
-                                if event.time-config.wait_period < time_item and event.time+config.wait_period > time_item:
+                                if event.time-options.wait_period < time_item and event.time+options.wait_period > time_item:
                                     os.system("cp %s %s" % (item.absolute(), savedir+"figures_eqt"))
                             except:
                                 pass
@@ -1192,10 +1192,10 @@ def command_detect(args):
                                        3.5,
                                        wc="*")
                     remove_outdated_wc(store_path_base,
-                                       int(wait_period/60),
+                                       1,
                                        wc="detections_*")
                     remove_outdated_wc(store_path_base,
-                                       int(wait_period/60),
+                                       1,
                                        wc="asociation_*")
 
                     for item in Path(store_path_base+"/downloads/").glob("*"):
