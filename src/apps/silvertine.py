@@ -1189,7 +1189,7 @@ def command_detect(args):
                                 #                nparallel=10)
 
                     remove_outdated_wc(store_path_base+"/download-tmp",
-                                       3.5,
+                                       2.5,
                                        wc="*")
                     remove_outdated_wc(store_path_base,
                                        1,
