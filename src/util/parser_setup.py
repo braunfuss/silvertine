@@ -8,7 +8,7 @@ import os
 import logging
 from optparse import OptionParser, OptionValueError, IndentedHelpFormatter
 from io import StringIO
-
+import shutil
 class Color:
     PURPLE = "\033[95m"
     CYAN = "\033[96m"
