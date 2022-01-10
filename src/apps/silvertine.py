@@ -10,11 +10,11 @@ from io import StringIO
 import tempfile
 import time
 from pathlib import Path
-import arrow
 import shutil
 
 from silvertine.setup_info import version as __version__
 import silvertine
+from silvertine.util.parser_setup import *
 try:
     from pyrocko import util, marker, model
     from pyrocko import pile as pile_mod
@@ -30,269 +30,6 @@ except ImportError:
 
 logger = logging.getLogger("silvertine.main")
 km = 1e3
-
-
-class Color:
-    PURPLE = "\033[95m"
-    CYAN = "\033[96m"
-    DARKCYAN = "\033[36m"
-    BLUE = "\033[94m"
-    GREEN = "\033[92m"
-    YELLOW = "\033[93m"
-    RED = "\033[91m"
-    BOLD = "\033[1m"
-    UNDERLINE = "\033[4m"
-    END = "\033[0m"
-
-
-def remove_outdated_wc(path, factor, scale="minutes", wc="*", factor2=None):
-    if scale == "minutes":
-        criticalTime = arrow.now().shift(minutes=-factor)
-    elif scale == "seconds":
-        criticalTime = arrow.now().shift(seconds=-factor)
-    elif scale == "minutes-seconds":
-        criticalTime = arrow.now().shift(minutes=-factor).shift(seconds=-factor2)
-
-    for item in Path(path).glob(wc):
-        itemTime = arrow.get(item.stat().st_mtime)
-        if itemTime < criticalTime:
-            try:
-                os.remove(item.absolute())
-            except:
-                shutil.rmtree(item.absolute())
-
-
-def d2u(d):
-    if isinstance(d, dict):
-        return dict((k.replace("-", "_"), v) for (k, v) in d.items())
-    else:
-        return d.replace("-", "_")
-
-def check_options(options):
-    if options.load is not False:
-        options.load = True
-    if options.train_model is not True:
-        options.train_model = False
-    if options.detector_only is not False:
-        options.detector_only = True
-    if options.mode is "detector_only":
-        options.detector_only = True
-    if options.detector_only is not False:
-        options.detector_only = True
-    if options.download is not False:
-        options.download = True
-    return options
-
-
-subcommand_descriptions = {
-    "init": "initialise new project structure or print configuration",
-    "scenario": "create a forward-modelled scenario project",
-    "locate": "locate a single or a set of earthquakes",
-    "post_shakemap": "post_shakemap a single or a set of earthquakes",
-    "plot_prod": "plot_prod a single or a set of earthquakes",
-    "pertub_earthmodels": "Pertub earthmodels",
-    "plot_mods": "plot_mods a single or a set of earthquakes",
-    "analyse_statistics": "command_analyse_statistics",
-    "optimize": "optimize",
-    "monitor": "Monitor stations",
-    "beam": "beamform for a single or a set of earthquakes",
-    "beam_process": "beam_process for a single or a set of earthquakes",
-    "events": "print available event names for given configuration",
-    "check": "check data and configuration",
-    "detect": "detect",
-    "go": "run silvertine optimisation",
-    "forward": "run forward modelling",
-    "harvest": "manually run harvesting",
-    "supply": "deliver waveforms",
-    "download_raw": "download waveforms",
-    "cluster": "run cluster analysis on result ensemble",
-    "plot": "plot optimisation result",
-    "movie": "visualize optimiser evolution",
-    "export": "export results",
-    "tag": "add user-defined label to run directories",
-    "report": "create result report",
-    "shmconv": "Seismic handler compat",
-    "diff": "compare two configs or other normalized silvertine YAML files",
-    "qc-polarization": "check sensor orientations with polarization analysis",
-    "upgrade-config": "upgrade config file to the latest version of silvertine",
-    "version": "print version number of silvertine and its main dependencies",
-}
-
-subcommand_usages = {
-    "init": (
-        "init list [options]",
-        "init <example> [options]",
-        "init <example> <projectdir> [options]",
-    ),
-    "scenario": "scenario [options] <projectdir>",
-    "locate": "locate [options] <projectdir>",
-    "post_shakemap": "post_shakemap [options] <projectdir>",
-    "plot_prod": "plot_prod [options] <projectdir>",
-    "pertub_earthmodels": "pertub_earthmodels [options]",
-    "plot_mods": "plot_mods [options] <projectdir>",
-    "analyse_statistics": "command_analyse_statistics [options] <projectdir>",
-    "detect": "detect [options] <projectdir>",
-    "optimize": "optimize [options] <projectdir>",
-    "monitor": "monitor [options] <projectdir>",
-    "events": "events <configfile>",
-    "supply": "tmin tmax",
-    "download_raw": "tmin tmax",
-    "shmconv": "task file",
-    "beam": "beams [options] <projectdir>",
-    "beam_process": "beam_process [options] <projectdir>",
-    "check": "check <configfile> <eventnames> ... [options]",
-    "go": "go <configfile> <eventnames> ... [options]",
-    "forward": (
-        "forward <rundir> [options]",
-        "forward <configfile> <eventnames> ... [options]",
-    ),
-    "harvest": "harvest <rundir> [options]",
-    "cluster": (
-        "cluster <method> <rundir> [options]",
-        "cluster <clusteringconfigfile> <rundir> [options]",
-    ),
-    "plot": (
-        "plot <plotnames> ( <rundir> | <configfile> <eventname> ) [options]",
-        "plot all ( <rundir> | <configfile> <eventname> ) [options]",
-        "plot <plotconfigfile> ( <rundir> | <configfile> <eventname> ) [options]",  # noqa
-        "plot list ( <rundir> | <configfile> <eventname> ) [options]",
-        "plot config ( <rundir> | <configfile> <eventname> ) [options]",
-    ),
-    "movie": "movie <rundir> <xpar> <ypar> <filetemplate> [options]",
-    "export": "export (best|mean|ensemble|stats) <rundirs> ... [options]",
-    "tag": ("tag add <tag> <rundir>", "tag remove <tag> <rundir>", "tag list <rundir>"),
-    "report": ("report <rundir> ... [options]", "report <configfile> <eventnames> ..."),
-    "diff": "diff <left_path> <right_path>",
-    "qc-polarization": "qc-polarization <configfile> <eventname> "
-    "<target_group_path> [options]",
-    "upgrade-config": "upgrade-config <configfile>",
-    "version": "version",
-}
-
-subcommands = subcommand_descriptions.keys()
-
-program_name = "silvertine"
-
-usage_tdata = d2u(subcommand_descriptions)
-usage_tdata["program_name"] = program_name
-
-usage_tdata["version_number"] = __version__
-
-
-usage = (
-    """%(program_name)s <subcommand> [options] [--] <arguments> ...
-
-silvertine is a framework for handling seiger.
-
-This is silvertine version %(version_number)s.
-
-Subcommands:
-
-    scenario        %(scenario)s
-    plot_prod     %(plot_prod)s
-    plot_mods     %(plot_mods)s
-    pertub_earthmodels     %(pertub_earthmodels)s
-    analyse_statistics     %(analyse_statistics)s
-    locate        %(locate)s
-    post_shakemap %(post_shakemap)s
-    detect        %(detect)s
-    optimize      %(optimize)s
-    monitor        %(monitor)s
-    beam        %(beam)s
-    supply        %(supply)s
-    download_raw        %(download_raw)s
-    beam_process        %(beam_process)s
-    init            %(init)s
-    events          %(events)s
-    check           %(check)s
-    go              %(go)s
-    shmconv         %(shmconv)s
-    forward         %(forward)s
-    harvest         %(harvest)s
-    cluster         %(cluster)s
-    plot            %(plot)s
-    movie           %(movie)s
-    export          %(export)s
-    tag             %(tag)s
-    report          %(report)s
-    diff            %(diff)s
-    qc-polarization %(qc_polarization)s
-    upgrade-config  %(upgrade_config)s
-    version         %(version)s
-
-To get further help and a list of available options for any subcommand run:
-
-    %(program_name)s <subcommand> --help
-
-What do you want to bust today?!
-"""
-    % usage_tdata
-)
-
-
-class CLIHints(object):
-    init = """
-We created a folder structure in {project_dir}.
-Check out the YAML configuration in {config} and start the optimisation by:
-
-    silvertine go {config}
-"""
-    scenario = """
-To start the scenario's optimisation, change to folder
-
-    cd {project_dir}
-
-Check out the YAML configuration in {config} and start the optimisation by:
-
-    silvertine go {config}
-"""
-    report = """
-To open the report in your web browser, run
-
-    silvertine report -s --open {config}
-"""
-    check = """
-To start the optimisation, run
-
-    silvertine go {config}
-"""
-    go = """
-To look at the results, run
-
-    silvertine report -so {rundir}
-"""
-
-    def __new__(cls, command, **kwargs):
-        return "{c.BOLD}Hint{c.END}\n".format(c=Color) + getattr(cls, command).format(
-            **kwargs
-        )
-
-
-def main(args=None):
-    if not args:
-        args = sys.argv
-
-    args = list(args)
-    if len(args) < 2:
-        sys.exit("Usage: %s" % usage)
-
-    args.pop(0)
-    command = args.pop(0)
-
-    if command in subcommands:
-        globals()["command_" + d2u(command)](args)
-
-    elif command in ("--help", "-h", "help"):
-        if command == "help" and args:
-            acommand = args[0]
-            if acommand in subcommands:
-                globals()["command_" + acommand](["--help"])
-
-        sys.exit("Usage: %s" % usage)
-
-    else:
-        die("No such subcommand: %s" % command)
-
 
 def add_common_options(parser):
     parser.add_option(
@@ -426,6 +163,178 @@ def multiple_choice(option, opt_str, value, parser, choices):
             )
     setattr(parser.values, option.dest, options)
 
+subcommand_descriptions = {
+    "init": "initialise new project structure or print configuration",
+    "scenario": "create a forward-modelled scenario project",
+    "locate": "locate a single or a set of earthquakes",
+    "post_shakemap": "post_shakemap a single or a set of earthquakes",
+    "plot_prod": "plot_prod a single or a set of earthquakes",
+    "pertub_earthmodels": "Pertub earthmodels",
+    "plot_mods": "plot_mods a single or a set of earthquakes",
+    "analyse_statistics": "command_analyse_statistics",
+    "optimize": "optimize",
+    "monitor": "Monitor stations",
+    "beam": "beamform for a single or a set of earthquakes",
+    "beam_process": "beam_process for a single or a set of earthquakes",
+    "events": "print available event names for given configuration",
+    "check": "check data and configuration",
+    "detect": "detect",
+    "go": "run silvertine optimisation",
+    "supply": "deliver waveforms",
+    "download_raw": "download waveforms",
+    "report": "create result report",
+    "shmconv": "Seismic handler compat",
+    "diff": "compare two configs or other normalized silvertine YAML files",
+    "upgrade-config": "upgrade config file to the latest version of silvertine",
+    "version": "print version number of silvertine and its main dependencies",
+}
+
+subcommand_usages = {
+    "init": (
+        "init list [options]",
+        "init <example> [options]",
+        "init <example> <projectdir> [options]",
+    ),
+    "scenario": "scenario [options] <projectdir>",
+    "locate": "locate [options] <projectdir>",
+    "post_shakemap": "post_shakemap [options] <projectdir>",
+    "plot_prod": "plot_prod [options] <projectdir>",
+    "pertub_earthmodels": "pertub_earthmodels [options]",
+    "plot_mods": "plot_mods [options] <projectdir>",
+    "analyse_statistics": "command_analyse_statistics [options] <projectdir>",
+    "detect": "detect [options] <projectdir>",
+    "optimize": "optimize [options] <projectdir>",
+    "monitor": "monitor [options] <projectdir>",
+    "events": "events <configfile>",
+    "supply": "tmin tmax",
+    "download_raw": "tmin tmax",
+    "shmconv": "task file",
+    "beam": "beams [options] <projectdir>",
+    "beam_process": "beam_process [options] <projectdir>",
+    "check": "check <configfile> <eventnames> ... [options]",
+    "report": ("report <rundir> ... [options]", "report <configfile> <eventnames> ..."),
+    "diff": "diff <left_path> <right_path>",
+    "upgrade-config": "upgrade-config <configfile>",
+    "version": "version",
+}
+
+subcommands = subcommand_descriptions.keys()
+
+program_name = "silvertine"
+
+usage_tdata = d2u(subcommand_descriptions)
+usage_tdata["program_name"] = program_name
+
+usage_tdata["version_number"] = __version__
+
+
+usage = (
+    """%(program_name)s <subcommand> [options] [--] <arguments> ...
+
+silvertine is a framework for handling seiger related projects.
+
+This is silvertine version %(version_number)s.
+
+Subcommands:
+
+    scenario        %(scenario)s
+    plot_prod     %(plot_prod)s
+    plot_mods     %(plot_mods)s
+    pertub_earthmodels     %(pertub_earthmodels)s
+    analyse_statistics     %(analyse_statistics)s
+    locate        %(locate)s
+    post_shakemap %(post_shakemap)s
+    detect        %(detect)s
+    optimize      %(optimize)s
+    monitor        %(monitor)s
+    beam        %(beam)s
+    supply        %(supply)s
+    download_raw        %(download_raw)s
+    beam_process        %(beam_process)s
+    init            %(init)s
+    events          %(events)s
+    check           %(check)s
+    go              %(go)s
+    shmconv         %(shmconv)s
+    report          %(report)s
+    diff            %(diff)s
+    upgrade-config  %(upgrade_config)s
+    version         %(version)s
+
+To get further help and a list of available options for any subcommand run:
+
+    %(program_name)s <subcommand> --help
+
+What do you want to bust today?!
+"""
+    % usage_tdata
+)
+
+
+class CLIHints(object):
+    init = """
+We created a folder structure in {project_dir}.
+Check out the YAML configuration in {config} and start the optimisation by:
+
+    silvertine go {config}
+"""
+    scenario = """
+To start the scenario's optimisation, change to folder
+
+    cd {project_dir}
+
+Check out the YAML configuration in {config} and start the optimisation by:
+
+    silvertine go {config}
+"""
+    report = """
+To open the report in your web browser, run
+
+    silvertine report -s --open {config}
+"""
+    check = """
+To start the optimisation, run
+
+    silvertine go {config}
+"""
+    go = """
+To look at the results, run
+
+    silvertine report -so {rundir}
+"""
+
+    def __new__(cls, command, **kwargs):
+        return "{c.BOLD}Hint{c.END}\n".format(c=Color) + getattr(cls, command).format(
+            **kwargs
+        )
+
+
+def main(args=None):
+    if not args:
+        args = sys.argv
+
+    args = list(args)
+    if len(args) < 2:
+        sys.exit("Usage: %s" % usage)
+
+    args.pop(0)
+    command = args.pop(0)
+
+    if command in subcommands:
+        globals()["command_" + d2u(command)](args)
+
+    elif command in ("--help", "-h", "help"):
+        if command == "help" and args:
+            acommand = args[0]
+            if acommand in subcommands:
+                globals()["command_" + acommand](["--help"])
+
+        sys.exit("Usage: %s" % usage)
+
+    else:
+        die("No such subcommand: %s" % command)
+
+
 
 def magnitude_range(option, opt_str, value, parser):
     mag_range = value.split("-")
@@ -463,6 +372,44 @@ def command_shmconv(args):
             fname
         )
 
+
+def command_monitor(args):
+    def setup(parser):
+        parser.add_option(
+            "--addresses",
+            dest="adresses",
+            type=str,
+            default=["eida.bgr.de", "eida.bgr.de"],
+            help="Adresses",
+        )
+        parser.add_option(
+            "--paths",
+            dest="paths",
+            type=str,
+            default=["GR.INS*.*.EH*", "GR.TMO*.*.EH*"],
+            help="Path of monitored stations",
+        )
+        parser.add_option(
+            "--save",
+            dest="save",
+            type=str,
+            default=False,
+            help="Save waveforms",
+        )
+        parser.add_option(
+            "--delay",
+            dest="delay",
+            type=float,
+            default=50,
+            help="Delay for pulling data",
+        )
+    parser, options, args = cl_parse("monitor", args, setup)
+
+    from silvertine.monitoring import stream
+
+    stream.live_steam(adresses=options.adresses, paths=options.paths,
+                      delay=options.delay,
+                      save=options.save)
 
 def command_locate(args):
     def setup(parser):
@@ -634,6 +581,7 @@ def process_event_data(args):
 
 
 def str2bool(v):
+    import argparse
     if isinstance(v, bool):
         return v
     if v.lower() in ("yes", "true", "t", "y", "1"):
@@ -744,6 +692,11 @@ def command_collect_detections(args):
 
 
 def command_detect(args):
+    from silvertine import detector, locate
+    from silvertine import seiger_lassie as lassie
+    from silvertine.util import waveform
+    from pyrocko import model
+
     def setup(parser):
         parser.add_option(
             "--download_method",
@@ -753,46 +706,12 @@ def command_detect(args):
             help="Choose download method",
         )
         parser.add_option(
-            "--on_run",
-            dest="on_run",
-            type=str,
-            default=False,
-            help="Detect on live stream.",
-        )
-        parser.add_option(
-            "--show",
-            dest="show",
-            type=str,
-            default=False,
-            help="Display progress of localisation for each event in browser",
-        )
-        parser.add_option(
             "--mode",
             dest="mode",
             type=str,
             default="both",
             help="Mode to to use"
         )
-        parser.add_option(
-            "--load",
-            dest="load",
-            type=str,
-            default=False,
-            help="Load data"
-        )
-        parser.add_option(
-            "--train_model",
-            dest="train_model",
-            type=str,
-            default=True,
-            help="train_model",
-        )
-        parser.add_option(
-            "--detector_only",
-            dest="detector_only",
-            type=str,
-            default=False,
-            help="Detector only mode.")
         parser.add_option(
             "--download",
             dest="download",
@@ -830,11 +749,12 @@ def command_detect(args):
             default=None,
             help="end")
         parser.add_option(
-            "--on_stream",
-            dest="on_stream",
-            type=str,
-            default=False,
-            help="end")
+            "--ngpu",
+            help="number of GPUs to use")
+        parser.add_option(
+            "--gpu-no",
+            help="GPU number to use",
+            type=int)
         parser.add_option(
             "--config",
             help="Load a configuration file")
@@ -842,70 +762,6 @@ def command_detect(args):
             "--configs",
             help="load a comma separated list of configs and process them"
         )
-        parser.add_option(
-            "--train",
-            action="store_true")
-        parser.add_option(
-            "--evaluate",
-            action="store_true",
-            help="Predict from input of `evaluation_data_generator` in config.",
-        )
-        parser.add_option(
-            "--evaluate-errors",
-            action="store_true",
-            help="Predict errors input of `evaluation_data_generator` in config.",
-        )
-        parser.add_option(
-            "--annotate",
-            action="store_true",
-            help="Add labels in error evaluation plots.",
-        )
-        parser.add_option(
-            "--predict",
-            action="store_true",
-            help="Predict from input of `predict_data_generator` in config.",
-        )
-        parser.add_option(
-            "--detect",
-            action="store_true",
-            help="Detect earthquakes")
-        parser.add_option(
-            "--optimize",
-            metavar="FILENAME",
-            help="use optimizer defined in FILENAME"
-        )
-        parser.add_option(
-            "--write-tfrecord",
-            metavar="FILENAME",
-            help="write data_generator out to FILENAME",
-        )
-        parser.add_option(
-            "--from-tfrecord",
-            metavar="FILENAME",
-            help="read tfrecord")
-        parser.add_option("--new-config")
-        parser.add_option(
-            "--clear",
-            help="delete remaints of former runs",
-            action="store_true"
-        )
-        parser.add_option(
-            "--show-data",
-            type=int,
-            metavar="N",
-            help="show N data examples. Call with `--debug` to get plot figures with additional information.",
-        )
-        parser.add_option(
-            "--nskip",
-            type=int,
-            help="For plotting. Examples to skip.")
-        parser.add_option(
-            "--ngpu",
-            help="number of GPUs to use")
-        parser.add_option(
-            "--gpu-no",
-            help="GPU number to use",
-            type=int)
         parser.add_option(
             "--debug",
             help="enable logging level DEBUG",
@@ -938,12 +794,6 @@ def command_detect(args):
             default="",
             help="Store path")
         parser.add_option(
-            "--pre_load",
-            dest="pre_load",
-            type=str,
-            default=True,
-            help="Pre-load the EQT model")
-        parser.add_option(
             "--store_interval",
             dest="store_interval",
             type=float,
@@ -956,71 +806,27 @@ def command_detect(args):
             default=130,
             help="wait_period")
         parser.add_option(
+            "--sources_list",
+            dest="sources_list",
+            default=["seedlink://eida.bgr.de/GR.INS*.*.EH*",
+                     "seedlink://eida.bgr.de/GR.TMO*.*.EH*"],
+            help="Pyrocko format station file")
+        parser.add_option(
             "--stations_file",
             dest="stations_file",
             type=str,
             default="/stations_landau.txt",
             help="Pyrocko format station file")
-
-
-    from silvertine import detector, locate
-    from silvertine import seiger_lassie as lassie
-    from silvertine.util import waveform
-    from pyrocko import model
     parser, options, args = cl_parse("detect", args, setup)
-
-    options = check_options(options)
-
-    if options.pre_load is True:
+    if options.mode == "both":
         from silvertine.util import eqt_util
         model_eqt = eqt_util.load_eqt_model()
     else:
         model_eqt = []
-    if options.on_run is False:
-        if options.mode == "transformer":
-            detector.picker.main(
-                options.path,
-                tmin=options.tmin,
-                tmax=options.tmax,
-                minlat=49.0,
-                maxlat=49.979,
-                minlon=7.9223,
-                maxlon=8.9723,
-                channels=["EH" + "[ZNE]"],
-                client_list=[
-                    "http://192.168.11.220:8080",
-                    "http://ws.gpi.kit.edu",
-                    "http://eida.gfz-potsdam.de",
-                ],
-                path_waveforms=options.data_dir,
-                download=options.download,
-                tinc=options.tinc,
-                freq=options.freq,
-                hf=options.hf,
-                lf=options.lf,
-            )
 
-        if options.mode == "detect" or options.mode == "locate":
-            detector.locator.locator.main()
-
-        if options.mode == "BNN":
-            detector.bnn.bnn_detector(
-                load=options.load,
-                train_model=options.train_model,
-                detector_only=options.detector_only,
-                data_dir=options.data_dir,
-                validation_data=options.validation_data,
-                wanted_start=options.wanted_start,
-                wanted_end=options.wanted_end,
-                mode=options.mode,
-            )
-    else:
-        if options.mode == "both":
+    if options.mode == "both":
             piled = pile_mod.make_pile()
-            sources_list = [
-                "seedlink://eida.bgr.de/GR.INS*.*.EH*",
-                "seedlink://eida.bgr.de/GR.TMO*.*.EH*",
-            ]  # seedlink sources
+            sources_list = options.sources_list  # seedlink sources
             pollinjector = None
             tempdir = None
             if options.store_path is not None:
@@ -1164,7 +970,7 @@ def command_detect(args):
                             events_qml = qml.get_pyrocko_events()
                             for i, eq in enumerate(events_qml):
                                 if event.time == eq.time:
-                                    evqml = events_qml.get_events()[i]
+                                    evqml = qml.get_events()[i]
                                     evqml.dump_xml(filename=savedir+"phases_eqt.qml")
                         for item in Path(store_path_base+"/").glob("detections_*/*/figures/*"):
                             try:
@@ -1272,71 +1078,6 @@ def command_optimize(args):
                 pass
 
 
-def command_monitor(args):
-    def setup(parser):
-        parser.add_option(
-            "--show",
-            dest="show",
-            type=str,
-            default=False,
-            help="Display progress of localisation for each event in browser",
-        )
-
-    parser, options, args = cl_parse("monitor", args, setup)
-
-    from silvertine.monitoring import stream
-
-    stream.live_steam()
-
-
-def command_beam(args):
-    def setup(parser):
-        parser.add_option(
-            "--show",
-            dest="show",
-            type=str,
-            default=False,
-            help="overwrite existing project folder.",
-        )
-        parser.add_option(
-            "--nevents",
-            dest="nevents",
-            type=int,
-            default=1,
-            help="Number of events to locate (default: %default)",
-        )
-
-    parser, options, args = cl_parse("locate", args, setup)
-
-    from silvertine.beam_depth import abedeto
-
-    project_dir = args[0]
-    if options.show is not False:
-        options.show = True
-    silvertine.beam_depth.abedeto.beam(
-        project_dir, show=options.show, n_tests=options.nevents
-    )
-
-
-def command_plot_prod(args):
-    def setup(parser):
-        parser.add_option(
-            "--show",
-            dest="show",
-            type=str,
-            default=False,
-            help="overwrite existing project folder.",
-        )
-
-    parser, options, args = cl_parse("plot_prod", args, setup)
-
-    from silvertine.util import prod_data
-
-    if options.show is not False:
-        options.show = True
-    prod_data.plot_insheim_prod_data()
-
-
 def command_plot_mods(args):
     def setup(parser):
         parser.add_option(
@@ -1356,7 +1097,6 @@ def command_plot_mods(args):
         parser.add_option(
             "--folder", dest="folder", type=str, default="data/", help="model."
         )
-
     parser, options, args = cl_parse("plot_mods", args, setup)
 
     from silvertine.util import silvertine_plot
@@ -1382,70 +1122,18 @@ def command_plot_mods(args):
             mods, axes=None, highlightidx=[0, 1, 2, 3, 4]
         )
     else:
-        #    try:
         from pathlib import Path
 
         pathlist = Path(options.folder).glob("*_*")
         for path in pathlist:
             mod = cake.load_model(str(path))
             mods.append(mod)
-        #    except:
-        #        pass
         fig, axes = silvertine_plot.bayesian_model_plot(
             mods, axes=None, highlightidx=[0, 1, 2, 3, 4]
         )
 
     if options.show is not False:
         plt.show()
-
-
-def command_analyse_statistics(args):
-    def setup(parser):
-        parser.add_option(
-            "--show",
-            dest="show",
-            type=str,
-            default=False,
-            help="Show plots or only save them.",
-        )
-        parser.add_option(
-            "--catalog",
-            dest="catalog",
-            type=str,
-            default="ler",
-            help="Analyse statistics of fixed catalog.",
-        )
-        parser.add_option(
-            "--data_folder",
-            dest="data_folder",
-            type=str,
-            default=False,
-            help="Data folder.",
-        )
-        parser.add_option("--start", dest="start", type=int, default=0, help="start.")
-        parser.add_option("--end", dest="end", type=int, default=None, help="start.")
-
-    parser, options, args = cl_parse("analyse_statistics", args, setup)
-
-    from silvertine.util import prod_data, silvertine_meta, stats
-    from pyrocko import model
-
-    if options.show is not False:
-        options.show = True
-    if options.data_folder is False:
-        options.data_folder = "data"
-    if options.catalog is "geres":
-        (
-            events,
-            pyrocko_stations,
-            ev_dict_list,
-            ev_list_picks,
-        ) = silvertine_meta.load_data(options.data_folder, nevent=options.end)
-    if options.catalog is "ler":
-        events = model.load_events("data/events_ler.pf")
-
-    distances, time_rel, msd = stats.calcuate_msd(events)
-    # prod_data.plot_insheim_prod_data()
 
 
 def command_pertub_earthmodels(args):
@@ -1494,7 +1182,7 @@ def command_pertub_earthmodels(args):
     else:
         from pyrocko import cake
 
-        mod = cake.load_model(folder + options.mod)
+        mod = cake.load_model(options.folder + options.mod)
 
     pertubed_mods = store_variation.ensemble_earthmodel(
         mod,
@@ -1511,158 +1199,6 @@ def command_pertub_earthmodels(args):
             store_variation.create_gf_store(
                 mod, options.gf_store, name=options.mod + "_pertubation_%s" % (k)
             )
-
-
-def command_beam_process(args):
-    def setup(parser):
-        parser.add_option(
-            "--show",
-            dest="show",
-            type=str,
-            default=False,
-            help="overwrite existing project folder.",
-        )
-        parser.add_option(
-            "--nevents",
-            dest="nevents",
-            type=int,
-            default=1,
-            help="Number of events to locate (default: %default)",
-        )
-
-    parser, options, args = cl_parse("locate", args, setup)
-
-    from silvertine.beam_depth import abedeto
-
-    project_dir = args[0]
-    if options.show is not False:
-        options.show = True
-    silvertine.beam_depth.abedeto.beam(
-        project_dir, show=options.show, n_tests=options.nevents
-    )
-
-    import argparse
-
-    parser = argparse.ArgumentParser("What was the depth, again?", add_help=False)
-    parser.add_option("--log", required=False, default="INFO")
-
-    sp = parser.add_subparsers(dest="cmd")
-
-    process_parser = sp.add_parser("beam_process", help="Create images")
-    process_parser.add_option(
-        "projects", help='default "all available"', nargs="*", default="."
-    )
-    process_parser.add_option(
-        "--array-id",
-        dest="array_id",
-        help="array-id to process",
-        required=False,
-        default=False,
-    )
-    process_parser.add_option(
-        "--settings", help="settings file", default=False, required=False
-    )
-    process_parser.add_option(
-        "--cc_align", help="dummy argument at the moment", required=False
-    )
-    process_parser.add_option(
-        "--store-superdirs",
-        help="super directory where to look for stores",
-        dest="store_superdirs",
-        nargs="*",
-        default=["stores"],
-        required=False,
-    )
-    process_parser.add_option(
-        "--store", help="name of store id", dest="store_id", required=False
-    )
-    process_parser.add_option(
-        "--depth", help="assumed source depth [km]", required=False
-    )
-    process_parser.add_option(
-        "--depths",
-        help="testing depths in km. zstart:zstop:delta, default 0:15:1",
-        default="0:15:1",
-        required=False,
-    )
-    process_parser.add_option(
-        "--quantity",
-        help="velocity|displacement",
-        choices=["velocity", "displacement", "restituted"],
-        required=False,
-    )
-    process_parser.add_option(
-        "--filter", help='4th order butterw. default: "0.7:4.5"', required=False
-    )
-    process_parser.add_option(
-        "--correction", required=False, help="a global correction in time [s]"
-    )
-    process_parser.add_option(
-        "--gain", required=False, help="gain factor", default=1.0, type=float
-    )
-    process_parser.add_option(
-        "--zoom",
-        required=False,
-        help="time window to look at. default -7:15",
-        default="-7:15",
-    )
-
-    process_parser.add_option(
-        "--normalize", help="normalize traces to 1", action="store_true", required=False
-    )
-    process_parser.add_option(
-        "--skip-true",
-        help="if true, do not plot recorded and the assigned synthetic trace on top of each other",
-        dest="skip_true",
-        action="store_true",
-        required=False,
-    )
-    process_parser.add_option(
-        "--show",
-        help="show matplotlib plots after each step",
-        action="store_true",
-        required=False,
-    )
-    process_parser.add_option(
-        "--force-nearest-neighbor",
-        help="handles OOB",
-        dest="force_nearest_neighbor",
-        default=False,
-        action="store_true",
-        required=False,
-    )
-    process_parser.add_option(
-        "--auto-caption",
-        help="Add a caption to figure with basic info",
-        dest="auto_caption",
-        default=False,
-        action="store_true",
-        required=False,
-    )
-    process_parser.add_option(
-        "--out-filename", help="file to store image", dest="save_as", required=False
-    )
-    process_parser.add_option(
-        "--print-parameters",
-        dest="print_parameters",
-        help="creates a text field giving the used parameters",
-        required=False,
-    )
-    process_parser.add_option(
-        "--title", dest="title", help="template for title.", required=False
-    )
-    process_parser.add_option(
-        "--overwrite-settings",
-        dest="overwrite_settings",
-        help="overwrite former settings files",
-        default=False,
-        action="store_true",
-        required=False,
-    )
-    args = parser.parse_args()
-    silvertine.beam_depth.abedeto.process(
-        args, project_dir, show=options.show, n_tests=options.nevents
-    )
 
 
 def command_scenario(args):
@@ -1995,691 +1531,6 @@ def command_post_shakemap(args):
         stations_corrections_file=options.stations_corrections_file,
     )
 
-
-def command_init(args):
-
-    from .cmd_init import silvertineInit
-
-    silvertine_init = silvertineInit()
-
-    def print_section(entries):
-        if len(entries) == 0:
-            return "\tNone available."
-
-        padding = max([len(n) for n in entries.keys()])
-        rstr = []
-        lcat = None
-        for name, desc in entries.items():
-
-            cat = name.split("_")[0]
-            if lcat is not None and lcat != cat:
-                rstr.append("")
-            lcat = cat
-
-            rstr.append(
-                "    {c.BOLD}{name:<{padding}}{c.END} : {desc}".format(
-                    name=name, desc=desc, padding=padding, c=Color
-                )
-            )
-        return "\n".join(rstr)
-
-    help_text = """Available configuration examples for silvertine.
-
-{c.BOLD}Example Projects{c.END}
-
-    Deploy a full project structure into a directory.
-
-    usage: silvertine init <example> <projectdir>
-
-    where <example> is any of the following:
-
-{examples_list}
-
-{c.BOLD}Config Sections{c.END}
-
-    Print out configuration snippets for various components.
-
-    usage: silvertine init <section>
-
-    where <section> is any of the following:
-
-{sections_list}
-""".format(
-        c=Color,
-        examples_list=print_section(silvertine_init.get_examples()),
-        sections_list=print_section(silvertine_init.get_sections()),
-    )
-
-    def setup(parser):
-        parser.add_option("--force", dest="force", action="store_true")
-
-    parser, options, args = cl_parse(
-        "init", args, setup, "Use silvertine init list to show available examples."
-    )
-
-    if len(args) not in (1, 2):
-        help_and_die(parser, "1 or 2 arguments required")
-
-    if args[0] == "list":
-        print(help_text)
-        return
-
-    if args[0].startswith("example_"):
-        if len(args) == 1:
-            config = silvertine_init.get_content_example(args[0])
-            if not config:
-                help_and_die(parser, "Unknown example: %s" % args[0])
-
-            sys.stdout.write(config + "\n\n")
-
-            logger.info(
-                "Hint: To create a project, use: silvertine init <example> "
-                "<projectdir>".format(c=Color, example=args[0])
-            )
-
-        elif op.exists(op.abspath(args[1])) and not options.force:
-            help_and_die(
-                parser,
-                'Directory "%s" already exists! Use --force to overwrite.' % args[1],
-            )
-        else:
-            try:
-                silvertine_init.init_example(args[0], args[1], force=options.force)
-            except OSError as e:
-                print(str(e))
-
-    else:
-        sec = silvertine_init.get_content_snippet(args[0])
-        if not sec:
-            help_and_die(parser, "Unknown snippet: %s" % args[0])
-
-        sys.stdout.write(sec)
-
-
-def command_init_old(args):
-
-    from . import cmd_init as init
-
-    def setup(parser):
-        parser.add_option(
-            "--targets",
-            action="callback",
-            dest="targets",
-            type=str,
-            callback=multiple_choice,
-            callback_kwargs={"choices": ("waveforms", "gnss", "insar", "all")},
-            default="waveforms",
-            help="select from:"
-            " waveforms, gnss and insar. "
-            "(default: --targets=%default,"
-            " multiple selection by --targets=waveforms,gnss,insar)",
-        )
-        parser.add_option(
-            "--problem",
-            dest="problem",
-            type="choice",
-            choices=["cmt", "rectangular"],
-            help="problem to generate: 'dc' (double couple)"
-            " or'rectangular' (rectangular finite fault)"
-            " (default: '%default')",
-        )
-        parser.add_option(
-            "--force",
-            dest="force",
-            action="store_true",
-            help="overwrite existing project folder",
-        )
-
-    parser, options, args = cl_parse("init", args, setup)
-
-    try:
-        project = init.silvertineProject()
-
-        if "all" in options.targets:
-            targets = ["waveforms", "gnss", "insar"]
-        else:
-            targets = options.targets
-
-        if not options.problem:
-            if "insar" in targets or "gnss" in targets:
-                problem = "rectangular"
-            else:
-                problem = "cmt"
-        else:
-            problem = options.problem
-
-        if problem == "rectangular":
-            project.set_rectangular_source()
-        elif problem == "cmt":
-            project.set_cmt_source()
-
-        if "waveforms" in targets:
-            project.add_waveforms()
-
-        if "insar" in targets:
-            project.add_insar()
-
-        if "gnss" in targets:
-            project.add_gnss()
-
-        if len(args) == 1:
-            project_dir = args[0]
-            project.build(project_dir, options.force)
-            logger.info(
-                CLIHints(
-                    "init",
-                    project_dir=project_dir,
-                    config=op.join(project_dir, "config", "config.gronf"),
-                )
-            )
-        else:
-            sys.stdout.write(project.dump())
-
-    except silvertine.silvertineError as e:
-        die(str(e))
-
-
-def command_events(args):
-    def setup(parser):
-        pass
-
-    parser, options, args = cl_parse("events", args, setup)
-    if len(args) != 1:
-        help_and_die(parser, "missing arguments")
-
-    config_path = args[0]
-    try:
-        config = silvertine.read_config(config_path)
-
-        for event_name in silvertine.get_event_names(config):
-            print(event_name)
-
-    except silvertine.silvertineError as e:
-        die(str(e))
-
-
-def command_check(args):
-
-    from silvertine.environment import Environment
-
-    def setup(parser):
-        parser.add_option(
-            "--target-ids",
-            dest="target_string_ids",
-            metavar="TARGET_IDS",
-            help="process only selected targets. TARGET_IDS is a "
-            "comma-separated list of target IDs. Target IDs have the "
-            "form SUPERGROUP.GROUP.NETWORK.STATION.LOCATION.CHANNEL.",
-        )
-
-        parser.add_option(
-            "--waveforms",
-            dest="show_waveforms",
-            action="store_true",
-            help="show raw, restituted, projected, and processed waveforms",
-        )
-
-        parser.add_option(
-            "--nrandom",
-            dest="n_random_synthetics",
-            metavar="N",
-            type=int,
-            default=10,
-            help="set number of random synthetics to forward model (default: "
-            "10). If set to zero, create synthetics for the reference "
-            "solution.",
-        )
-
-        parser.add_option(
-            "--save-stations-used",
-            dest="stations_used_path",
-            metavar="FILENAME",
-            help="aggregate all stations used by the setup into a file",
-        )
-
-    parser, options, args = cl_parse("check", args, setup)
-    if len(args) < 1:
-        help_and_die(parser, "missing arguments")
-
-    try:
-        env = Environment(args)
-        config = env.get_config()
-
-        target_string_ids = None
-        if options.target_string_ids:
-            target_string_ids = options.target_string_ids.split(",")
-
-        silvertine.check(
-            config,
-            event_names=env.get_selected_event_names(),
-            target_string_ids=target_string_ids,
-            show_waveforms=options.show_waveforms,
-            n_random_synthetics=options.n_random_synthetics,
-            stations_used_path=options.stations_used_path,
-        )
-
-        logger.info(CLIHints("check", config=env.get_config_path()))
-
-    except silvertine.silvertineError as e:
-        die(str(e))
-
-
-def command_go(args):
-
-    from silvertine.environment import Environment
-
-    def setup(parser):
-        parser.add_option(
-            "--force",
-            dest="force",
-            action="store_true",
-            help="overwrite existing run directory",
-        )
-        parser.add_option(
-            "--preserve",
-            dest="preserve",
-            action="store_true",
-            help="preserve old rundir",
-        )
-        parser.add_option(
-            "--status",
-            dest="status",
-            default="state",
-            type="choice",
-            choices=["state", "quiet"],
-            help="status output selection (choices: state, quiet, default: " "state)",
-        )
-        parser.add_option(
-            "--parallel",
-            dest="nparallel",
-            type=int,
-            default=1,
-            help="set number of events to process in parallel, "
-            "if set to more than one, --status=quiet is implied.",
-        )
-        parser.add_option(
-            "--threads",
-            dest="nthreads",
-            type=int,
-            default=1,
-            help="set number of threads per process (default: 1). "
-            "Set to 0 to use all available cores.",
-        )
-
-    parser, options, args = cl_parse("go", args, setup)
-
-    try:
-        env = Environment(args)
-
-        status = options.status
-        if options.nparallel != 1:
-            status = "quiet"
-
-        silvertine.go(
-            env,
-            force=options.force,
-            preserve=options.preserve,
-            status=status,
-            nparallel=options.nparallel,
-            nthreads=options.nthreads,
-        )
-        if len(env.get_selected_event_names()) == 1:
-            logger.info(CLIHints("go", rundir=env.get_rundir_path()))
-
-    except silvertine.silvertineError as e:
-        die(str(e))
-
-
-def command_forward(args):
-
-    from silvertine.environment import Environment
-
-    def setup(parser):
-        pass
-
-    parser, options, args = cl_parse("forward", args, setup)
-    if len(args) < 1:
-        help_and_die(parser, "missing arguments")
-
-    try:
-        env = Environment(args)
-        silvertine.forward(env)
-    except silvertine.silvertineError as e:
-        die(str(e))
-
-
-def command_harvest(args):
-    def setup(parser):
-        parser.add_option(
-            "--force",
-            dest="force",
-            action="store_true",
-            help="overwrite existing harvest directory",
-        )
-        parser.add_option(
-            "--neach",
-            dest="neach",
-            type=int,
-            default=10,
-            help="take NEACH best samples from each chain (default: %default)",
-        )
-        parser.add_option(
-            "--weed",
-            dest="weed",
-            type=int,
-            default=0,
-            help="weed out bootstrap samples with bad global performance. "
-            "0: no weeding (default), "
-            "1: only bootstrap chains where all NEACH best samples "
-            "global misfit is less than the global average misfit of all "
-            "NEACH best in all chains plus one standard deviation are "
-            "included in the harvest ensemble, "
-            "2: same as 1 but additionally individual samples are "
-            "removed if their global misfit is greater than the global "
-            "average misfit of all NEACH best in all chains, "
-            "3: harvesting is done on the global chain only, bootstrap "
-            "chains are excluded",
-        )
-
-    parser, options, args = cl_parse("harvest", args, setup)
-    if len(args) != 1:
-        help_and_die(parser, "no rundir")
-
-    (run_path,) = args
-    silvertine.harvest(
-        run_path, force=options.force, nbest=options.neach, weed=options.weed
-    )
-
-
-def command_cluster(args):
-    from silvertine import Clustering
-    from silvertine.clustering import metrics, methods, read_config, write_config
-
-    def setup(parser):
-        parser.add_option(
-            "--metric",
-            dest="metric",
-            metavar="METRIC",
-            default="kagan_angle",
-            choices=metrics.metrics,
-            help="metric to measure model distances. Choices: [%s]. Default: "
-            "kagan_angle" % ", ".join(metrics.metrics),
-        )
-
-        parser.add_option(
-            "--write-config",
-            dest="write_config",
-            metavar="FILE",
-            help="write configuration (or default configuration) to FILE",
-        )
-
-    method = args[0] if args else ""
-    try:
-        parser, options, args = cl_parse(
-            "cluster",
-            args[1:],
-            setup=Clustering.cli_setup(method, setup),
-            details="Available clustering methods: [%s]. Use "
-            '"silvertine cluster <method> --help" to get list of method'
-            "dependent options." % ", ".join(methods),
-        )
-
-        if method not in Clustering.name_to_class and not op.exists(method):
-            help_and_die(
-                parser,
-                "no such clustering method: %s" % method
-                if method
-                else "no clustering method specified",
-            )
-
-        if op.exists(method):
-            clustering = read_config(method)
-        else:
-            clustering = Clustering.cli_instantiate(method, options)
-
-        if options.write_config:
-            write_config(clustering, options.write_config)
-        else:
-            if len(args) != 1:
-                help_and_die(parser, "no rundir")
-            (run_path,) = args
-
-            silvertine.cluster(run_path, clustering, metric=options.metric)
-
-    except silvertine.silvertineError as e:
-        die(str(e))
-
-
-def command_plot(args):
-    def setup(parser):
-        parser.add_option(
-            "--show",
-            dest="show",
-            action="store_true",
-            help="show plot for interactive inspection",
-        )
-
-    details = ""
-
-    parser, options, args = cl_parse("plot", args, setup, details)
-
-    if not options.show:
-        import matplotlib
-
-        matplotlib.use("Agg")
-
-    from silvertine.environment import Environment
-
-    if len(args) not in (1, 2, 3):
-        help_and_die(parser, "1, 2 or 3 arguments required")
-
-    if len(args) > 1:
-        env = Environment(args[1:])
-    else:
-        env = None
-
-    from silvertine import plot
-
-    if args[0] == "list":
-
-        def get_doc_title(doc):
-            for ln in doc.split("\n"):
-                ln = ln.strip()
-                if ln != "":
-                    ln = ln.strip(".")
-                    return ln
-            return "Undocumented."
-
-        if env:
-            plot_classes = env.get_plot_classes()
-        else:
-            plot_classes = plot.get_all_plot_classes()
-
-        plot_names, plot_doc = zip(*[(pc.name, pc.__doc__) for pc in plot_classes])
-
-        plot_descs = [get_doc_title(doc) for doc in plot_doc]
-        left_spaces = max([len(pn) for pn in plot_names])
-
-        for name, desc in zip(plot_names, plot_descs):
-            print("{name:<{ls}} - {desc}".format(ls=left_spaces, name=name, desc=desc))
-
-    elif args[0] == "config":
-        plot_config_collection = plot.get_plot_config_collection(env)
-        print(plot_config_collection)
-
-    elif args[0] == "all":
-        if env is None:
-            help_and_die(parser, "two or three arguments required")
-        plot_names = plot.get_plot_names(env)
-        plot.make_plots(env, plot_names=plot_names, show=options.show)
-
-    elif op.exists(args[0]):
-        if env is None:
-            help_and_die(parser, "two or three arguments required")
-        plots = plot.PlotConfigCollection.load(args[0])
-        plot.make_plots(env, plots, show=options.show)
-
-    else:
-        if env is None:
-            help_and_die(parser, "two or three arguments required")
-        plot_names = [name.strip() for name in args[0].split(",")]
-        plot.make_plots(env, plot_names=plot_names, show=options.show)
-
-
-def command_movie(args):
-
-    import matplotlib
-
-    matplotlib.use("Agg")
-
-    def setup(parser):
-        pass
-
-    parser, options, args = cl_parse("movie", args, setup)
-
-    if len(args) != 4:
-        help_and_die(parser, "four arguments required")
-
-    run_path, xpar_name, ypar_name, movie_filename_template = args
-
-    from silvertine import plot
-
-    movie_filename = movie_filename_template % {"xpar": xpar_name, "ypar": ypar_name}
-
-    try:
-        plot.make_movie(run_path, xpar_name, ypar_name, movie_filename)
-
-    except silvertine.silvertineError as e:
-        die(str(e))
-
-
-def command_export(args):
-    def setup(parser):
-        parser.add_option(
-            "--type",
-            dest="type",
-            metavar="TYPE",
-            choices=("event", "event-yaml", "source", "vector"),
-            help="select type of objects to be exported. Choices: "
-            '"event" (default), "event-yaml", "source", "vector".',
-        )
-
-        parser.add_option(
-            "--parameters",
-            dest="parameters",
-            metavar="PLIST",
-            help="select parameters to be exported. PLIST is a "
-            "comma-separated list where each entry has the form "
-            '"<parameter>[.<measure>]". Available measures: "best", '
-            '"mean", "std", "minimum", "percentile16", "median", '
-            '"percentile84", "maximum".',
-        )
-
-        parser.add_option(
-            "--selection",
-            dest="selection",
-            metavar="EXPRESSION",
-            help="only export data for runs which match EXPRESSION. "
-            'Example expression: "tags_contains:excellent,good"',
-        )
-
-        parser.add_option(
-            "--output", dest="filename", metavar="FILE", help="write output to FILE"
-        )
-
-    parser, options, args = cl_parse("export", args, setup)
-    if len(args) < 2:
-        help_and_die(parser, "arguments required")
-
-    what = args[0]
-
-    dirnames = args[1:]
-
-    what_choices = ("best", "mean", "ensemble", "stats")
-
-    if what not in what_choices:
-        help_and_die(
-            parser,
-            "invalid choice: %s (choose from %s)"
-            % (repr(what), ", ".join(repr(x) for x in what_choices)),
-        )
-
-    if options.parameters:
-        pnames = options.parameters.split(",")
-    else:
-        pnames = None
-
-    try:
-        silvertine.export(
-            what,
-            dirnames,
-            filename=options.filename,
-            type=options.type,
-            pnames=pnames,
-            selection=options.selection,
-        )
-
-    except silvertine.silvertineError as e:
-        die(str(e))
-
-
-def command_tag(args):
-    def setup(parser):
-        parser.add_option(
-            "-d",
-            "--dir-names",
-            dest="show_dirnames",
-            action="store_true",
-            help="show directory names instead of run names",
-        )
-
-    parser, options, args = cl_parse("tag", args, setup)
-    if len(args) < 2:
-        help_and_die(parser, "two or more arguments required")
-
-    action = args.pop(0)
-
-    if action not in ("add", "remove", "list"):
-        help_and_die(parser, "invalid action: %s" % action)
-
-    if action in ("add", "remove"):
-        if len(args) < 2:
-            help_and_die(parser, "three or more arguments required")
-
-        tag = args.pop(0)
-
-        rundirs = args
-
-    if action == "list":
-        rundirs = args
-
-    from silvertine.environment import Environment
-
-    errors = False
-    for rundir in rundirs:
-        try:
-            env = Environment([rundir])
-            if options.show_dirnames:
-                name = rundir
-            else:
-                name = env.get_problem().name
-
-            info = env.get_run_info()
-            if action == "add":
-                info.add_tag(tag)
-                env.set_run_info(info)
-            elif action == "remove":
-                info.remove_tag(tag)
-                env.set_run_info(info)
-            elif action == "list":
-                print("%-60s : %s" % (name, ", ".join(info.tags)))
-
-        except silvertine.silvertineError as e:
-            errors = True
-            logger.error(e)
-
-    if errors:
-        die("Errors occurred, see log messages above.")
 
 
 def make_report(env_args, event_name, conf, update_without_plotting, nthreads):
