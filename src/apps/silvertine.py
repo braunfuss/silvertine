@@ -1004,12 +1004,12 @@ def command_detect(args):
                                 if not os.path.exists(savedir):
                                     os.makedirs(savedir)
 
-                                # lassie.search(config_fine,
-                                #                override_tmin=event.time-30,
-                                #                override_tmax=event.time+30,
-                                #                force=True,
-                                #                show_detections=True,
-                                #                nparallel=10)
+                                lassie.search(config_fine,
+                                               override_tmin=event.time-30,
+                                               override_tmax=event.time+30,
+                                               force=True,
+                                               show_detections=True,
+                                               nparallel=10)
 
                     remove_outdated_wc(store_path_base+"/download-tmp",
                                        2.5,
