@@ -54,7 +54,7 @@ def preprocess(path, tmin="2016-02-12 06:20:03.800",
     preprocessor(preproc_dir=pre_proc_basepath,
                  mseed_dir=downloads_basepath,
                  stations_json=json_basepath,
-                 overlap=0.4,
+                 overlap=0.45,
                  n_processor=6)
 
 
@@ -76,10 +76,10 @@ def predict(path, tmin="2016-02-12 06:20:03.800",
               output_probabilities=False,
               number_of_sampling=1,
               loss_weights=[0.02, 0.40, 0.58],
-              detection_threshold=0.001,
+              detection_threshold=0.002,
               P_threshold=0.001,
               S_threshold=0.001,
-              number_of_plots=10,
+              number_of_plots=1,
               plot_mode='time',
               batch_size=500,
               number_of_cpus=20,
@@ -93,7 +93,7 @@ def predict(path, tmin="2016-02-12 06:20:03.800",
 def associate(path, tmin, tmax, minlat=49.1379, maxlat=49.1879, minlon=8.1223,
               maxlon=8.1723,
               channels=["EH"+"[ZNE]"], client_list=["BGR"], iter=None,
-              pair_n=4, moving_window=30):
+              pair_n=3, moving_window=10):
 
     import shutil
     import os
@@ -209,14 +209,14 @@ def iter_chunked(tinc, path, data_pile, tmin=None,
         cat_read = read_events(file)
         for event in cat_read:
             cat.append(event)
-    cat.write("%s/events.qml" % path, format="QUAKEML")
-    events = []
-    files = glob("%s/asociation*/events.pf" % path)
-    files.sort(key=os.path.getmtime)
-    for file in files:
-        events_read = pm.load_events(file)
-        events.extend(events_read)
-    pm.dump_events(events, "%s/events.pf" % path)
+    cat.write("%s/events_eqt.qml" % path, format="QUAKEML")
+    # events = []
+    # files = glob("%s/asociation*/events.pf" % path)
+    # files.sort(key=os.path.getmtime)
+    # for file in files:
+    #     events_read = pm.load_events(file)
+    #     events.extend(events_read)
+    # pm.dump_events(events, "%s/events.pf" % path)
 
 
 def load_eqt_folder(data_paths, tinc, path, tmin="2021-05-26 06:20:03.800",

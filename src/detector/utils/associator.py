@@ -31,8 +31,8 @@ from pyrocko import model
 def run_associator(input_dir,
                    start_time,
                    end_time,
-                   moving_window=15,
-                   pair_n=3,
+                   moving_window=25,
+                   pair_n=2,
                    output_dir='.',
                    consider_combination=False):
 
@@ -544,7 +544,7 @@ def _dbs_associator(start_time, end_time, moving_window,
             for _, row in detections.iterrows():
                 station = "{:<5}".format(row['station'])
                 if station[0] is "R":
-                    pair_nt = 3
+                    pair_nt = 2
             #pbar.update()
             if len(detections) >= pair_nt:
 

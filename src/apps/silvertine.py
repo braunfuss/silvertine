@@ -20,7 +20,7 @@ try:
     from pyrocko import pile as pile_mod
     from pyrocko.gui.snuffler_app import *
     from pyrocko.io import quakeml
-
+    from pyrocko.gui.pile_viewer import PhaseMarker, EventMarker
 except ImportError:
     print(
         "Pyrocko is required for silvertine!"
@@ -854,7 +854,7 @@ def command_detect(args):
                     )
                 _injector = pile_mod.Injector(
                     piled,
-                    path=store_path,
+                    path=options.store_path,
                     fixation_length=options.store_interval,
                     forget_fixed=True)
 
@@ -888,13 +888,14 @@ def command_detect(args):
                     start = time.time()
                     config_path = options.config
                     config = lassie.read_config(config_path)
+                    config_fine = lassie.read_config(config_path+"_fine")
                     pool = Pool(processes=2)
-                    pool.apply_async(lassie.search(config,
-                                                   override_tmin=options.tmin,
-                                                   override_tmax=options.tmax,
-                                                   force=True,
-                                                   show_detections=True,
-                                                   nparallel=10))
+                    # pool.apply_async(lassie.search(config,
+                    #                                override_tmin=options.tmin,
+                    #                                override_tmax=options.tmax,
+                    #                                force=True,
+                    #                                show_detections=True,
+                    #                                nparallel=10))
                     pool.apply_async(detector.picker.main(
                         store_path_base,
                         tmin=options.tmin,
@@ -968,10 +969,26 @@ def command_detect(args):
                         for item in Path(store_path_base+"/").glob("asociation_*/associations.xml"):
                             qml = quakeml.QuakeML.load_xml(filename=item)
                             events_qml = qml.get_pyrocko_events()
+                            components = ["*"]
                             for i, eq in enumerate(events_qml):
                                 if event.time == eq.time:
+                                    phase_markers = []
                                     evqml = qml.get_events()[i]
-                                    evqml.dump_xml(filename=savedir+"phases_eqt.qml")
+                                    phase_markers_qml = evqml.get_pyrocko_phase_markers()
+                                    for phase_marker in phase_markers_qml:
+                                        for component in components:
+                                            d = phase_marker.copy()
+                                            nsl = list(d.nslc_ids[0])
+
+                                            nsl[3] = component
+                                            nsl[2] = ""
+                                            nsl = tuple(nsl)
+                                            d.set([nsl], d.tmin, d.tmax)
+                                            phase_markers.append(d)
+                                    PhaseMarker.save_markers(phase_markers, savedir+"/events_eqt.pym", fdigits=3)
+
+                                    evqml.dump_xml(filename=savedir+"event_eqt.qml")
+
                         for item in Path(store_path_base+"/").glob("detections_*/*/figures/*"):
                             try:
                                 time_item = util.stt(str(item.absolute())[-31:-21]+" "+str(item.absolute())[-20:-5])
@@ -988,8 +1005,8 @@ def command_detect(args):
                                     os.makedirs(savedir)
 
                                 # lassie.search(config_fine,
-                                #                override_tmin=options.tmin,
-                                #                override_tmax=options.tmax,
+                                #                override_tmin=event.time-30,
+                                #                override_tmax=event.time+30,
                                 #                force=True,
                                 #                show_detections=True,
                                 #                nparallel=10)
