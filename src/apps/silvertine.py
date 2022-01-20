@@ -890,12 +890,20 @@ def command_detect(args):
                     config = lassie.read_config(config_path)
                     config_fine = lassie.read_config(config_path+"_fine")
                     pool = Pool(processes=2)
-                    # pool.apply_async(lassie.search(config,
-                    #                                override_tmin=options.tmin,
-                    #                                override_tmax=options.tmax,
-                    #                                force=True,
-                    #                                show_detections=True,
-                    #                                nparallel=10))
+                    if options.tmin is not None:
+                        tmin_override = util.stt(options.tmin)
+                    else:
+                        tmin_override = None
+                    if options.tmax is not None:
+                        tmax_override = util.stt(options.tmax)
+                    else:
+                        tmax_override = None
+                    pool.apply_async(lassie.search(config,
+                                                   override_tmin=tmin_override,
+                                                   override_tmax=tmax_override,
+                                                   force=True,
+                                                   show_detections=True,
+                                                   nparallel=10))
                     pool.apply_async(detector.picker.main(
                         store_path_base,
                         tmin=options.tmin,
@@ -960,7 +968,7 @@ def command_detect(args):
                                                                     savedir, None)
                             except:
                                 pass
-
+                    phase_markers_collected = []
                     for event in events_eqt:
                         savedir = store_path_base + '/eqt_detections/' + str(event.time) + '/'
                         if not os.path.exists(savedir):
@@ -985,9 +993,11 @@ def command_detect(args):
                                             nsl = tuple(nsl)
                                             d.set([nsl], d.tmin, d.tmax)
                                             phase_markers.append(d)
+                                            phase_markers_collected.append(d)
                                     PhaseMarker.save_markers(phase_markers, savedir+"/events_eqt.pym", fdigits=3)
 
                                     evqml.dump_xml(filename=savedir+"event_eqt.qml")
+                        PhaseMarker.save_markers(phase_markers_collected, store_path_base+"/events_eqt_collected.pym", fdigits=3)
 
                         for item in Path(store_path_base+"/").glob("detections_*/*/figures/*"):
                             try:
@@ -1003,13 +1013,13 @@ def command_detect(args):
                                 savedir = store_path_base + '/combined_detections/' + util.tts(event_stack.time) + '/'
                                 if not os.path.exists(savedir):
                                     os.makedirs(savedir)
-
-                                lassie.search(config_fine,
-                                               override_tmin=event.time-30,
-                                               override_tmax=event.time+30,
-                                               force=True,
-                                               show_detections=True,
-                                               nparallel=10)
+                            # grond run
+                            #    lassie.search(config_fine,
+                            #                   override_tmin=event.time-30,
+                            #                   override_tmax=event.time+30,
+                            #                   force=True,
+                            #                   show_detections=True,
+                            #                   nparallel=10)
 
                     remove_outdated_wc(store_path_base+"/download-tmp",
                                        2.5,
@@ -1022,7 +1032,10 @@ def command_detect(args):
                                        wc="asociation_*")
 
                     for item in Path(store_path_base+"/downloads/").glob("*"):
-                        shutil.rmtree(item.absolute())
+                        try:
+                            shutil.rmtree(item.absolute())
+                        except:
+                            pass
                     if options.download_method == "stream_sim":
                         process_in_progress = False
 

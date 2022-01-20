@@ -379,7 +379,6 @@ def predictor(input_dir=None,
 
 
     if model is None:
-
         model = load_model(args['input_model'],
                            custom_objects={'SeqSelfAttention': SeqSelfAttention,
                                            'FeedForward': FeedForward,
@@ -631,7 +630,9 @@ def _gen_predictor(new_list, args, model):
     return prob_dic
 
 
-def _gen_writer(new_list, args, prob_dic, pred_set, HDF_PROB, predict_writer, save_figs, csvPr_gen, plt_n, detection_memory, keepPS, allowonlyS, spLimit):
+def _gen_writer(new_list, args, prob_dic, pred_set, HDF_PROB, predict_writer,
+                save_figs, csvPr_gen, plt_n, detection_memory, keepPS,
+                allowonlyS, spLimit, deltat=100):
     """
 
     Applies the detection and picking on the output predicted probabilities and if it founds any, write them out in the CSV file,
@@ -706,26 +707,27 @@ def _gen_writer(new_list, args, prob_dic, pred_set, HDF_PROB, predict_writer, sa
 
         matches, pick_errors, yh3 =  picker(args, prob_dic['DD_mean'][ts], prob_dic['PP_mean'][ts], prob_dic['SS_mean'][ts],
                                             prob_dic['DD_std'][ts], prob_dic['PP_std'][ts], prob_dic['SS_std'][ts])
-
         if not allowonlyS: #if NOT limiting to "only S" picks
             if len(matches)>=1 and matches[list(matches)[0]][6] and not matches[list(matches)[0]][3]: #if S picks exist but no P...
                 continue
         if keepPS:
             if (len(matches) >= 1) and (matches[list(matches)[0]][3] and matches[list(matches)[0]][6]):
-                snr = [_get_snr(dat, matches[list(matches)[0]][3], window = 100), _get_snr(dat, matches[list(matches)[0]][6], window = 100)]
-                pre_write = len(detection_memory)
-                detection_memory=_output_writter_prediction(dataset, predict_writer, csvPr_gen, matches, snr, detection_memory)
-                post_write = len(detection_memory)
-                if plt_n < args['number_of_plots'] and post_write > pre_write:
-                    _plotter_prediction(dat, evi, args, save_figs,
-                                          prob_dic['DD_mean'][ts],
-                                          prob_dic['PP_mean'][ts],
-                                          prob_dic['SS_mean'][ts],
-                                          prob_dic['DD_std'][ts],
-                                          prob_dic['PP_std'][ts],
-                                          prob_dic['SS_std'][ts],
-                                          matches)
-                    plt_n += 1
+                # discard unreal time differences for seiger
+                if (matches[list(matches)[0]][6]-matches[list(matches)[0]][3])/deltat) > 0.5:
+                    snr = [_get_snr(dat, matches[list(matches)[0]][3], window=100), _get_snr(dat, matches[list(matches)[0]][6], window=100)]
+                    pre_write = len(detection_memory)
+                    detection_memory=_output_writter_prediction(dataset, predict_writer, csvPr_gen, matches, snr, detection_memory)
+                    post_write = len(detection_memory)
+                    if plt_n < args['number_of_plots'] and post_write > pre_write:
+                        _plotter_prediction(dat, evi, args, save_figs,
+                                              prob_dic['DD_mean'][ts],
+                                              prob_dic['PP_mean'][ts],
+                                              prob_dic['SS_mean'][ts],
+                                              prob_dic['DD_std'][ts],
+                                              prob_dic['PP_std'][ts],
+                                              prob_dic['SS_std'][ts],
+                                              matches)
+                        plt_n += 1
         else:
             if (len(matches) >= 1) and ((matches[list(matches)[0]][3] or matches[list(matches)[0]][6])):
                 snr = [_get_snr(dat, matches[list(matches)[0]][3], window = 100), _get_snr(dat, matches[list(matches)[0]][6], window = 100)]

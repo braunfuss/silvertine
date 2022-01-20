@@ -54,7 +54,7 @@ def preprocess(path, tmin="2016-02-12 06:20:03.800",
     preprocessor(preproc_dir=pre_proc_basepath,
                  mseed_dir=downloads_basepath,
                  stations_json=json_basepath,
-                 overlap=0.45,
+                 overlap=0.55,
                  n_processor=6)
 
 
@@ -79,14 +79,14 @@ def predict(path, tmin="2016-02-12 06:20:03.800",
               detection_threshold=0.002,
               P_threshold=0.001,
               S_threshold=0.001,
-              number_of_plots=1,
+              number_of_plots=100,
               plot_mode='time',
               batch_size=500,
               number_of_cpus=20,
               keepPS=True,
               model=model,
-              allowonlyS=True,
-              spLimit=3,
+              allowonlyS=False,
+              spLimit=5,
               models=models)
 
 
