@@ -22,5 +22,3 @@ def find_station(name, tmin=None, tmax=None):
             return st.lat, st.lon
         except:
             return False
-
-def to_refrence_igem(lat, lon):

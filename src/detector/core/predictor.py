@@ -713,7 +713,7 @@ def _gen_writer(new_list, args, prob_dic, pred_set, HDF_PROB, predict_writer,
         if keepPS:
             if (len(matches) >= 1) and (matches[list(matches)[0]][3] and matches[list(matches)[0]][6]):
                 # discard unreal time differences for seiger
-                if (matches[list(matches)[0]][6]-matches[list(matches)[0]][3])/deltat) > 0.5:
+                if (matches[list(matches)[0]][6]-matches[list(matches)[0]][3])/(deltat) > 0.5:
                     snr = [_get_snr(dat, matches[list(matches)[0]][3], window=100), _get_snr(dat, matches[list(matches)[0]][6], window=100)]
                     pre_write = len(detection_memory)
                     detection_memory=_output_writter_prediction(dataset, predict_writer, csvPr_gen, matches, snr, detection_memory)

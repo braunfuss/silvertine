@@ -4,6 +4,7 @@ from os.path import join as pjoin
 import os.path as op
 import os
 from multiprocessing import Pool
+from multiprocessing import Process
 import logging
 from optparse import OptionParser, OptionValueError, IndentedHelpFormatter
 from io import StringIO
@@ -18,9 +19,11 @@ from silvertine.util.parser_setup import *
 try:
     from pyrocko import util, marker, model
     from pyrocko import pile as pile_mod
+    from pyrocko import orthodrome as ort
     from pyrocko.gui.snuffler_app import *
     from pyrocko.io import quakeml
     from pyrocko.gui.pile_viewer import PhaseMarker, EventMarker
+    from pyrocko.gui import marker as pm
 except ImportError:
     print(
         "Pyrocko is required for silvertine!"
@@ -898,35 +901,37 @@ def command_detect(args):
                         tmax_override = util.stt(options.tmax)
                     else:
                         tmax_override = None
-                    pool.apply_async(lassie.search(config,
-                                                   override_tmin=tmin_override,
-                                                   override_tmax=tmax_override,
-                                                   force=True,
-                                                   show_detections=True,
-                                                   nparallel=10))
-                    pool.apply_async(detector.picker.main(
-                        store_path_base,
-                        tmin=options.tmin,
-                        tmax=options.tmax,
-                        minlat=49.0,
-                        maxlat=49.979,
-                        minlon=7.9223,
-                        maxlon=8.9723,
-                        channels=["EH" + "[ZNE]"],
-                        client_list=[
-                            "http://eida.bgr.de",
-                            "http://ws.gpi.kit.edu",
-                            ],
-                        path_waveforms=store_path_base_down,
-                        download=options.download,
-                        tinc=options.tinc,
-                        freq=options.freq,
-                        hf=options.hf,
-                        lf=options.lf,
-                        models=[model_eqt],
-                    ))
-                    pool.close()
-                    pool.join()
+                    # p1 = Process(target = lassie.search(config,
+                    #                                override_tmin=tmin_override,
+                    #                                override_tmax=tmax_override,
+                    #                                force=True,
+                    #                                show_detections=True,
+                    #                                nparallel=10))
+                    # p1.start()
+                #     p2 = Process(detector.picker.main(
+                #         store_path_base,
+                #         tmin=options.tmin,
+                #         tmax=options.tmax,
+                #         minlat=49.0,
+                #         maxlat=49.979,
+                #         minlon=7.9223,
+                #         maxlon=8.9723,
+                #         channels=["EH" + "[ZNE]"],
+                #         client_list=[
+                #             "http://eida.bgr.de",
+                #             "http://ws.gpi.kit.edu",
+                #             ],
+                #         path_waveforms=store_path_base_down,
+                #         download=options.download,
+                #         tinc=options.tinc,
+                #         freq=options.freq,
+                #         hf=options.hf,
+                #         lf=options.lf,
+                #         models=[model_eqt],
+                #     ))
+                #     p2.start()
+                # #    p1.join()
+                #     p2.join()
                     end = time.time()
                     diff = end - start
                     # if detection make fine location and output here
@@ -955,7 +960,7 @@ def command_detect(args):
                         for item in Path(config.path_prefix+"/"+config.run_path+"/figures").glob("*"):
                             try:
                                 time_item = util.stt(str(item.absolute())[-27:-17]+" "+str(item.absolute())[-16:-4])
-                                if event.time-10 < time_item and event.time+10 > time_item:
+                                if event.time-3 < time_item and event.time+3 > time_item:
                                     os.system("cp %s %s" % (item.absolute(), savedir+"figures_stacking"))
                                     plot_waveforms = False
                                     if plot_waveforms is True:
@@ -1009,10 +1014,79 @@ def command_detect(args):
 
                     for event_stack in events_stacking:
                         for event_eqt in events_eqt:
-                            if event_stack.time-10 < event_eqt.time and event_stack.time+10 > event_eqt.time:
+                            if event_stack.time-3 < event_eqt.time and event_stack.time+3 > event_eqt.time:
                                 savedir = store_path_base + '/combined_detections/' + util.tts(event_stack.time) + '/'
                                 if not os.path.exists(savedir):
                                     os.makedirs(savedir)
+                                from silvertine.locate.grond import locate
+                                for item in Path(store_path_base+"/").glob("asociation_*/associations.xml"):
+                                    qml = quakeml.QuakeML.load_xml(filename=item)
+                                    events_qml = qml.get_pyrocko_events()
+                                    components = ["*"]
+
+                                    for i, eq in enumerate(events_qml):
+                                        if event_eqt.time == eq.time:
+                                            phase_markers = []
+                                            evqml = qml.get_events()[i]
+                                            event_marker = evqml.get_pyrocko_event()
+                                            # seiger center coordinates
+                                            event_marker.lat = 49.16512600149505
+                                            event_marker.lon = 8.133401103618198
+                                            event_marker.name = str(int(event.time))
+                                            event_name = event_marker.name
+                                            phase_markers_qml = evqml.get_pyrocko_phase_markers()
+                                            #event_marker.hash = phase_markers[0].get_event_hash()
+                                            phase_markers.append(EventMarker(event_marker))
+
+                                            model.dump_events([event_marker], savedir+"/event.pf")
+
+                                            for phase_marker in phase_markers_qml:
+                                                phase_marker.set_event_hash(EventMarker(event_marker).get_event_hash())
+                                                if phase_marker.get_phasename() == 'P':
+                                                    phase_marker.set_phasename("any_P")
+                                                if phase_marker.get_phasename() == 'S':
+                                                    phase_marker.set_phasename("any_S")
+                                                for component in components:
+
+                                                    d = phase_marker.copy()
+                                                    nsl = list(d.nslc_ids[0])
+
+                                                    nsl[3] = component
+                                                    nsl[2] = ""
+                                                    nsl = tuple(nsl)
+                                                    d.set([nsl], d.tmin, d.tmax)
+                                                    phase_markers.append(d)
+                                            phase_markers = list(set(phase_markers))
+                                            for i, p in enumerate(phase_markers):
+                                                for k, ps in enumerate(phase_markers):
+                                                    try:
+                                                        if k != i:
+                                                            if p.get_phasename() == ps.get_phasename() and p.nslc_ids[0] == ps.nslc_ids[0]:
+                                                                print(p)
+                                                                phase_markers.remove(p)
+                                                    except:
+                                                        pass
+                                            PhaseMarker.save_markers(phase_markers, savedir+"/phases.pym", fdigits=3)
+                                marker_file = savedir+'/phases.pym'
+                                gf_stores_path = "/media/asteinbe/aki/seiger-data/data_single/grond/gf_stores"
+                                scenario_dir = savedir
+                                config_path = '/media/asteinbe/aki/seiger-data/data_single/grond/grond.conf'
+                                stations_path = '/media/asteinbe/aki/seiger-data/stations_landau.txt'
+                                best = locate(marker_file, gf_stores_path, scenario_dir, config_path, stations_path, event_name)
+                                lat, lon = ort.ne_to_latlon(best.lat, best.lon, best.north_shift, best.east_shift)
+                                evqml.preferred_origin.latitude = quakeml.RealQuantity(value=float(lat))
+                                evqml.preferred_origin.longitude = quakeml.RealQuantity(value=float(lon))
+                                evqml.preferred_origin.time = quakeml.TimeQuantity(value=best.time)
+                                evqml.preferred_origin.depth = quakeml.RealQuantity(value=best.depth)
+                                public_id = "quakeml:seiger/"+ str(int(float(event_stack.name.split()[1].replace(')','').replace('(',''))))+"_"+str(best.time)
+
+                                evqml.public_id = public_id
+                                for pick in evqml.pick_list:
+                                    pick.public_id = public_id
+
+                                evqml.preferred_origin_id = public_id
+                                evqml.origin_list[0].public_id = public_id
+                                evqml.dump_xml(filename=savedir+"event_combined.qml")
                             # grond run
                             #    lassie.search(config_fine,
                             #                   override_tmin=event.time-30,
