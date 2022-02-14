@@ -818,6 +818,7 @@ def command_detect(args):
             "--sources_list",
             dest="sources_list",
             default=["seedlink://eida.bgr.de/GR.INS*.*.EH*",
+                     "seedlink://ws.gpi.kit.edu/LE.*.*.HH*",
                      "seedlink://eida.bgr.de/GR.TMO*.*.EH*"],
             help="Pyrocko format station file")
         parser.add_option(
