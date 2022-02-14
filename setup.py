@@ -103,6 +103,7 @@ setup(
         'silvertine.detector',
         'silvertine.detector.core',
         'silvertine.detector.utils',
+        'silvertine.detector.locator',
         'silvertine.scenario',
         'silvertine.locate',
         'silvertine.minimum_1d',
@@ -115,7 +116,6 @@ setup(
         'silvertine.monitoring',
         'silvertine.beam_depth',
         'silvertine.seismic_handler',
-        'silvertine.detector.locator',
     ],
     entry_points={
         'console_scripts': [

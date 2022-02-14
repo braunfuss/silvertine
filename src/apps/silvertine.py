@@ -760,6 +760,12 @@ def command_detect(args):
             type=int)
         parser.add_option(
             "--config",
+            help="Load a grond configuration file")
+        parser.add_option(
+            "--ttt_path",
+            help="Path of ttt stores")
+        parser.add_option(
+            "--config_grond",
             help="Load a configuration file")
         parser.add_option(
             "--configs",
@@ -901,37 +907,37 @@ def command_detect(args):
                         tmax_override = util.stt(options.tmax)
                     else:
                         tmax_override = None
-                    # p1 = Process(target = lassie.search(config,
-                    #                                override_tmin=tmin_override,
-                    #                                override_tmax=tmax_override,
-                    #                                force=True,
-                    #                                show_detections=True,
-                    #                                nparallel=10))
-                    # p1.start()
-                #     p2 = Process(detector.picker.main(
-                #         store_path_base,
-                #         tmin=options.tmin,
-                #         tmax=options.tmax,
-                #         minlat=49.0,
-                #         maxlat=49.979,
-                #         minlon=7.9223,
-                #         maxlon=8.9723,
-                #         channels=["EH" + "[ZNE]"],
-                #         client_list=[
-                #             "http://eida.bgr.de",
-                #             "http://ws.gpi.kit.edu",
-                #             ],
-                #         path_waveforms=store_path_base_down,
-                #         download=options.download,
-                #         tinc=options.tinc,
-                #         freq=options.freq,
-                #         hf=options.hf,
-                #         lf=options.lf,
-                #         models=[model_eqt],
-                #     ))
-                #     p2.start()
-                # #    p1.join()
-                #     p2.join()
+                    p1 = Process(target = lassie.search(config,
+                                                   override_tmin=tmin_override,
+                                                   override_tmax=tmax_override,
+                                                   force=True,
+                                                   show_detections=True,
+                                                   nparallel=10))
+                    p1.start()
+                    p2 = Process(detector.picker.main(
+                        store_path_base,
+                        tmin=options.tmin,
+                        tmax=options.tmax,
+                        minlat=49.0,
+                        maxlat=49.979,
+                        minlon=7.9223,
+                        maxlon=8.9723,
+                        channels=["EH" + "[ZNE]"],
+                        client_list=[
+                            "http://eida.bgr.de",
+                            "http://ws.gpi.kit.edu",
+                            ],
+                        path_waveforms=store_path_base_down,
+                        download=options.download,
+                        tinc=options.tinc,
+                        freq=options.freq,
+                        hf=options.hf,
+                        lf=options.lf,
+                        models=[model_eqt],
+                    ))
+                    p2.start()
+                    p1.join()
+                    p2.join()
                     end = time.time()
                     diff = end - start
                     # if detection make fine location and output here
@@ -1062,16 +1068,18 @@ def command_detect(args):
                                                     try:
                                                         if k != i:
                                                             if p.get_phasename() == ps.get_phasename() and p.nslc_ids[0] == ps.nslc_ids[0]:
-                                                                print(p)
                                                                 phase_markers.remove(p)
                                                     except:
                                                         pass
                                             PhaseMarker.save_markers(phase_markers, savedir+"/phases.pym", fdigits=3)
                                 marker_file = savedir+'/phases.pym'
-                                gf_stores_path = "/media/asteinbe/aki/seiger-data/data_single/grond/gf_stores"
+                            #    gf_stores_path = "/media/asteinbe/aki/seiger-data/data_single/grond/gf_stores"
                                 scenario_dir = savedir
-                                config_path = '/media/asteinbe/aki/seiger-data/data_single/grond/grond.conf'
-                                stations_path = '/media/asteinbe/aki/seiger-data/stations_landau.txt'
+                            #    config_path = '/media/asteinbe/aki/seiger-data/data_single/grond/grond.conf'
+                            #    stations_path = '/media/asteinbe/aki/seiger-data/stations_landau.txt'
+                                gf_stores_path = options.ttt_path
+                                config_path = options.config_grond
+                                stations_path = store_path_base+options.stations_file
                                 best = locate(marker_file, gf_stores_path, scenario_dir, config_path, stations_path, event_name)
                                 lat, lon = ort.ne_to_latlon(best.lat, best.lon, best.north_shift, best.east_shift)
                                 evqml.preferred_origin.latitude = quakeml.RealQuantity(value=float(lat))
