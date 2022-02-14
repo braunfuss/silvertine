@@ -340,7 +340,6 @@ def search(
                 istations_selected = num.array(
                     [station_index[nsl] for nsl in nsls_selected],
                     dtype=num.int)
-
                 arrays = [tr.ydata.astype(num.float) for tr in trs_selected]
 
                 offsets = num.array(
@@ -440,9 +439,15 @@ def search(
                 num.min(ydata_window),
                 num.max(ydata_window),
                 num.median(ydata_window)))
+            if nstations_selected != 17:
+                logger.info('Warning, station outage detected! Nr of station operable: %s' % nstations_selected)
+
+            detector_threshold_seiger = config.detector_threshold - ((17 - nstations_selected)*4) # 17 is maximum number of seiger stations, 4 is a mean baseline for noise
+            if nstations_selected != 17:
+                logger.info('Warning, station outage detected! Nr of station operable: %s, threshold now: %s' % (nstations_selected, detector_threshold_seiger))
 
             tpeaks, apeaks = list(zip(*[(tpeak, apeak) for (tpeak, apeak) in zip(
-                *tr_stackmax.peaks(config.detector_threshold, tpeaksearch)) if
+                *tr_stackmax.peaks(detector_threshold_seiger, tpeaksearch)) if
                 wmin <= tpeak and tpeak < wmax])) or ([], [])
 
             tr_stackmax_indx = tr_stackmax.copy(data=False)
@@ -545,7 +550,7 @@ def search(
                             deltat_cf, imax, iframe_p, xpeak, ypeak,
                             zpeak,
                             tr_stackmax, tpeaks, apeaks,
-                            config.detector_threshold,
+                            detector_threshold_seiger,
                             wmin, wmax,
                             pdata, trs, fmin, fmax, idetection,
                             tpeaksearch,

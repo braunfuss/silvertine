@@ -87,6 +87,10 @@ def get_events(time_range, region=None, catalog=geofon, **kwargs):
 def cut_n_dump(traces, win, out_path):
     otraces = []
     for tr in traces:
+        if tr.station == "7869":
+            tr.station = "MOER"
+            tr.network = "LE"
+            tr.location = ""
         try:
             otr = tr.chop(win[0], win[1], inplace=False)
             otraces.append(otr)
@@ -338,7 +342,7 @@ def main():
         dest="sites",
         metavar="SITE1,SITE2,...",
         #    default='bgr',
-        default="http://ws.gpi.kit.edu,bgr",
+        default="http://ws.gpi.kit.edu,bgr,http://188.246.25.142:8080",
         help='sites to query (available: %s, default: "%%default"'
         % ", ".join(g_sites_available),
     )
@@ -812,6 +816,10 @@ def main():
 
                         trs = io.load(f.name)
                         for tr in trs:
+                            if tr.station == "7869":
+                                tr.station = "MOER"
+                                tr.network = "LE"
+                                tr.location = ""
                             try:
                                 tr.chop(tmin_win, tmax_win)
                                 have_data.add(tr.nslc_id)
@@ -914,6 +922,9 @@ def main():
                 sited = "bgr_internal"
             elif site == "http://ws.gpi.kit.edu":
                 sited = "kit"
+            if site == "http://188.246.25.142:8080":
+                sited = "moer"
+
             sxs[site].dump_xml(filename=op.join(output_dir, "stations.%s.xml" % sited))
 
     # chapter 1.5: inject local data
@@ -926,6 +937,10 @@ def main():
         ):
 
             for tr in traces:
+                if tr.station == "7869":
+                    tr.station = "MOER"
+                    tr.network = "LE"
+                    tr.location = ""
                 if tr.nslc_id not in have_data:
                     fns.extend(io.save(traces, fn_template_raw))
                     have_data_site["local"].add(tr.nslc_id)
@@ -992,6 +1007,10 @@ def main():
         rest_traces_a = []
         win_a = None
         for tr in traces_a:
+            if tr.station == "7869":
+                tr.station = "MOER"
+                tr.network = "LE"
+                tr.location = ""
             win_a = tr.wmin, tr.wmax
 
             if win_b and win_b[0] >= win_a[0]:
@@ -1046,6 +1065,10 @@ def main():
             rest_traces_a = []
             if win_a:
                 for tr in rest_traces:
+                    if tr.station == "7869":
+                        tr.station = "MOER"
+                        tr.network = "LE"
+                        tr.location = ""
                     try:
                         rest_traces_a.append(
                             tr.chop(win_a[0], win_a[1] + otpad, inplace=False)
