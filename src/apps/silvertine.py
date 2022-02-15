@@ -840,7 +840,7 @@ def command_detect(args):
             pollinjector = None
             tempdir = None
             if options.store_path is not None:
-                store_path_base_down = options.store_path+"/download-tmp"
+                store_path_base_down = options.store_path+"download-tmp"
                 store_path_base = options.store_path
             else:
                 store_path_base_down = "."
@@ -851,20 +851,21 @@ def command_detect(args):
             if sources_list:
                 if store_path_base_down is None:
                     tempdir = tempfile.mkdtemp("", "snuffler-tmp-")
-                    store_path = pjoin(
+                    store_path_stream = pjoin(
                         tempdir,
                         "trace-%(network)s.%(station)s.%(location)s.%(channel)s."
                         "%(tmin_ms)s.mseed",
                     )
-                elif os.path.isdir(store_path_base_down):
-                    store_path = pjoin(
+                util.ensuredir(store_path_base_down)
+                if os.path.isdir(store_path_base_down):
+                    store_path_stream = pjoin(
                         store_path_base_down,
                         "trace-%(network)s.%(station)s.%(location)s.%(channel)s."
                         "%(tmin_ms)s.mseed",
                     )
                 _injector = pile_mod.Injector(
                     piled,
-                    path=options.store_path,
+                    path=store_path_stream,
                     fixation_length=options.store_interval,
                     forget_fixed=True)
 
@@ -904,7 +905,9 @@ def command_detect(args):
                     start = time.time()
                     config_path = options.config
                     config = lassie.read_config(config_path)
-                    config_fine = lassie.read_config(config_path+"_fine")
+                    fine_detection = False
+                    if fine_detection is True:
+                        config_fine = lassie.read_config(config_path+"_fine")
                     pool = Pool(processes=2)
                     if options.tmin is not None:
                         tmin_override = util.stt(options.tmin)
