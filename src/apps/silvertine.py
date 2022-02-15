@@ -818,14 +818,14 @@ def command_detect(args):
             "--sources_list",
             dest="sources_list",
             default=["seedlink://eida.bgr.de/GR.INS*.*.EH*",
-                     "seedlink://ws.gpi.kit.edu/LE.*.*.*",
+                     "seedlink://eida.bgr.de/LE.*.*.*",
                      "seedlink://eida.bgr.de/GR.TMO*.*.EH*"],
             help="Pyrocko format station file")
         parser.add_option(
             "--stations_file",
             dest="stations_file",
             type=str,
-            default="/stations_landau.txt",
+            default="stations_landau.txt",
             help="Pyrocko format station file")
     parser, options, args = cl_parse("detect", args, setup)
     if options.mode == "both":
@@ -869,7 +869,10 @@ def command_detect(args):
                     forget_fixed=True)
 
                 # Data is downloaded continously after starting the stream
+                print("start")
                 if options.download_method is "stream":
+                    print("stat")
+                    print(sources_list)
                     sources = setup_acquisition_sources(sources_list)
                     for source in sources:
                         source.start()
@@ -879,8 +882,9 @@ def command_detect(args):
                 events_eqt = []
                 events_stacking = []
                 process_in_progress = True
-
+                print("start process")
                 while process_in_progress is True:
+                    print("running")
                     try:
                         if options.download_method is "stream":
                             time.sleep(options.wait_period-diff)
@@ -889,11 +893,13 @@ def command_detect(args):
                         for source in sources:
                             source.stop()
                         pass
-
+                    print("down")
                     if options.download_method is "stream":
                         for source in sources:
                             trs = source.poll()
+                            print(trs)
                             for tr in trs:
+                                print(tr)
                                 _injector.inject(tr)
                     start = time.time()
                     config_path = options.config
