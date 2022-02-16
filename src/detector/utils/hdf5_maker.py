@@ -442,6 +442,7 @@ def preprocessor(preproc_dir, mseed_dir, stations_json, overlap=0.3, n_processor
 
 
     ray.get([process.remote(station_list[i]) for i in range(len(station_list))])
+    ray.shutdown()
    # for station in station_list:
     #    process(station)
    # with open(os.path.join(preproc_dir,'time_tracks.pkl'), 'wb') as f:
