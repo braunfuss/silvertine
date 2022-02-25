@@ -908,7 +908,7 @@ def command_detect(args):
                     fine_detection = False
                     if fine_detection is True:
                         config_fine = lassie.read_config(config_path+"_fine")
-                    pool = Pool(processes=2)
+                    #pool = Pool(processes=2)
                     ray.shutdown()
                     if options.tmin is not None:
                         tmin_override = util.stt(options.tmin)
@@ -918,14 +918,13 @@ def command_detect(args):
                         tmax_override = util.stt(options.tmax)
                     else:
                         tmax_override = None
-                    p1 = Process(target = lassie.search(config,
+                    target = lassie.search(config,
                                                    override_tmin=tmin_override,
                                                    override_tmax=tmax_override,
                                                    force=True,
                                                    show_detections=True,
-                                                   nparallel=10))
-                    p1.start()
-                    p2 = Process(detector.picker.main(
+                                                   nparallel=10)
+                    detector.picker.main(
                         store_path_base,
                         tmin=options.tmin,
                         tmax=options.tmax,
@@ -945,10 +944,7 @@ def command_detect(args):
                         hf=options.hf,
                         lf=options.lf,
                         models=[model_eqt],
-                    ))
-                    p2.start()
-                    p1.join()
-                    p2.join()
+                    )
                     end = time.time()
                     diff = end - start
                     # if detection make fine location and output here
