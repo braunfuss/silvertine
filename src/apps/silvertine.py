@@ -16,6 +16,7 @@ import shutil
 from silvertine.setup_info import version as __version__
 import silvertine
 from silvertine.util.parser_setup import *
+from silvertine.util import ref_mods
 try:
     from pyrocko import util, marker, model
     from pyrocko import pile as pile_mod
@@ -785,6 +786,12 @@ def command_detect(args):
             default=None,
             help="Frequency value")
         parser.add_option(
+            "--apply_residuals",
+            dest="apply_residuals",
+            type=str,
+            default=True,
+            help="apply_residuals",)
+        parser.add_option(
             "--hf",
             dest="hf",
             type=float,
@@ -833,7 +840,8 @@ def command_detect(args):
         model_eqt = eqt_util.load_eqt_model()
     else:
         model_eqt = []
-
+    if options.apply_residuals is True:
+        residuals = ref_mods.insheim_i1_layered_model_residuals()
     if options.mode == "both":
             piled = pile_mod.make_pile()
             sources_list = options.sources_list  # seedlink sources
@@ -968,7 +976,7 @@ def command_detect(args):
                         for item in Path(config.path_prefix+"/"+config.run_path+"/figures").glob("*"):
                             try:
                                 time_item = util.stt(str(item.absolute())[-27:-17]+" "+str(item.absolute())[-16:-4])
-                                if event.time-3 < time_item and event.time+3 > time_item:
+                                if event.time-6 < time_item and event.time+6 > time_item:
                                     os.system("cp %s %s" % (item.absolute(), savedir+"figures_stacking"))
                                     plot_waveforms = False
                                     if plot_waveforms is True:
@@ -988,6 +996,7 @@ def command_detect(args):
                             os.makedirs(savedir)
                             os.makedirs(savedir+"figures_eqt")
                         for item in Path(store_path_base+"/").glob("asociation_*/associations.xml"):
+
                             qml = quakeml.QuakeML.load_xml(filename=item)
                             events_qml = qml.get_pyrocko_events()
                             components = ["*"]
@@ -1005,6 +1014,7 @@ def command_detect(args):
                                             nsl[2] = ""
                                             nsl = tuple(nsl)
                                             d.set([nsl], d.tmin, d.tmax)
+
                                             phase_markers.append(d)
                                             phase_markers_collected.append(d)
                                     PhaseMarker.save_markers(phase_markers, savedir+"/events_eqt.pym", fdigits=3)
@@ -1022,7 +1032,9 @@ def command_detect(args):
 
                     for event_stack in events_stacking:
                         for event_eqt in events_eqt:
-                            if event_stack.time-3 < event_eqt.time and event_stack.time+3 > event_eqt.time:
+                            phase_markers = []
+                            event_marker = []
+                            if event_stack.time-6 < event_eqt.time and event_stack.time+6 > event_eqt.time:
                                 savedir = store_path_base + '/combined_detections/' + util.tts(event_stack.time) + '/'
                                 if not os.path.exists(savedir):
                                     os.makedirs(savedir)
@@ -1040,12 +1052,13 @@ def command_detect(args):
                                             # seiger center coordinates
                                             event_marker.lat = 49.16512600149505
                                             event_marker.lon = 8.133401103618198
+                                            event_marker.lat = 49.191064149
+                                            event_marker.lon = 8.12879222313
                                             event_marker.name = str(int(event.time))
                                             event_name = event_marker.name
                                             phase_markers_qml = evqml.get_pyrocko_phase_markers()
                                             #event_marker.hash = phase_markers[0].get_event_hash()
                                             phase_markers.append(EventMarker(event_marker))
-
                                             model.dump_events([event_marker], savedir+"/event.pf")
 
                                             for phase_marker in phase_markers_qml:
@@ -1062,7 +1075,20 @@ def command_detect(args):
                                                     nsl[3] = component
                                                     nsl[2] = ""
                                                     nsl = tuple(nsl)
-                                                    d.set([nsl], d.tmin, d.tmax)
+
+                                                    if options.apply_residuals:
+                                                        try:
+                                                            P_res = residuals["%s" % nsl[1]][0]
+                                                            S_res = residuals["%s" % nsl[1]][1]
+                                                            if phase_marker.get_phasename() == 'any_P':
+                                                                d.set([nsl], d.tmin+P_res, d.tmax)
+                                                            if phase_marker.get_phasename() == 'any_S':
+                                                                d.set([nsl], d.tmin+S_res, d.tmax)
+                                                        except:
+                                                            d.set([nsl], d.tmin, d.tmax)
+                                                    else:
+                                                        d.set([nsl], d.tmin, d.tmax)
+
                                                     phase_markers.append(d)
                                             phase_markers = list(set(phase_markers))
                                             for i, p in enumerate(phase_markers):
@@ -1073,8 +1099,8 @@ def command_detect(args):
                                                                 phase_markers.remove(p)
                                                     except:
                                                         pass
-                                            PhaseMarker.save_markers(phase_markers, savedir+"/phases.pym", fdigits=3)
-                                marker_file = savedir+'/phases.pym'
+                                            PhaseMarker.save_markers(phase_markers, savedir+"/phases_res.pym", fdigits=3)
+                                marker_file = savedir+'/phases_res.pym'
                             #    gf_stores_path = "/media/asteinbe/aki/seiger-data/data_single/grond/gf_stores"
                                 scenario_dir = savedir
                             #    config_path = '/media/asteinbe/aki/seiger-data/data_single/grond/grond.conf'
@@ -1089,6 +1115,11 @@ def command_detect(args):
                                 evqml.preferred_origin.time = quakeml.TimeQuantity(value=best.time)
                                 evqml.preferred_origin.depth = quakeml.RealQuantity(value=best.depth)
                                 public_id = "quakeml:seiger/"+ str(int(float(event_stack.name.split()[1].replace(')','').replace('(',''))))+"_"+str(best.time)
+                                event_marker.lat = lat
+                                event_marker.lon = lon
+                                event_marker.depth = best.depth
+                                event_marker.time = best.time
+                                model.dump_events([event_marker], savedir+"/event.pf")
 
                                 evqml.public_id = public_id
                                 for pick in evqml.pick_list:
@@ -1104,16 +1135,16 @@ def command_detect(args):
                             #                   force=True,
                             #                   show_detections=True,
                             #                   nparallel=10)
-
-                    remove_outdated_wc(store_path_base+"/download-tmp",
-                                       2.5,
-                                       wc="*")
-                    remove_outdated_wc(store_path_base,
-                                       1,
-                                       wc="detections_*")
-                    remove_outdated_wc(store_path_base,
-                                       1,
-                                       wc="asociation_*")
+                    if options.download_method is "stream":
+                        remove_outdated_wc(store_path_base+"/download-tmp",
+                                           2.5,
+                                           wc="*")
+                        remove_outdated_wc(store_path_base,
+                                           1,
+                                           wc="detections_*")
+                        remove_outdated_wc(store_path_base,
+                                           1,
+                                           wc="asociation_*")
 
                     for item in Path(store_path_base+"/downloads/").glob("*"):
                         try:
