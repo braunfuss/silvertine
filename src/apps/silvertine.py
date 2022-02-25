@@ -12,7 +12,7 @@ import tempfile
 import time
 from pathlib import Path
 import shutil
-
+import ray
 from silvertine.setup_info import version as __version__
 import silvertine
 from silvertine.util.parser_setup import *
@@ -909,6 +909,7 @@ def command_detect(args):
                     if fine_detection is True:
                         config_fine = lassie.read_config(config_path+"_fine")
                     pool = Pool(processes=2)
+                    ray.shutdown()
                     if options.tmin is not None:
                         tmin_override = util.stt(options.tmin)
                     else:
