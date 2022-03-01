@@ -904,6 +904,8 @@ def command_detect(args):
                 events_stacking = []
                 process_in_progress = True
                 while process_in_progress is True:
+                    for source in sources:
+                        source.start()
                     from keras import backend as K
                     K.clear_session()
                     model_eqt = eqt_util.load_eqt_model()
@@ -1170,6 +1172,8 @@ def command_detect(args):
                         remove_outdated_wc(store_path_base,
                                            1,
                                            wc="asociation_*")
+                    for source in sources:
+                        source.stop()
 
                     for item in Path(store_path_base+"/downloads/").glob("*"):
                         try:
