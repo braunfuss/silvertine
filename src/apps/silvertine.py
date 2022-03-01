@@ -1154,7 +1154,6 @@ def command_detect(args):
                     sc3._write_sc3ml(catalog, store_path_base+"/LI_catalog_SC.qml")
                     _write_quakeml(catalog, store_path_base+"/LI_catalog.qml")
                     gc.collect()
-                    del qml, evqml, catalog, events_stacking, events_qml, phase_markers_collected
                     piled = pile_mod.make_pile()
                             #    qml.dump_xml(filename=store_path_base+"events_all_combined.qml")
 
