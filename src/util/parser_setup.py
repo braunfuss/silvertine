@@ -5,7 +5,6 @@ import sys
 from os.path import join as pjoin
 import os.path as op
 import os
-import subprocess
 import logging
 from optparse import OptionParser, OptionValueError, IndentedHelpFormatter
 from io import StringIO
@@ -35,7 +34,7 @@ def remove_outdated_wc(path, factor, scale="minutes", wc="*", factor2=None):
         itemTime = arrow.get(item.stat().st_mtime)
         if itemTime < criticalTime:
             try:
-                subprocess.call(['rm','-r'] + item.absolute())
+                os.remove(item.absolute())
             except:
                 shutil.rmtree(item.absolute())
 
