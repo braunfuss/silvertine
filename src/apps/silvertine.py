@@ -20,6 +20,7 @@ from silvertine.util import ref_mods
 from obspy import read_events
 import obspy.io.seiscomp.event as sc3
 from obspy.io.quakeml.core import _write_quakeml
+import gc
 try:
     from pyrocko import util, marker, model
     from pyrocko import pile as pile_mod
@@ -1152,6 +1153,8 @@ def command_detect(args):
                                     _write_quakeml(evs, store_path_reader+"/LI_%s.qml" % best.time)
                     sc3._write_sc3ml(catalog, store_path_base+"/LI_catalog_SC.qml")
                     _write_quakeml(catalog, store_path_base+"/LI_catalog.qml")
+                    gc.collect()
+                    piled = pile_mod.make_pile()
                             #    qml.dump_xml(filename=store_path_base+"events_all_combined.qml")
 
                     if options.download_method is "stream":
