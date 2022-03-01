@@ -17,6 +17,9 @@ from silvertine.setup_info import version as __version__
 import silvertine
 from silvertine.util.parser_setup import *
 from silvertine.util import ref_mods
+from obspy import read_events
+import obspy.io.seiscomp.event as sc3
+from obspy.io.quakeml.core import _write_quakeml
 try:
     from pyrocko import util, marker, model
     from pyrocko import pile as pile_mod
@@ -810,6 +813,12 @@ def command_detect(args):
             default="",
             help="Store path")
         parser.add_option(
+            "--store_path_reader",
+            dest="store_path_reader",
+            type=str,
+            default=None,
+            help="store_path_reader")
+        parser.add_option(
             "--store_interval",
             dest="store_interval",
             type=float,
@@ -853,6 +862,10 @@ def command_detect(args):
             else:
                 store_path_base_down = "."
                 store_path_base = "."
+            if options.store_path_reader is None:
+                store_path_reader = options.store_path+"read"
+            else:
+                store_path_reader = options.store_path_reader
 
             stations = model.load_stations(store_path_base+options.stations_file)
 
@@ -1016,7 +1029,7 @@ def command_detect(args):
                                             phase_markers_collected.append(d)
                                     PhaseMarker.save_markers(phase_markers, savedir+"/events_eqt.pym", fdigits=3)
 
-                                    evqml.dump_xml(filename=savedir+"event_eqt.qml")
+                            qml.dump_xml(filename=savedir+"event_eqt.qml")
                         PhaseMarker.save_markers(phase_markers_collected, store_path_base+"/events_eqt_collected.pym", fdigits=3)
 
                         for item in Path(store_path_base+"/").glob("detections_*/*/figures/*"):
@@ -1026,7 +1039,7 @@ def command_detect(args):
                                     os.system("cp %s %s" % (item.absolute(), savedir+"figures_eqt"))
                             except:
                                 pass
-
+                    catalog = read_events(store_path_base+"/LI_catalog.qml")
                     for event_stack in events_stacking:
                         for event_eqt in events_eqt:
                             phase_markers = []
@@ -1041,10 +1054,11 @@ def command_detect(args):
                                     events_qml = qml.get_pyrocko_events()
                                     components = ["*"]
 
-                                    for i, eq in enumerate(events_qml):
+                                    for ieqml, eq in enumerate(events_qml):
                                         if event_eqt.time == eq.time:
                                             phase_markers = []
-                                            evqml = qml.get_events()[i]
+                                            ieqml_found = ieqml
+                                            evqml = qml.get_events()[ieqml]
                                             event_marker = evqml.get_pyrocko_event()
                                             # seiger center coordinates
                                             event_marker.lat = 49.16512600149505
@@ -1120,18 +1134,26 @@ def command_detect(args):
 
                                 evqml.public_id = public_id
                                 for pick in evqml.pick_list:
-                                    pick.public_id = public_id
+                                    rand = pick.public_id[-5]
+                                    pick.public_id = public_id+"_"+rand+"_"+pick.phase_hint.value
+                                    arrival = quakeml.Arrival(public_id = pick.public_id+"_arrival", pick_id = pick.public_id, phase=quakeml.Phase(value=pick.phase_hint.value))
+                                    evqml.origin_list[0].arrival_list.append(arrival)
+                                evqml.preferred_origin_id = public_id+"_"+rand+"O"
+                                evqml.origin_list[0].public_id = public_id+"_"+rand+"O"
+                                qml.event_parameters.event_list = [evqml]
 
-                                evqml.preferred_origin_id = public_id
-                                evqml.origin_list[0].public_id = public_id
-                                evqml.dump_xml(filename=savedir+"event_combined.qml")
-                            # grond run
-                            #    lassie.search(config_fine,
-                            #                   override_tmin=event.time-30,
-                            #                   override_tmax=event.time+30,
-                            #                   force=True,
-                            #                   show_detections=True,
-                            #                   nparallel=10)
+                                qml.dump_xml(filename=savedir+"event_combined.qml")
+                                evs = read_events(savedir+"event_combined.qml")
+                                for ev in evs:
+                                    print(ev)
+                                    if len(ev.picks)>2:
+                                        catalog.append(ev)
+                                    sc3._write_sc3ml(evs, store_path_reader+"/LI_SC_%s.qml" % best.time)
+                                    _write_quakeml(evs, store_path_reader+"/LI_%s.qml" % best.time)
+                    sc3._write_sc3ml(catalog, store_path_base+"/LI_catalog_SC.qml")
+                    _write_quakeml(catalog, store_path_base+"/LI_catalog.qml")
+                            #    qml.dump_xml(filename=store_path_base+"events_all_combined.qml")
+
                     if options.download_method is "stream":
                         remove_outdated_wc(store_path_base+"/download-tmp",
                                            2.5,
