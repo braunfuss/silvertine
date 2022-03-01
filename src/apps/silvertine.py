@@ -1147,7 +1147,6 @@ def command_detect(args):
                                 qml.dump_xml(filename=savedir+"event_combined.qml")
                                 evs = read_events(savedir+"event_combined.qml")
                                 for ev in evs:
-                                    print(ev)
                                     if len(ev.picks)>2:
                                         catalog.append(ev)
                                     sc3._write_sc3ml(evs, store_path_reader+"/LI_SC_%s.qml" % best.time)
@@ -1155,7 +1154,7 @@ def command_detect(args):
                     sc3._write_sc3ml(catalog, store_path_base+"/LI_catalog_SC.qml")
                     _write_quakeml(catalog, store_path_base+"/LI_catalog.qml")
                     gc.collect()
-                    K.clear_session()
+                    del qml, evqml, catalog, events_stacking, events_qml, phase_markers_collected
                     piled = pile_mod.make_pile()
                             #    qml.dump_xml(filename=store_path_base+"events_all_combined.qml")
 
