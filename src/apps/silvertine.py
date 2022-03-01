@@ -904,6 +904,9 @@ def command_detect(args):
                 events_stacking = []
                 process_in_progress = True
                 while process_in_progress is True:
+                    from keras import backend as K
+                    K.clear_session()
+                    model_eqt = eqt_util.load_eqt_model()
                     try:
                         if options.download_method is "stream":
                             time.sleep(options.wait_period-diff)
