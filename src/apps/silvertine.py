@@ -20,6 +20,7 @@ from silvertine.util import ref_mods
 from obspy import read_events
 import obspy.io.seiscomp.event as sc3
 from obspy.io.quakeml.core import _write_quakeml
+from tensorflow.keras import backend as K
 import gc
 try:
     from pyrocko import util, marker, model
@@ -1154,6 +1155,7 @@ def command_detect(args):
                     sc3._write_sc3ml(catalog, store_path_base+"/LI_catalog_SC.qml")
                     _write_quakeml(catalog, store_path_base+"/LI_catalog.qml")
                     gc.collect()
+                    K.clear_session()
                     piled = pile_mod.make_pile()
                             #    qml.dump_xml(filename=store_path_base+"events_all_combined.qml")
 

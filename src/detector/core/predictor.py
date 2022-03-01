@@ -168,7 +168,7 @@ def predict_station(st, args_copy, model):
         dd = pd.read_csv(os.path.join(save_dir,'X_prediction_results.csv'))
         print(' *** Finished the prediction in: {} hours and {} minutes and {} seconds.'.format(hour, minute, round(seconds, 2)), flush=True)
         print(' *** Detected: '+str(len(dd))+' events.', flush=True)
-        K.clear_session()
+        
         with open(os.path.join(save_dir,'X_report.txt'), 'a') as the_file:
             the_file.write('================== Overal Info =============================='+'\n')
             the_file.write('date of report: '+str(datetime.now())+'\n')
