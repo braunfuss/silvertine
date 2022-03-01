@@ -890,7 +890,7 @@ def command_detect(args):
                     piled,
                     path=store_path_stream,
                     fixation_length=options.store_interval,
-                    forget_fixed=True)
+                    forget_fixed=False)
 
                 # Data is downloaded continously after starting the stream
                 if options.download_method is "stream":
@@ -904,11 +904,6 @@ def command_detect(args):
                 events_stacking = []
                 process_in_progress = True
                 while process_in_progress is True:
-                    for source in sources:
-                        source.start()
-                    from keras import backend as K
-                    K.clear_session()
-                    model_eqt = eqt_util.load_eqt_model()
                     try:
                         if options.download_method is "stream":
                             time.sleep(options.wait_period-diff)
@@ -1172,8 +1167,6 @@ def command_detect(args):
                         remove_outdated_wc(store_path_base,
                                            1,
                                            wc="asociation_*")
-                    for source in sources:
-                        source.stop()
 
                     for item in Path(store_path_base+"/downloads/").glob("*"):
                         try:
