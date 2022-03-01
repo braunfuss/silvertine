@@ -9,6 +9,9 @@ import logging
 from optparse import OptionParser, OptionValueError, IndentedHelpFormatter
 from io import StringIO
 import shutil
+import subprocess
+from subprocess import DEVNULL, STDOUT, check_call
+
 class Color:
     PURPLE = "\033[95m"
     CYAN = "\033[96m"
@@ -34,7 +37,8 @@ def remove_outdated_wc(path, factor, scale="minutes", wc="*", factor2=None):
         itemTime = arrow.get(item.stat().st_mtime)
         if itemTime < criticalTime:
             try:
-                os.remove(item.absolute())
+                subprocess.call(['rm','-r'] + [item.absolute()], stdout=DEVNULL, stderr=STDOUT)
+
             except:
                 shutil.rmtree(item.absolute())
 

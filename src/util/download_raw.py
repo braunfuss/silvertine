@@ -1,6 +1,7 @@
 from pyrocko.client import fdsn
 from pyrocko import util, io, trace, model
 import subprocess
+from subprocess import DEVNULL, STDOUT, check_call
 import os
 import time as timemod
 import numpy as num
@@ -124,4 +125,4 @@ def download_raw(path, tmint, tmaxt, seiger=True, selection=None,
                 provider = "bgr"
             if provider == "http://ws.gpi.kit.edu":
                 provider = "kit"
-            subprocess.run(['rm -r %s*' % (path+'/traces_%s.mseed' % provider)], shell=True)
+            subprocess.run(['rm -r %s*' % (path+'/traces_%s.mseed' % provider)], shell=True, stdout=DEVNULL, stderr=STDOUT)

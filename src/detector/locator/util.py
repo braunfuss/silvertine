@@ -3,6 +3,8 @@ import shutil
 import logging
 import numpy as num
 from pyrocko import orthodrome
+import subprocess
+from subprocess import DEVNULL, STDOUT, check_call
 
 logger = logging.getLogger('Silvertine_locator.util')
 
@@ -83,19 +85,17 @@ def filter_oob(sources, targets, config):
         sources.pop(i)
         # del sources[i]
     _d = [t.distance_to(s) for t in targets for s in sources]
-    print(max(_d))
-    print(min(_d))
+
     _d = [s.depth+t.elevation for t in targets for s in sources]
-    print(min(_d))
-    print(max(_d))
     return sources
+
 
 def delete_if_exists(dir_or_file):
     '''Deletes `dir_or_file` if exists'''
     if os.path.exists(dir_or_file):
         if os.path.isfile(dir_or_file):
             logger.debug('deleting file: %s' % dir_or_file)
-            os.remove(dir_or_file)
+            subprocess.call(['rm','-r'] + [dir_or_file], stdout=DEVNULL, stderr=STDOUT)
         else:
             logger.debug('deleting directory: %s' % dir_or_file)
             shutil.rmtree(dir_or_file)
