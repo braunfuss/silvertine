@@ -344,7 +344,6 @@ def main(args=None):
         die("No such subcommand: %s" % command)
 
 
-
 def magnitude_range(option, opt_str, value, parser):
     mag_range = value.split("-")
     if len(mag_range) != 2:
@@ -419,6 +418,7 @@ def command_monitor(args):
     stream.live_steam(adresses=options.adresses, paths=options.paths,
                       delay=options.delay,
                       save=options.save)
+
 
 def command_locate(args):
     def setup(parser):
@@ -890,7 +890,7 @@ def command_detect(args):
                     piled,
                     path=store_path_stream,
                     fixation_length=options.store_interval,
-                    forget_fixed=False)
+                    forget_fixed=True)
 
                 # Data is downloaded continously after starting the stream
                 if options.download_method is "stream":
@@ -903,6 +903,17 @@ def command_detect(args):
                 events_eqt = []
                 events_stacking = []
                 process_in_progress = True
+                config_path = options.config
+                config = lassie.read_config(config_path)
+                fine_detection = False
+                if options.tmin is not None:
+                    tmin_override = util.stt(options.tmin)
+                else:
+                    tmin_override = None
+                if options.tmax is not None:
+                    tmax_override = util.stt(options.tmax)
+                else:
+                    tmax_override = None
                 while process_in_progress is True:
                     try:
                         if options.download_method is "stream":
@@ -912,33 +923,22 @@ def command_detect(args):
                         for source in sources:
                             source.stop()
                         pass
+
                     if options.download_method is "stream":
                         for source in sources:
                             trs = source.poll()
                             for tr in trs:
                                 _injector.inject(tr)
+                        print(len(trs))
+                        print(_injector.__sizeof__())
+
                     start = time.time()
-                    config_path = options.config
-                    config = lassie.read_config(config_path)
-                    fine_detection = False
-                    if fine_detection is True:
-                        config_fine = lassie.read_config(config_path+"_fine")
-                    #pool = Pool(processes=2)
-                    ray.shutdown()
-                    if options.tmin is not None:
-                        tmin_override = util.stt(options.tmin)
-                    else:
-                        tmin_override = None
-                    if options.tmax is not None:
-                        tmax_override = util.stt(options.tmax)
-                    else:
-                        tmax_override = None
                     target = lassie.search(config,
-                                                   override_tmin=tmin_override,
-                                                   override_tmax=tmax_override,
-                                                   force=True,
-                                                   show_detections=True,
-                                                   nparallel=10)
+                                           override_tmin=tmin_override,
+                                           override_tmax=tmax_override,
+                                           force=True,
+                                           show_detections=True,
+                                           nparallel=10)
                     detector.picker.main(
                         store_path_base,
                         tmin=options.tmin,
@@ -962,8 +962,6 @@ def command_detect(args):
                     )
                     end = time.time()
                     diff = end - start
-                    # if detection make fine location and output here
-
                     try:
                         try:
                             events_stacking = model.load_events(store_path_base+"stacking_events.pf")
@@ -1042,6 +1040,7 @@ def command_detect(args):
                             except:
                                 pass
                     catalog = read_events(store_path_base+"/LI_catalog.qml")
+                    event_name = None
                     for event_stack in events_stacking:
                         for event_eqt in events_eqt:
                             phase_markers = []
@@ -1113,49 +1112,50 @@ def command_detect(args):
                                                     except:
                                                         pass
                                             PhaseMarker.save_markers(phase_markers, savedir+"/phases_res.pym", fdigits=3)
-                                marker_file = savedir+'/phases_res.pym'
-                            #    gf_stores_path = "/media/asteinbe/aki/seiger-data/data_single/grond/gf_stores"
-                                scenario_dir = savedir
-                            #    config_path = '/media/asteinbe/aki/seiger-data/data_single/grond/grond.conf'
-                            #    stations_path = '/media/asteinbe/aki/seiger-data/stations_landau.txt'
-                                gf_stores_path = options.ttt_path
-                                config_path = options.config_grond
-                                stations_path = store_path_base+options.stations_file
-                                best = locate(marker_file, gf_stores_path, scenario_dir, config_path, stations_path, event_name)
-                                lat, lon = ort.ne_to_latlon(best.lat, best.lon, best.north_shift, best.east_shift)
-                                evqml.preferred_origin.latitude = quakeml.RealQuantity(value=float(lat))
-                                evqml.preferred_origin.longitude = quakeml.RealQuantity(value=float(lon))
-                                evqml.preferred_origin.time = quakeml.TimeQuantity(value=best.time)
-                                evqml.preferred_origin.depth = quakeml.RealQuantity(value=best.depth)
-                                public_id = "quakeml:seiger/"+ str(int(float(event_stack.name.split()[1].replace(')','').replace('(',''))))+"_"+str(best.time)
-                                event_marker.lat = lat
-                                event_marker.lon = lon
-                                event_marker.depth = best.depth
-                                event_marker.time = best.time
-                                model.dump_events([event_marker], savedir+"/event.pf")
+                                if event_name is not None:
+                                    marker_file = savedir+'/phases_res.pym'
+                                #    gf_stores_path = "/media/asteinbe/aki/seiger-data/data_single/grond/gf_stores"
+                                    scenario_dir = savedir
+                                #    config_path = '/media/asteinbe/aki/seiger-data/data_single/grond/grond.conf'
+                                #    stations_path = '/media/asteinbe/aki/seiger-data/stations_landau.txt'
+                                    gf_stores_path = options.ttt_path
+                                    config_path = options.config_grond
+                                    stations_path = store_path_base+options.stations_file
+                                    best = locate(marker_file, gf_stores_path, scenario_dir, config_path, stations_path, event_name)
+                                    lat, lon = ort.ne_to_latlon(best.lat, best.lon, best.north_shift, best.east_shift)
+                                    evqml.preferred_origin.latitude = quakeml.RealQuantity(value=float(lat))
+                                    evqml.preferred_origin.longitude = quakeml.RealQuantity(value=float(lon))
+                                    evqml.preferred_origin.time = quakeml.TimeQuantity(value=best.time)
+                                    evqml.preferred_origin.depth = quakeml.RealQuantity(value=best.depth)
+                                    public_id = "quakeml:seiger/" + str(int(float(event_stack.name.split()[1].replace(')','').replace('(',''))))+"_"+str(best.time)
+                                    event_marker.lat = lat
+                                    event_marker.lon = lon
+                                    event_marker.depth = best.depth
+                                    event_marker.time = best.time
+                                    model.dump_events([event_marker], savedir+"/event.pf")
 
-                                evqml.public_id = public_id
-                                for pick in evqml.pick_list:
-                                    rand = pick.public_id[-5]
-                                    pick.public_id = public_id+"_"+rand+"_"+pick.phase_hint.value
-                                    arrival = quakeml.Arrival(public_id = pick.public_id+"_arrival", pick_id = pick.public_id, phase=quakeml.Phase(value=pick.phase_hint.value))
-                                    evqml.origin_list[0].arrival_list.append(arrival)
-                                evqml.preferred_origin_id = public_id+"_"+rand+"O"
-                                evqml.origin_list[0].public_id = public_id+"_"+rand+"O"
-                                qml.event_parameters.event_list = [evqml]
+                                    evqml.public_id = public_id
+                                    for pick in evqml.pick_list:
+                                        rand = pick.public_id[-5]
+                                        pick.public_id = public_id+"_"+rand+"_"+pick.phase_hint.value
+                                        arrival = quakeml.Arrival(public_id = pick.public_id+"_arrival", pick_id = pick.public_id, phase=quakeml.Phase(value=pick.phase_hint.value))
+                                        evqml.origin_list[0].arrival_list.append(arrival)
+                                    evqml.preferred_origin_id = public_id+"_"+rand+"O"
+                                    evqml.origin_list[0].public_id = public_id+"_"+rand+"O"
+                                    qml.event_parameters.event_list = [evqml]
 
-                                qml.dump_xml(filename=savedir+"event_combined.qml")
-                                evs = read_events(savedir+"event_combined.qml")
-                                for ev in evs:
-                                    if len(ev.picks)>2:
-                                        catalog.append(ev)
-                                    sc3._write_sc3ml(evs, store_path_reader+"/LI_SC_%s.qml" % best.time)
-                                    _write_quakeml(evs, store_path_reader+"/LI_%s.qml" % best.time)
+                                    qml.dump_xml(filename=savedir+"event_combined.qml")
+                                    evs = read_events(savedir+"event_combined.qml")
+                                    for ev in evs:
+                                        if len(ev.picks) > 2:
+                                            catalog.append(ev)
+                                        sc3._write_sc3ml(evs, store_path_reader+"/LI_SC_%s.qml" % best.time)
+                                        _write_quakeml(evs, store_path_reader+"/LI_%s.qml" % best.time)
                     sc3._write_sc3ml(catalog, store_path_base+"/LI_catalog_SC.qml")
                     _write_quakeml(catalog, store_path_base+"/LI_catalog.qml")
                     gc.collect()
                     piled = pile_mod.make_pile()
-                            #    qml.dump_xml(filename=store_path_base+"events_all_combined.qml")
+                    #    qml.dump_xml(filename=store_path_base+"events_all_combined.qml")
 
                     if options.download_method is "stream":
                         remove_outdated_wc(store_path_base+"/download-tmp",
