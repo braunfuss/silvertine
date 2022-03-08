@@ -752,6 +752,12 @@ def command_detect(args):
             default=None,
             help="begin")
         parser.add_option(
+            "--sds",
+            dest="sds",
+            type=str,
+            default=None,
+            help="sds")
+        parser.add_option(
             "--tmax",
             dest="tmax",
             type=str,
@@ -815,6 +821,12 @@ def command_detect(args):
             default="",
             help="Store path")
         parser.add_option(
+            "--waveform_path",
+            dest="waveform_path",
+            type=str,
+            default="",
+            help="waveform path")
+        parser.add_option(
             "--store_path_reader",
             dest="store_path_reader",
             type=str,
@@ -859,8 +871,12 @@ def command_detect(args):
             pollinjector = None
             tempdir = None
             if options.store_path is not None:
-                store_path_base_down = options.store_path+"download-tmp"
-                store_path_base = options.store_path
+                if options.sds is None:
+                    store_path_base_down = options.waveform_path+"download-tmp"
+                    store_path_base = options.store_path
+                else:
+                    store_path_base_down = options.waveform_path
+                    store_path_base = options.store_path
             else:
                 store_path_base_down = "."
                 store_path_base = "."
@@ -929,16 +945,27 @@ def command_detect(args):
                             trs = source.poll()
                             for tr in trs:
                                 _injector.inject(tr)
-                        print(len(trs))
-                        print(_injector.__sizeof__())
 
                     start = time.time()
+                    if options.sds is not None:
+                        list_sds = options.sds.split(",")
+                        path_waveforms = []
+                        for sd in list_sds:
+                            for st in stations:
+                                for cha in st.channels:
+                                    path_waveforms.append(store_path_base_down+"%s/%s/%s/%s.D/" %(sd, st.network, st.station, cha.name))
+                        config.data_paths = path_waveforms
+
+                    else:
+                        path_waveforms = store_path_base_down
+                        config.data_paths = [path_waveforms]
                     target = lassie.search(config,
                                            override_tmin=tmin_override,
                                            override_tmax=tmax_override,
                                            force=True,
                                            show_detections=True,
                                            nparallel=10)
+                    gc.collect()
                     detector.picker.main(
                         store_path_base,
                         tmin=options.tmin,
@@ -952,7 +979,7 @@ def command_detect(args):
                             "http://eida.bgr.de",
                             "http://ws.gpi.kit.edu",
                             ],
-                        path_waveforms=store_path_base_down,
+                        path_waveforms=path_waveforms,
                         download=options.download,
                         tinc=options.tinc,
                         freq=options.freq,
@@ -960,6 +987,7 @@ def command_detect(args):
                         lf=options.lf,
                         models=[model_eqt],
                     )
+                    gc.collect()
                     end = time.time()
                     diff = end - start
                     try:
