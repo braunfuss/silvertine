@@ -128,6 +128,7 @@ def search(
         force=False,
         stop_after_first=False,
         nparallel=6,
+        save_imax=False,
         bark=False):
 
     fp = config.expand_path
@@ -568,8 +569,8 @@ def search(
 
             tr_stackmax.chop(wmin, wmax)
             tr_stackmax_indx.chop(wmin, wmax)
-
-            io.save([tr_stackmax, tr_stackmax_indx], ifm_path_template)
+            if save_imax is True:
+                io.save([tr_stackmax, tr_stackmax_indx], ifm_path_template)
 
             del frames
         logger.info('end processing time window group: %s - %s' % (

@@ -1006,27 +1006,27 @@ def command_detect(args):
                     for item in Path(store_path_base).glob("asociation_*/events.pf"):
                         events_eqt.extend(model.load_events(item.absolute()))
                     model.dump_events(events_eqt, store_path_base+"eqt_events.pf")
-                    for event in events_stacking:
-                        savedir = store_path_base + '/stacking_detections/' + str(event.time) + '/'
-                        if not os.path.exists(savedir):
-                            os.makedirs(savedir)
-                            os.makedirs(savedir+"figures_stacking")
-                        for item in Path(config.path_prefix+"/"+config.run_path+"/figures").glob("*"):
-                            try:
-                                time_item = util.stt(str(item.absolute())[-27:-17]+" "+str(item.absolute())[-16:-4])
-                                if event.time-6 < time_item and event.time+6 > time_item:
-                                    os.system("cp %s %s" % (item.absolute(), savedir+"figures_stacking"))
-                                    plot_waveforms = False
-                                    if plot_waveforms is True:
-                                        pile_event = pile.make_pile(store_path_base_down+"download-tmp", show_progress=False)
-                                        for traces in pile_event.chopper(tmin=event.time-10,
-                                                                         tmax=event.time+10,
-                                                                         keep_current_files_open=False,
-                                                                         want_incomplete=True):
-                                            waveform.plot_waveforms(traces, event, stations,
-                                                                    savedir, None)
-                            except:
-                                pass
+                    # for event in events_stacking:
+                    #     savedir = store_path_base + '/stacking_detections/' + str(event.time) + '/'
+                    #     if not os.path.exists(savedir):
+                    #         os.makedirs(savedir)
+                    #         os.makedirs(savedir+"figures_stacking")
+                    #     for item in Path(config.path_prefix+"/"+config.run_path+"/figures").glob("*"):
+                    #         try:
+                    #             time_item = util.stt(str(item.absolute())[-27:-17]+" "+str(item.absolute())[-16:-4])
+                    #             if event.time-6 < time_item and event.time+6 > time_item:
+                    #                 os.system("cp %s %s" % (item.absolute(), savedir+"figures_stacking"))
+                    #                 plot_waveforms = False
+                    #                 if plot_waveforms is True:
+                    #                     pile_event = pile.make_pile(store_path_base_down+"download-tmp", show_progress=False)
+                    #                     for traces in pile_event.chopper(tmin=event.time-10,
+                    #                                                      tmax=event.time+10,
+                    #                                                      keep_current_files_open=False,
+                    #                                                      want_incomplete=True):
+                    #                         waveform.plot_waveforms(traces, event, stations,
+                    #                                                 savedir, None)
+                    #         except:
+                    #             pass
                     phase_markers_collected = []
                     for event in events_eqt:
                         savedir = store_path_base + '/eqt_detections/' + str(event.time) + '/'

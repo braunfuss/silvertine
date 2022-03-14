@@ -54,7 +54,7 @@ def preprocess(path, tmin="2016-02-12 06:20:03.800",
     preprocessor(preproc_dir=pre_proc_basepath,
                  mseed_dir=downloads_basepath,
                  stations_json=json_basepath,
-                 overlap=0.55,
+                 overlap=0.65,
                  n_processor=6)
 
 
@@ -148,6 +148,7 @@ def iter_chunked(tinc, path, data_pile, tmin=None,
                  channels=["EH"+"[ZNE]"], client_list=["BGR"],
                  download=True, seiger=True, selection=None,
                  path_waveforms=None,
+                 sds=None,
                  stream=False,
                  reject_blacklisted=None, tpad=0,
                  tstart=None, tstop=None,
@@ -158,7 +159,6 @@ def iter_chunked(tinc, path, data_pile, tmin=None,
     except:
         pass
     model_path = os.path.dirname(os.path.abspath(__file__))+"/model/EqT_model.h5"
-
     deltat_cf = min(data_pile.deltats.keys())
     for i, trs in enumerate(data_pile.chopper(tinc=tinc, tmin=tstart,
                                               tmax=tstop, tpad=tpad,
@@ -198,7 +198,7 @@ def iter_chunked(tinc, path, data_pile, tmin=None,
                 minlon=minlon, maxlon=maxlon, channels=channels,
                 client_list=client_list, download=download, seiger=seiger,
                 selection=selection, path_waveforms=path_waveforms,
-                stream=stream, model=None, iter=i, models=models)
+                stream=stream, model=None, iter=i, models=models, sds=None)
         for tr in trs:
             subprocess.run(["rm -r %s/downloads/%s/%s.%s..%s__%s__%s.mseed" %(path, tr.station, tr.network, tr.station, tr.channel, date_min, date_max)], shell=True)
 
@@ -227,16 +227,19 @@ def load_eqt_folder(data_paths, tinc, path, tmin="2021-05-26 06:20:03.800",
                     channels=["EH"+"[ZNE]"], client_list=["BGR"],
                     download=True, seiger=True, selection=None,
                     path_waveforms=None,
+                    sds=None,
                     stream=False,
                     data_format='mseed', deltat_want=100,
                     tstart=None, tstop=None, hf=8, lf=2, models=[]):
     data_pile = pile.make_pile(data_paths, fileformat=data_format, show_progress=False)
+
     iter_chunked(tinc, path, data_pile, tmin=tmin, tmax=tmax, minlat=minlat,
                  maxlat=maxlat,
                  minlon=minlon, maxlon=maxlon, channels=channels,
                  client_list=client_list, download=download, seiger=seiger,
                  selection=selection, path_waveforms=path_waveforms,
                  stream=stream,
+                 sds=sds,
                  reject_blacklisted=None, tpad=0,
                  tstart=None, tstop=None, hf=hf,
                  lf=lf, models=models)
@@ -249,6 +252,7 @@ def process(path, tmin="2021-05-26 06:20:03.800",
             channels=["EH"+"[ZNE]"], client_list=["BGR"],
             download=True, seiger=True, selection=None,
             path_waveforms=None, model=None,
+            sds=None,
             stream=False, iter=None, models=None):
 
     if iter is None:
@@ -284,7 +288,7 @@ def main(path, tmin="2021-05-26 06:20:03.800",
                                                "http://ws.gpi.kit.edu/"],
          download=True, seiger=True, selection=None, clean=False,
          stream=False, path_waveforms=None, tinc=None,
-         lf=5, hf=40, freq=None, models=None):
+         lf=5, hf=40, freq=None, models=None, sds=None):
 
     if download is True:
         if tinc is None:
@@ -323,15 +327,14 @@ def main(path, tmin="2021-05-26 06:20:03.800",
 
                 iter =+ 1
 
-
-    if path_waveforms is not None:
+    if path_waveforms is not None or sds is not None:
         load_eqt_folder(path_waveforms, tinc, path, tmin=tmin, tmax=tmax,
                         minlat=minlat, maxlat=maxlat,
                         minlon=minlon, maxlon=maxlon, channels=channels,
                         client_list=client_list, download=download,
                         seiger=seiger,
                         selection=selection,
-                        stream=stream, hf=hf, lf=lf, models=models)
+                        stream=stream, hf=hf, lf=lf, models=models, sds=sds)
     else:
         process(path, tmin=tmin, tmax=tmax, minlat=minlat, maxlat=maxlat,
                 minlon=minlon, maxlon=maxlon, channels=channels,
