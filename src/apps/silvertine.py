@@ -22,6 +22,11 @@ import obspy.io.seiscomp.event as sc3
 from obspy.io.quakeml.core import _write_quakeml
 from tensorflow.keras import backend as K
 import gc
+import threading
+from silvertine.locate.grond import locate
+
+# from gevent import monkey
+# monkey.patch_all()
 try:
     from pyrocko import util, marker, model
     from pyrocko import pile as pile_mod
@@ -700,6 +705,38 @@ def command_collect_detections(args):
             events_collected.extend(events)
 
 
+def command_locate_with_grond(marker_file, gf_stores_path, scenario_dir, config_path, stations_path, event_name, evqml, qml, event_stack, event_marker, savedir, store_path_reader):
+    best = locate(marker_file, gf_stores_path, scenario_dir, config_path, stations_path, event_name)
+
+    lat, lon = ort.ne_to_latlon(best.lat, best.lon, best.north_shift, best.east_shift)
+    evqml.preferred_origin.latitude = quakeml.RealQuantity(value=float(lat))
+    evqml.preferred_origin.longitude = quakeml.RealQuantity(value=float(lon))
+    evqml.preferred_origin.time = quakeml.TimeQuantity(value=best.time)
+    evqml.preferred_origin.depth = quakeml.RealQuantity(value=best.depth)
+    public_id = "quakeml:seiger/" + str(int(float(event_stack.name.split()[1].replace(')','').replace('(',''))))+"_"+str(best.time)
+    event_marker.lat = lat
+    event_marker.lon = lon
+    event_marker.depth = best.depth
+    event_marker.time = best.time
+    model.dump_events([event_marker], savedir+"/event.pf")
+
+    evqml.public_id = public_id
+    for pick in evqml.pick_list:
+        rand = pick.public_id[-5]
+        pick.public_id = public_id+"_"+rand+"_"+pick.phase_hint.value
+        arrival = quakeml.Arrival(public_id = pick.public_id+"_arrival", pick_id = pick.public_id, phase=quakeml.Phase(value=pick.phase_hint.value))
+        evqml.origin_list[0].arrival_list.append(arrival)
+    evqml.preferred_origin_id = public_id+"_"+rand+"O"
+    evqml.origin_list[0].public_id = public_id+"_"+rand+"O"
+    qml.event_parameters.event_list = [evqml]
+
+    qml.dump_xml(filename=savedir+"event_combined.qml")
+    evs = read_events(savedir+"event_combined.qml")
+    for ev in evs:
+        sc3._write_sc3ml(evs, store_path_reader+"/LI_SC_%s.qml" % best.time)
+        _write_quakeml(evs, store_path_reader+"/LI_%s.qml" % best.time)
+
+
 def command_detect(args):
     from silvertine import detector, locate
     from silvertine import seiger_lassie as lassie
@@ -959,34 +996,34 @@ def command_detect(args):
                     else:
                         path_waveforms = store_path_base_down
                         config.data_paths = [path_waveforms]
-                    target = lassie.search(config,
-                                           override_tmin=tmin_override,
-                                           override_tmax=tmax_override,
-                                           force=True,
-                                           show_detections=True,
-                                           nparallel=10)
-                    gc.collect()
-                    detector.picker.main(
-                        store_path_base,
-                        tmin=options.tmin,
-                        tmax=options.tmax,
-                        minlat=49.0,
-                        maxlat=49.979,
-                        minlon=7.9223,
-                        maxlon=8.9723,
-                        channels=["EH" + "[ZNE]"],
-                        client_list=[
-                            "http://eida.bgr.de",
-                            "http://ws.gpi.kit.edu",
-                            ],
-                        path_waveforms=path_waveforms,
-                        download=options.download,
-                        tinc=options.tinc,
-                        freq=options.freq,
-                        hf=options.hf,
-                        lf=options.lf,
-                        models=[model_eqt],
-                    )
+                    # target = lassie.search(config,
+                    #                        override_tmin=tmin_override,
+                    #                        override_tmax=tmax_override,
+                    #                        force=True,
+                    #                        show_detections=True,
+                    #                        nparallel=10)
+                    # gc.collect()
+                    # detector.picker.main(
+                    #     store_path_base,
+                    #     tmin=options.tmin,
+                    #     tmax=options.tmax,
+                    #     minlat=49.0,
+                    #     maxlat=49.979,
+                    #     minlon=7.9223,
+                    #     maxlon=8.9723,
+                    #     channels=["EH" + "[ZNE]"],
+                    #     client_list=[
+                    #         "http://eida.bgr.de",
+                    #         "http://ws.gpi.kit.edu",
+                    #         ],
+                    #     path_waveforms=path_waveforms,
+                    #     download=options.download,
+                    #     tinc=options.tinc,
+                    #     freq=options.freq,
+                    #     hf=options.hf,
+                    #     lf=options.lf,
+                    #     models=[model_eqt],
+                    # )
                     gc.collect()
                     end = time.time()
                     diff = end - start
@@ -1077,7 +1114,6 @@ def command_detect(args):
                                 savedir = store_path_base + '/combined_detections/' + util.tts(event_stack.time) + '/'
                                 if not os.path.exists(savedir):
                                     os.makedirs(savedir)
-                                from silvertine.locate.grond import locate
                                 for item in Path(store_path_base+"/").glob("asociation_*/associations.xml"):
                                     qml = quakeml.QuakeML.load_xml(filename=item)
                                     events_qml = qml.get_pyrocko_events()
@@ -1149,40 +1185,47 @@ def command_detect(args):
                                     gf_stores_path = options.ttt_path
                                     config_path = options.config_grond
                                     stations_path = store_path_base+options.stations_file
-                                    best = locate(marker_file, gf_stores_path, scenario_dir, config_path, stations_path, event_name)
-                                    lat, lon = ort.ne_to_latlon(best.lat, best.lon, best.north_shift, best.east_shift)
-                                    evqml.preferred_origin.latitude = quakeml.RealQuantity(value=float(lat))
-                                    evqml.preferred_origin.longitude = quakeml.RealQuantity(value=float(lon))
-                                    evqml.preferred_origin.time = quakeml.TimeQuantity(value=best.time)
-                                    evqml.preferred_origin.depth = quakeml.RealQuantity(value=best.depth)
-                                    public_id = "quakeml:seiger/" + str(int(float(event_stack.name.split()[1].replace(')','').replace('(',''))))+"_"+str(best.time)
-                                    event_marker.lat = lat
-                                    event_marker.lon = lon
-                                    event_marker.depth = best.depth
-                                    event_marker.time = best.time
-                                    model.dump_events([event_marker], savedir+"/event.pf")
+                                    if options.download_method is "stream":
+                                        thread = threading.Thread(target=command_locate_with_grond, args=(marker_file, gf_stores_path, scenario_dir, config_path, stations_path, event_name, evqml, qml, event_stack, event_marker, savedir, store_path_reader))
+                                        thread.start()
+                                    else:
+                                        best = locate(marker_file, gf_stores_path, scenario_dir, config_path, stations_path, event_name)
 
-                                    evqml.public_id = public_id
-                                    for pick in evqml.pick_list:
-                                        rand = pick.public_id[-5]
-                                        pick.public_id = public_id+"_"+rand+"_"+pick.phase_hint.value
-                                        arrival = quakeml.Arrival(public_id = pick.public_id+"_arrival", pick_id = pick.public_id, phase=quakeml.Phase(value=pick.phase_hint.value))
-                                        evqml.origin_list[0].arrival_list.append(arrival)
-                                    evqml.preferred_origin_id = public_id+"_"+rand+"O"
-                                    evqml.origin_list[0].public_id = public_id+"_"+rand+"O"
-                                    qml.event_parameters.event_list = [evqml]
+                                        lat, lon = ort.ne_to_latlon(best.lat, best.lon, best.north_shift, best.east_shift)
+                                        evqml.preferred_origin.latitude = quakeml.RealQuantity(value=float(lat))
+                                        evqml.preferred_origin.longitude = quakeml.RealQuantity(value=float(lon))
+                                        evqml.preferred_origin.time = quakeml.TimeQuantity(value=best.time)
+                                        evqml.preferred_origin.depth = quakeml.RealQuantity(value=best.depth)
+                                        public_id = "quakeml:seiger/" + str(int(float(event_stack.name.split()[1].replace(')','').replace('(',''))))+"_"+str(best.time)
+                                        event_marker.lat = lat
+                                        event_marker.lon = lon
+                                        event_marker.depth = best.depth
+                                        event_marker.time = best.time
+                                        model.dump_events([event_marker], savedir+"/event.pf")
 
-                                    qml.dump_xml(filename=savedir+"event_combined.qml")
-                                    evs = read_events(savedir+"event_combined.qml")
-                                    for ev in evs:
-                                        if len(ev.picks) > 2:
-                                            catalog.append(ev)
-                                        sc3._write_sc3ml(evs, store_path_reader+"/LI_SC_%s.qml" % best.time)
-                                        _write_quakeml(evs, store_path_reader+"/LI_%s.qml" % best.time)
+                                        evqml.public_id = public_id
+                                        for pick in evqml.pick_list:
+                                            rand = pick.public_id[-5]
+                                            pick.public_id = public_id+"_"+rand+"_"+pick.phase_hint.value
+                                            arrival = quakeml.Arrival(public_id = pick.public_id+"_arrival", pick_id = pick.public_id, phase=quakeml.Phase(value=pick.phase_hint.value))
+                                            evqml.origin_list[0].arrival_list.append(arrival)
+                                        evqml.preferred_origin_id = public_id+"_"+rand+"O"
+                                        evqml.origin_list[0].public_id = public_id+"_"+rand+"O"
+                                        qml.event_parameters.event_list = [evqml]
+
+                                        qml.dump_xml(filename=savedir+"event_combined.qml")
+                                        evs = read_events(savedir+"event_combined.qml")
+                                        for ev in evs:
+                                            if len(ev.picks) > 2:
+                                                catalog.append(ev)
+                                            sc3._write_sc3ml(evs, store_path_reader+"/LI_SC_%s.qml" % best.time)
+                                            _write_quakeml(evs, store_path_reader+"/LI_%s.qml" % best.time)
+
                     sc3._write_sc3ml(catalog, store_path_base+"/LI_catalog_SC.qml")
                     _write_quakeml(catalog, store_path_base+"/LI_catalog.qml")
                     gc.collect()
                     piled = pile_mod.make_pile()
+
                     #    qml.dump_xml(filename=store_path_base+"events_all_combined.qml")
 
                     if options.download_method is "stream":
