@@ -23,7 +23,7 @@ from obspy.io.quakeml.core import _write_quakeml
 from tensorflow.keras import backend as K
 import gc
 import threading
-from silvertine.locate.grond import locate
+from silvertine.locate.grond import locate as glocate
 
 # from gevent import monkey
 # monkey.patch_all()
@@ -706,7 +706,7 @@ def command_collect_detections(args):
 
 
 def command_locate_with_grond(marker_file, gf_stores_path, scenario_dir, config_path, stations_path, event_name, evqml, qml, event_stack, event_marker, savedir, store_path_reader):
-    best = locate(marker_file, gf_stores_path, scenario_dir, config_path, stations_path, event_name)
+    best = glocate(marker_file, gf_stores_path, scenario_dir, config_path, stations_path, event_name)
 
     lat, lon = ort.ne_to_latlon(best.lat, best.lon, best.north_shift, best.east_shift)
     evqml.preferred_origin.latitude = quakeml.RealQuantity(value=float(lat))
@@ -1189,7 +1189,7 @@ def command_detect(args):
                                         thread = threading.Thread(target=command_locate_with_grond, args=(marker_file, gf_stores_path, scenario_dir, config_path, stations_path, event_name, evqml, qml, event_stack, event_marker, savedir, store_path_reader))
                                         thread.start()
                                     else:
-                                        best = locate(marker_file, gf_stores_path, scenario_dir, config_path, stations_path, event_name)
+                                        best = glocate(marker_file, gf_stores_path, scenario_dir, config_path, stations_path, event_name)
 
                                         lat, lon = ort.ne_to_latlon(best.lat, best.lon, best.north_shift, best.east_shift)
                                         evqml.preferred_origin.latitude = quakeml.RealQuantity(value=float(lat))
