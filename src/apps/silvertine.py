@@ -996,34 +996,34 @@ def command_detect(args):
                     else:
                         path_waveforms = store_path_base_down
                         config.data_paths = [path_waveforms]
-                    # target = lassie.search(config,
-                    #                        override_tmin=tmin_override,
-                    #                        override_tmax=tmax_override,
-                    #                        force=True,
-                    #                        show_detections=True,
-                    #                        nparallel=10)
-                    # gc.collect()
-                    # detector.picker.main(
-                    #     store_path_base,
-                    #     tmin=options.tmin,
-                    #     tmax=options.tmax,
-                    #     minlat=49.0,
-                    #     maxlat=49.979,
-                    #     minlon=7.9223,
-                    #     maxlon=8.9723,
-                    #     channels=["EH" + "[ZNE]"],
-                    #     client_list=[
-                    #         "http://eida.bgr.de",
-                    #         "http://ws.gpi.kit.edu",
-                    #         ],
-                    #     path_waveforms=path_waveforms,
-                    #     download=options.download,
-                    #     tinc=options.tinc,
-                    #     freq=options.freq,
-                    #     hf=options.hf,
-                    #     lf=options.lf,
-                    #     models=[model_eqt],
-                    # )
+                    target = lassie.search(config,
+                                           override_tmin=tmin_override,
+                                           override_tmax=tmax_override,
+                                           force=True,
+                                           show_detections=True,
+                                           nparallel=10)
+                    gc.collect()
+                    detector.picker.main(
+                        store_path_base,
+                        tmin=options.tmin,
+                        tmax=options.tmax,
+                        minlat=49.0,
+                        maxlat=49.979,
+                        minlon=7.9223,
+                        maxlon=8.9723,
+                        channels=["EH" + "[ZNE]"],
+                        client_list=[
+                            "http://eida.bgr.de",
+                            "http://ws.gpi.kit.edu",
+                            ],
+                        path_waveforms=path_waveforms,
+                        download=options.download,
+                        tinc=options.tinc,
+                        freq=options.freq,
+                        hf=options.hf,
+                        lf=options.lf,
+                        models=[model_eqt],
+                    )
                     gc.collect()
                     end = time.time()
                     diff = end - start
