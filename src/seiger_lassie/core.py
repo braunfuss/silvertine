@@ -163,8 +163,7 @@ def search(
     data_paths = fp(config.data_paths)
     for data_path in fp(data_paths):
         if not op.exists(data_path):
-            raise common.LassieError(
-                'waveform data path does not exist: %s' % data_path)
+            pass
 
     p = pile.make_pile(data_paths, fileformat='detect')
     if p.is_empty():
