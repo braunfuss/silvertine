@@ -984,6 +984,7 @@ def command_detect(args):
                                 _injector.inject(tr)
 
                     start = time.time()
+                    store_path_LE = "/diskb/steinberg/seiger-data"
                     if options.sds is not None:
                         list_sds = options.sds.split(",")
                         path_waveforms = []
@@ -991,6 +992,9 @@ def command_detect(args):
                             for st in stations:
                                 for cha in st.channels:
                                     path_waveforms.append(store_path_base_down+"%s/%s/%s/%s.D/" %(sd, st.network, st.station, cha.name))
+                                    if int(sd) <= 2020:
+                                        path_waveforms.append(store_path_LE+"/%s/" %(sd))
+
                         config.data_paths = path_waveforms
 
                     else:
