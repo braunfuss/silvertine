@@ -135,13 +135,13 @@ def search(
 
     run_path = fp(config.run_path)
 
-    if op.exists(run_path):
-        if force:
-            shutil.rmtree(run_path)
-        else:
-            raise common.LassieError(
-                'run directory already exists: %s' %
-                run_path)
+    # if op.exists(run_path):
+    #     if force:
+    #         shutil.rmtree(run_path)
+    #     else:
+    #         raise common.LassieError(
+    #             'run directory already exists: %s' %
+    #             run_path)
 
     util.ensuredir(run_path)
 
