@@ -895,14 +895,14 @@ def command_detect(args):
             default="stations_landau.txt",
             help="Pyrocko format station file")
     parser, options, args = cl_parse("detect", args, setup)
-    if options.mode == "both":
+    if options.mode == "both" or options.mode == "eqt":
         from silvertine.util import eqt_util
         model_eqt = eqt_util.load_eqt_model()
     else:
         model_eqt = []
     if options.apply_residuals is True:
         residuals = ref_mods.insheim_i1_layered_model_residuals()
-    if options.mode == "both":
+    if options.mode == "both" or options.mode == "eqt":
             piled = pile_mod.make_pile()
             sources_list = options.sources_list  # seedlink sources
             pollinjector = None
@@ -1000,13 +1000,14 @@ def command_detect(args):
                     else:
                         path_waveforms = store_path_base_down
                         config.data_paths = [path_waveforms]
-                    target = lassie.search(config,
-                                           override_tmin=tmin_override,
-                                           override_tmax=tmax_override,
-                                           force=True,
-                                           show_detections=True,
-                                           nparallel=10)
-                    gc.collect()
+                    if options.mode == "both":
+                        target = lassie.search(config,
+                                               override_tmin=tmin_override,
+                                               override_tmax=tmax_override,
+                                               force=True,
+                                               show_detections=True,
+                                               nparallel=10)
+                        gc.collect()
                     detector.picker.main(
                         store_path_base,
                         tmin=options.tmin,
