@@ -840,6 +840,12 @@ def command_detect(args):
             default=True,
             help="apply_residuals",)
         parser.add_option(
+            "--seiger",
+            dest="seiger",
+            type=str,
+            default=True,
+            help="seiger",)
+        parser.add_option(
             "--hf",
             dest="hf",
             type=float,
@@ -982,18 +988,18 @@ def command_detect(args):
                             trs = source.poll()
                             for tr in trs:
                                 _injector.inject(tr)
-
                     start = time.time()
-                    store_path_LE = "/diskb/steinberg/seiger-data"
-                    if options.sds is not None:
-                        list_sds = options.sds.split(",")
-                        path_waveforms = []
-                        for sd in list_sds:
-                            for st in stations:
-                                for cha in st.channels:
-                                    path_waveforms.append(store_path_base_down+"%s/%s/%s/%s.D/" %(sd, st.network, st.station, cha.name))
-                            if int(sd) <= 2020:
-                                path_waveforms.append(store_path_LE+"/%s/" %(sd))
+                    if options.seiger is True:
+                        store_path_LE = "/diskb/steinberg/seiger-data"
+                        if options.sds is not None:
+                            list_sds = options.sds.split(",")
+                            path_waveforms = []
+                            for sd in list_sds:
+                                for st in stations:
+                                    for cha in st.channels:
+                                        path_waveforms.append(store_path_base_down+"%s/%s/%s/%s.D/" %(sd, st.network, st.station, cha.name))
+                                if int(sd) <= 2020:
+                                    path_waveforms.append(store_path_LE+"/%s/" %(sd))
 
                         config.data_paths = path_waveforms
 
@@ -1042,13 +1048,7 @@ def command_detect(args):
                         model.dump_events(events_stacking, store_path_base+"stacking_events.pf")
                     except:
                         pass
-                    try:
-                        events_eqt = model.load_events(store_path_base+"eqt_events.pf")
-                    except:
-                        events_eqt = []
-                    for item in Path(store_path_base).glob("asociation_*/events.pf"):
-                        events_eqt.extend(model.load_events(item.absolute()))
-                    model.dump_events(events_eqt, store_path_base+"eqt_events.pf")
+
                     # for event in events_stacking:
                     #     savedir = store_path_base + '/stacking_detections/' + str(event.time) + '/'
                     #     if not os.path.exists(savedir):
@@ -1070,169 +1070,176 @@ def command_detect(args):
                     #                                                 savedir, None)
                     #         except:
                     #             pass
-                    phase_markers_collected = []
-                    for event in events_eqt:
-                        savedir = store_path_base + '/eqt_detections/' + str(event.time) + '/'
-                        if not os.path.exists(savedir):
-                            os.makedirs(savedir)
-                            os.makedirs(savedir+"figures_eqt")
-                        for item in Path(store_path_base+"/").glob("asociation_*/associations.xml"):
+                    try:
+                        events_eqt = model.load_events(store_path_base+"eqt_events.pf")
+                    except:
+                        events_eqt = []
+                    if options.mode == "both" or options.mode == "eqt":
 
-                            qml = quakeml.QuakeML.load_xml(filename=item)
-                            events_qml = qml.get_pyrocko_events()
-                            components = ["*"]
-                            for i, eq in enumerate(events_qml):
-                                if event.time == eq.time:
-                                    phase_markers = []
-                                    evqml = qml.get_events()[i]
-                                    phase_markers_qml = evqml.get_pyrocko_phase_markers()
-                                    for phase_marker in phase_markers_qml:
-                                        for component in components:
-                                            d = phase_marker.copy()
-                                            nsl = list(d.nslc_ids[0])
+                        for item in Path(store_path_base).glob("asociation_*/events.pf"):
+                            events_eqt.extend(model.load_events(item.absolute()))
+                        model.dump_events(events_eqt, store_path_base+"eqt_events.pf")
+                        phase_markers_collected = []
+                        for event in events_eqt:
+                            savedir = store_path_base + '/eqt_detections/' + str(event.time) + '/'
+                            if not os.path.exists(savedir):
+                                os.makedirs(savedir)
+                                os.makedirs(savedir+"figures_eqt")
+                            for item in Path(store_path_base+"/").glob("asociation_*/associations.xml"):
 
-                                            nsl[3] = component
-                                            nsl[2] = ""
-                                            nsl = tuple(nsl)
-                                            d.set([nsl], d.tmin, d.tmax)
+                                qml = quakeml.QuakeML.load_xml(filename=item)
+                                events_qml = qml.get_pyrocko_events()
+                                components = ["*"]
+                                for i, eq in enumerate(events_qml):
+                                    if event.time == eq.time:
+                                        phase_markers = []
+                                        evqml = qml.get_events()[i]
+                                        phase_markers_qml = evqml.get_pyrocko_phase_markers()
+                                        for phase_marker in phase_markers_qml:
+                                            for component in components:
+                                                d = phase_marker.copy()
+                                                nsl = list(d.nslc_ids[0])
 
-                                            phase_markers.append(d)
-                                            phase_markers_collected.append(d)
-                                    PhaseMarker.save_markers(phase_markers, savedir+"/events_eqt.pym", fdigits=3)
+                                                nsl[3] = component
+                                                nsl[2] = ""
+                                                nsl = tuple(nsl)
+                                                d.set([nsl], d.tmin, d.tmax)
 
-                            qml.dump_xml(filename=savedir+"event_eqt.qml")
-                        PhaseMarker.save_markers(phase_markers_collected, store_path_base+"/events_eqt_collected.pym", fdigits=3)
+                                                phase_markers.append(d)
+                                                phase_markers_collected.append(d)
+                                        PhaseMarker.save_markers(phase_markers, savedir+"/events_eqt.pym", fdigits=3)
 
-                        for item in Path(store_path_base+"/").glob("detections_*/*/figures/*"):
-                            try:
-                                time_item = util.stt(str(item.absolute())[-31:-21]+" "+str(item.absolute())[-20:-5])
-                                if event.time-options.wait_period < time_item and event.time+options.wait_period > time_item:
-                                    os.system("cp %s %s" % (item.absolute(), savedir+"figures_eqt"))
-                            except:
-                                pass
+                                qml.dump_xml(filename=savedir+"event_eqt.qml")
+                            PhaseMarker.save_markers(phase_markers_collected, store_path_base+"/events_eqt_collected.pym", fdigits=3)
+
+                            for item in Path(store_path_base+"/").glob("detections_*/*/figures/*"):
+                                try:
+                                    time_item = util.stt(str(item.absolute())[-31:-21]+" "+str(item.absolute())[-20:-5])
+                                    if event.time-options.wait_period < time_item and event.time+options.wait_period > time_item:
+                                        os.system("cp %s %s" % (item.absolute(), savedir+"figures_eqt"))
+                                except:
+                                    pass
                     catalog = read_events(store_path_base+"/LI_catalog.qml")
                     event_name = None
-                    for event_stack in events_stacking:
-                        for event_eqt in events_eqt:
-                            phase_markers = []
-                            event_marker = []
-                            if event_stack.time-6 < event_eqt.time and event_stack.time+6 > event_eqt.time:
-                                savedir = store_path_base + '/combined_detections/' + util.tts(event_stack.time) + '/'
-                                if not os.path.exists(savedir):
-                                    os.makedirs(savedir)
-                                for item in Path(store_path_base+"/").glob("asociation_*/associations.xml"):
-                                    qml = quakeml.QuakeML.load_xml(filename=item)
-                                    events_qml = qml.get_pyrocko_events()
-                                    components = ["*"]
+                    if options.mode == "both":
+                        for event_stack in events_stacking:
+                            for event_eqt in events_eqt:
+                                phase_markers = []
+                                event_marker = []
+                                if event_stack.time-6 < event_eqt.time and event_stack.time+6 > event_eqt.time:
+                                    savedir = store_path_base + '/combined_detections/' + util.tts(event_stack.time) + '/'
+                                    if not os.path.exists(savedir):
+                                        os.makedirs(savedir)
+                                    for item in Path(store_path_base+"/").glob("asociation_*/associations.xml"):
+                                        qml = quakeml.QuakeML.load_xml(filename=item)
+                                        events_qml = qml.get_pyrocko_events()
+                                        components = ["*"]
 
-                                    for ieqml, eq in enumerate(events_qml):
-                                        if event_eqt.time == eq.time:
-                                            phase_markers = []
-                                            ieqml_found = ieqml
-                                            evqml = qml.get_events()[ieqml]
-                                            event_marker = evqml.get_pyrocko_event()
-                                            # seiger center coordinates
-                                            event_marker.lat = 49.16512600149505
-                                            event_marker.lon = 8.133401103618198
-                                            event_marker.lat = 49.191064149
-                                            event_marker.lon = 8.12879222313
-                                            event_marker.name = str(int(event.time))
-                                            event_name = event_marker.name
-                                            phase_markers_qml = evqml.get_pyrocko_phase_markers()
-                                            #event_marker.hash = phase_markers[0].get_event_hash()
-                                            phase_markers.append(EventMarker(event_marker))
+                                        for ieqml, eq in enumerate(events_qml):
+                                            if event_eqt.time == eq.time:
+                                                phase_markers = []
+                                                ieqml_found = ieqml
+                                                evqml = qml.get_events()[ieqml]
+                                                event_marker = evqml.get_pyrocko_event()
+                                                if options.seiger is True:
+                                                # seiger center coordinates
+                                                    event_marker.lat = 49.16512600149505
+                                                    event_marker.lon = 8.133401103618198
+                                                event_marker.name = str(int(event.time))
+                                                event_name = event_marker.name
+                                                phase_markers_qml = evqml.get_pyrocko_phase_markers()
+                                                #event_marker.hash = phase_markers[0].get_event_hash()
+                                                phase_markers.append(EventMarker(event_marker))
+                                                model.dump_events([event_marker], savedir+"/event.pf")
+                                                if options.mode is not "stacking":
+                                                for phase_marker in phase_markers_qml:
+                                                    phase_marker.set_event_hash(EventMarker(event_marker).get_event_hash())
+                                                    if phase_marker.get_phasename() == 'P':
+                                                        phase_marker.set_phasename("any_P")
+                                                    if phase_marker.get_phasename() == 'S':
+                                                        phase_marker.set_phasename("any_S")
+                                                    for component in components:
+
+                                                        d = phase_marker.copy()
+                                                        nsl = list(d.nslc_ids[0])
+
+                                                        nsl[3] = component
+                                                        nsl[2] = ""
+                                                        nsl = tuple(nsl)
+
+                                                        if options.apply_residuals:
+                                                            try:
+                                                                P_res = residuals["%s" % nsl[1]][0]
+                                                                S_res = residuals["%s" % nsl[1]][1]
+                                                                if phase_marker.get_phasename() == 'any_P':
+                                                                    d.set([nsl], d.tmin+P_res, d.tmax)
+                                                                if phase_marker.get_phasename() == 'any_S':
+                                                                    d.set([nsl], d.tmin+S_res, d.tmax)
+                                                            except:
+                                                                d.set([nsl], d.tmin, d.tmax)
+                                                        else:
+                                                            d.set([nsl], d.tmin, d.tmax)
+
+                                                        phase_markers.append(d)
+                                                phase_markers = list(set(phase_markers))
+                                                for i, p in enumerate(phase_markers):
+                                                    for k, ps in enumerate(phase_markers):
+                                                        try:
+                                                            if k != i:
+                                                                if p.get_phasename() == ps.get_phasename() and p.nslc_ids[0] == ps.nslc_ids[0]:
+                                                                    phase_markers.remove(p)
+                                                        except:
+                                                            pass
+                                                PhaseMarker.save_markers(phase_markers, savedir+"/phases_res.pym", fdigits=3)
+                                    if event_name is not None:
+                                        marker_file = savedir+'/phases_res.pym'
+                                    #    gf_stores_path = "/media/asteinbe/aki/seiger-data/data_single/grond/gf_stores"
+                                        scenario_dir = savedir
+                                    #    config_path = '/media/asteinbe/aki/seiger-data/data_single/grond/grond.conf'
+                                    #    stations_path = '/media/asteinbe/aki/seiger-data/stations_landau.txt'
+                                        gf_stores_path = options.ttt_path
+                                        config_path = options.config_grond
+                                        stations_path = store_path_base+options.stations_file
+                                        if options.download_method is "stream":
+                                            thread = threading.Thread(target=command_locate_with_grond, args=(marker_file, gf_stores_path, scenario_dir, config_path, stations_path, event_name, evqml, qml, event_stack, event_marker, savedir, store_path_reader))
+                                            thread.start()
+                                        else:
+                                            best = glocate(marker_file, gf_stores_path, scenario_dir, config_path, stations_path, event_name)
+
+                                            lat, lon = ort.ne_to_latlon(best.lat, best.lon, best.north_shift, best.east_shift)
+                                            evqml.preferred_origin.latitude = quakeml.RealQuantity(value=float(lat))
+                                            evqml.preferred_origin.longitude = quakeml.RealQuantity(value=float(lon))
+                                            evqml.preferred_origin.time = quakeml.TimeQuantity(value=best.time)
+                                            evqml.preferred_origin.depth = quakeml.RealQuantity(value=best.depth)
+                                            public_id = "quakeml:seiger/" + str(int(float(event_stack.name.split()[1].replace(')','').replace('(',''))))+"_"+str(best.time)
+                                            event_marker.lat = lat
+                                            event_marker.lon = lon
+                                            event_marker.depth = best.depth
+                                            event_marker.time = best.time
                                             model.dump_events([event_marker], savedir+"/event.pf")
 
-                                            for phase_marker in phase_markers_qml:
-                                                phase_marker.set_event_hash(EventMarker(event_marker).get_event_hash())
-                                                if phase_marker.get_phasename() == 'P':
-                                                    phase_marker.set_phasename("any_P")
-                                                if phase_marker.get_phasename() == 'S':
-                                                    phase_marker.set_phasename("any_S")
-                                                for component in components:
+                                            evqml.public_id = public_id
+                                            for pick in evqml.pick_list:
+                                                rand = pick.public_id[-5]
+                                                pick.public_id = public_id+"_"+rand+"_"+pick.phase_hint.value
+                                                arrival = quakeml.Arrival(public_id = pick.public_id+"_arrival", pick_id = pick.public_id, phase=quakeml.Phase(value=pick.phase_hint.value))
+                                                evqml.origin_list[0].arrival_list.append(arrival)
+                                            evqml.preferred_origin_id = public_id+"_"+rand+"O"
+                                            evqml.origin_list[0].public_id = public_id+"_"+rand+"O"
+                                            qml.event_parameters.event_list = [evqml]
 
-                                                    d = phase_marker.copy()
-                                                    nsl = list(d.nslc_ids[0])
+                                            qml.dump_xml(filename=savedir+"event_combined.qml")
+                                            evs = read_events(savedir+"event_combined.qml")
+                                            for ev in evs:
+                                                if len(ev.picks) > 2:
+                                                    catalog.append(ev)
+                                                sc3._write_sc3ml(evs, store_path_reader+"/LI_SC_%s.qml" % best.time)
+                                                _write_quakeml(evs, store_path_reader+"/LI_%s.qml" % best.time)
 
-                                                    nsl[3] = component
-                                                    nsl[2] = ""
-                                                    nsl = tuple(nsl)
-
-                                                    if options.apply_residuals:
-                                                        try:
-                                                            P_res = residuals["%s" % nsl[1]][0]
-                                                            S_res = residuals["%s" % nsl[1]][1]
-                                                            if phase_marker.get_phasename() == 'any_P':
-                                                                d.set([nsl], d.tmin+P_res, d.tmax)
-                                                            if phase_marker.get_phasename() == 'any_S':
-                                                                d.set([nsl], d.tmin+S_res, d.tmax)
-                                                        except:
-                                                            d.set([nsl], d.tmin, d.tmax)
-                                                    else:
-                                                        d.set([nsl], d.tmin, d.tmax)
-
-                                                    phase_markers.append(d)
-                                            phase_markers = list(set(phase_markers))
-                                            for i, p in enumerate(phase_markers):
-                                                for k, ps in enumerate(phase_markers):
-                                                    try:
-                                                        if k != i:
-                                                            if p.get_phasename() == ps.get_phasename() and p.nslc_ids[0] == ps.nslc_ids[0]:
-                                                                phase_markers.remove(p)
-                                                    except:
-                                                        pass
-                                            PhaseMarker.save_markers(phase_markers, savedir+"/phases_res.pym", fdigits=3)
-                                if event_name is not None:
-                                    marker_file = savedir+'/phases_res.pym'
-                                #    gf_stores_path = "/media/asteinbe/aki/seiger-data/data_single/grond/gf_stores"
-                                    scenario_dir = savedir
-                                #    config_path = '/media/asteinbe/aki/seiger-data/data_single/grond/grond.conf'
-                                #    stations_path = '/media/asteinbe/aki/seiger-data/stations_landau.txt'
-                                    gf_stores_path = options.ttt_path
-                                    config_path = options.config_grond
-                                    stations_path = store_path_base+options.stations_file
-                                    if options.download_method is "stream":
-                                        thread = threading.Thread(target=command_locate_with_grond, args=(marker_file, gf_stores_path, scenario_dir, config_path, stations_path, event_name, evqml, qml, event_stack, event_marker, savedir, store_path_reader))
-                                        thread.start()
-                                    else:
-                                        best = glocate(marker_file, gf_stores_path, scenario_dir, config_path, stations_path, event_name)
-
-                                        lat, lon = ort.ne_to_latlon(best.lat, best.lon, best.north_shift, best.east_shift)
-                                        evqml.preferred_origin.latitude = quakeml.RealQuantity(value=float(lat))
-                                        evqml.preferred_origin.longitude = quakeml.RealQuantity(value=float(lon))
-                                        evqml.preferred_origin.time = quakeml.TimeQuantity(value=best.time)
-                                        evqml.preferred_origin.depth = quakeml.RealQuantity(value=best.depth)
-                                        public_id = "quakeml:seiger/" + str(int(float(event_stack.name.split()[1].replace(')','').replace('(',''))))+"_"+str(best.time)
-                                        event_marker.lat = lat
-                                        event_marker.lon = lon
-                                        event_marker.depth = best.depth
-                                        event_marker.time = best.time
-                                        model.dump_events([event_marker], savedir+"/event.pf")
-
-                                        evqml.public_id = public_id
-                                        for pick in evqml.pick_list:
-                                            rand = pick.public_id[-5]
-                                            pick.public_id = public_id+"_"+rand+"_"+pick.phase_hint.value
-                                            arrival = quakeml.Arrival(public_id = pick.public_id+"_arrival", pick_id = pick.public_id, phase=quakeml.Phase(value=pick.phase_hint.value))
-                                            evqml.origin_list[0].arrival_list.append(arrival)
-                                        evqml.preferred_origin_id = public_id+"_"+rand+"O"
-                                        evqml.origin_list[0].public_id = public_id+"_"+rand+"O"
-                                        qml.event_parameters.event_list = [evqml]
-
-                                        qml.dump_xml(filename=savedir+"event_combined.qml")
-                                        evs = read_events(savedir+"event_combined.qml")
-                                        for ev in evs:
-                                            if len(ev.picks) > 2:
-                                                catalog.append(ev)
-                                            sc3._write_sc3ml(evs, store_path_reader+"/LI_SC_%s.qml" % best.time)
-                                            _write_quakeml(evs, store_path_reader+"/LI_%s.qml" % best.time)
-
-                    sc3._write_sc3ml(catalog, store_path_base+"/LI_catalog_SC.qml")
-                    _write_quakeml(catalog, store_path_base+"/LI_catalog.qml")
+                        sc3._write_sc3ml(catalog, store_path_base+"/LI_catalog_SC.qml")
+                        _write_quakeml(catalog, store_path_base+"/LI_catalog.qml")
                     gc.collect()
                     piled = pile_mod.make_pile()
-
-                    #    qml.dump_xml(filename=store_path_base+"events_all_combined.qml")
 
                     if options.download_method is "stream":
                         remove_outdated_wc(store_path_base+"/download-tmp",
