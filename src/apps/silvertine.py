@@ -870,6 +870,12 @@ def command_detect(args):
             default="",
             help="waveform path")
         parser.add_option(
+            "--ref_catalog",
+            dest="ref_catalog",
+            type=str,
+            default=None,
+            help="Reference catalog path")
+        parser.add_option(
             "--store_path_reader",
             dest="store_path_reader",
             type=str,
@@ -956,6 +962,8 @@ def command_detect(args):
                     sources = setup_acquisition_sources(sources_list)
                     for source in sources:
                         source.start()
+                if options.ref_catalog is not None:
+                    ref_catalog = model.load_events(options.ref_catalog)
 
                 diff = 0 # for keeping track of time between data saving
                 models = []
@@ -965,6 +973,7 @@ def command_detect(args):
                 config_path = options.config
                 config = lassie.read_config(config_path)
                 fine_detection = False
+
                 if options.tmin is not None:
                     tmin_override = util.stt(options.tmin)
                 else:
