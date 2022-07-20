@@ -1,0 +1,110 @@
+%YAML 1.1
+# Grond configuration file, version 1.5.1
+--- !grond.Config
+path_prefix: /home/asteinbe/2021_nov_oct
+rundir_template: runs/${problem_name}.grun
+dataset_config: !grond.DatasetConfig
+  stations_stationxml_paths:
+  - responses_seiger.xml
+  - MOER.xml
+  events_path: event.txt
+  waveform_paths:
+  - download-tmp
+  responses_stationxml_paths:
+  - responses_seiger.xml
+  extend_incomplete: false
+  picks_paths: []
+  blacklist_paths: []
+  blacklist: []
+  whitelist_paths: []
+  whitelist:
+  - INS5
+  - INS2
+  - INS7
+  - INS1
+target_groups:
+- !grond.WaveformTargetGroup
+  normalisation_family: td
+  path: fd.2
+  weight: 1.0
+  interpolation: nearest_neighbor
+  store_id: ORG
+  distance_min: 0.0
+  distance_max: 1000000.0
+  depth_max: 1.0
+  exclude: []
+  channels:
+  - Z
+  misfit_config: !grond.WaveformMisfitConfig
+    quantity: displacement
+    fmin: 5.0
+    fmax: 35.0
+    ffactor: 1.0
+    tmin: '{stored:begin}-1'
+    tmax: '{stored:begin}+3'
+    domain: absolute
+    norm_exponent: 1
+    tautoshift_max: 0.1
+    autoshift_penalty_max: 0.05
+- !grond.WaveformTargetGroup
+  normalisation_family: td
+  path: fd.1
+  weight: 1.0
+  interpolation: nearest_neighbor
+  store_id: ORG
+  distance_min: 0.0
+  distance_max: 1000000.0
+  depth_max: 1.0
+  exclude: []
+  channels:
+  - Z
+  misfit_config: !grond.WaveformMisfitConfig
+    quantity: displacement
+    fmin: 5.0
+    fmax: 35.0
+    ffactor: 1.0
+    tmin: '{stored:begin}-1'
+    tmax: '{stored:begin}+3'
+    domain: time_domain
+    norm_exponent: 1
+    tautoshift_max: 0.1
+    autoshift_penalty_max: 0.05
+problem_config: !grond.VolumePointProblemConfig
+  name_template: ${event_name}_insh_small_1
+  norm_exponent: 1
+  ranges:
+    depth: 7304.687999999999 .. 7304.687999999999
+    duration: 0 .. 0
+    east_shift: -0 .. 0
+    magnitude: -2 .. 5
+    north_shift: -0 .. 0
+    time: -2.2 .. 2.2 | add
+  distance_min: 0.0
+  nthreads: 1
+analyser_configs:
+- !grond.TargetBalancingAnalyserConfig
+  niterations: 1
+  use_reference_magnitude: false
+optimiser_config: !grond.HighScoreOptimiserConfig
+  sampler_phases:
+  - !grond.UniformSamplerPhase
+    niterations: 100
+    ntries_preconstrain_limit: 1000
+  - !grond.DirectedSamplerPhase
+    niterations: 500
+    ntries_preconstrain_limit: 1000
+    scatter_scale_begin: 0.8
+    scatter_scale_end: 0.2
+    starting_point: excentricity_compensated
+    sampler_distribution: normal
+    standard_deviation_estimator: median_density_single_chain
+    ntries_sample_limit: 1000
+  chain_length_factor: 8.0
+  nbootstrap: 1
+engine_config: !grond.EngineConfig
+  gf_stores_from_pyrocko_config: true
+  gf_store_superdirs:
+  - /home/asteinbe/gf_stores
+  - /media/asteinbe/aki/gf_stores
+  gf_store_dirs: []
+event_names_exclude: []
